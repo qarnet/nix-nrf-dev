@@ -29,6 +29,15 @@ The shell provides: `west` + Zephyr toolchain (via nrfutil sdk-manager for
 the configured NCS version), `ZEPHYR_BASE`, `openocd` (master build),
 `nrf-probes`, `nrfutil`, and multilib GCC for `native_sim`.
 
+**Scoped toolchain environment:** Nordic's sdk-manager env script exports
+`PYTHONHOME`, `PYTHONPATH`, `LD_LIBRARY_PATH` and `GIT_EXEC_PATH` — toxic
+to any non-toolchain tool (bare `nix` fails to load shared libraries,
+store pythons pick the wrong stdlib). `mkNrfShell` therefore does NOT eval
+that script into the shell; a `west` wrapper loads it only inside west's
+process tree (~100 ms/invocation; cmake/ninja/gcc are spawned by west and
+see the full toolchain). The shell itself stays clean — `nix`, agents, and
+editors launched from it work normally.
+
 ## Outputs
 
 | Output | What |
