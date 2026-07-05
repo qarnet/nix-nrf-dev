@@ -14,22 +14,24 @@
     };
   };
 
-  outputs = {
-    self,
-    nixpkgs,
-    flake-utils,
-    treefmt-nix,
-    git-hooks,
-    ...
-  }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-utils,
+      treefmt-nix,
+      git-hooks,
+      ...
+    }:
     flake-utils.lib.eachDefaultSystem (
-      system: let
+      system:
+      let
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true; # nrfutil-core is unfree
         };
 
-        openocd-master-unwrapped = import ./nix/openocd-master.nix {inherit pkgs;};
+        openocd-master-unwrapped = import ./nix/openocd-master.nix { inherit pkgs; };
 
         # The from-source openocd build dlopens libudev at runtime; wrap it so
         # the binary works outside a NixOS system profile.
@@ -38,7 +40,7 @@
           exec ${openocd-master-unwrapped}/bin/openocd "$@"
         '';
 
-        nrfutil-core = import ./nix/nrfutil-core.nix {inherit pkgs system;};
+        nrfutil-core = import ./nix/nrfutil-core.nix { inherit pkgs system; };
 
         nrf-probes = import ./nix/nrf-probes.nix {
           inherit pkgs;
@@ -60,10 +62,20 @@
           src = ./.;
           hooks = {
             alejandra.enable = true;
-            deadnix.enable = true;
+            deadnix = {
+              enable = true;
+              # templates/default/flake.nix is a consumer skeleton; its
+              # conventional `self`/`nixpkgs` destructuring is idiomatic even
+              # when unused.
+              excludes = [ "^templates/" ];
+            };
             statix.enable = true;
             black.enable = true;
-            shellcheck.enable = true;
+            shellcheck = {
+              enable = true;
+              # .envrc is a direnv config, not a shell script — no shebang.
+              excludes = [ "\\.envrc$" ];
+            };
             typos.enable = true;
             end-of-file-fixer.enable = true;
             trim-trailing-whitespace.enable = true;
@@ -73,16 +85,16 @@
             actionlint.enable = true;
             convco = {
               enable = true;
-              stages = ["commit-msg"];
+              stages = [ "commit-msg" ];
             };
           };
         };
-      in {
-        packages =
-          {
-            inherit openocd-master openocd-master-unwrapped nrf-probes;
-          }
-          // pkgs.lib.optionalAttrs (nrfutil-core != null) {inherit nrfutil-core;};
+      in
+      {
+        packages = {
+          inherit openocd-master openocd-master-unwrapped nrf-probes;
+        }
+        // pkgs.lib.optionalAttrs (nrfutil-core != null) { inherit nrfutil-core; };
 
         lib = {
           inherit mkNrfShell;

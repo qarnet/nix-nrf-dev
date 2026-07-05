@@ -1,0 +1,4 @@
+# .typos.toml — typos spellchecker config (consumed by the git-hooks typos hook).
+# Whitelist abbreviations used in TCL comment placeholders and tool names.
+[default.extend-words]
+SER = "SER" # serial-number placeholder in tcl usage examples
