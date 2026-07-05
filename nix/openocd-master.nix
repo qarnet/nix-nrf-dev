@@ -1,5 +1,4 @@
-{ pkgs }:
-
+{pkgs}:
 pkgs.openocd.overrideAttrs (old: {
   pname = "openocd-master";
 
@@ -12,8 +11,10 @@ pkgs.openocd.overrideAttrs (old: {
   };
 
   # Git checkout needs bootstrap/autoreconf.
-  nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
-    pkgs.autoreconfHook
-    pkgs.pkg-config
-  ];
+  nativeBuildInputs =
+    (old.nativeBuildInputs or [])
+    ++ [
+      pkgs.autoreconfHook
+      pkgs.pkg-config
+    ];
 })

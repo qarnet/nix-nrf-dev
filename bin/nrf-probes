@@ -104,25 +104,37 @@ def enumerate_probes():
 def fingerprint(serial):
     cmd = [
         "openocd",
-        "-f", "interface/cmsis-dap.cfg",
-        "-c", f"adapter serial {serial}",
-        "-c", "transport select swd",
-        "-c", "adapter speed 1000",
-        "-c", "gdb_port disabled",
-        "-c", "tcl_port disabled",
-        "-c", "telnet_port disabled",
-        "-c", "swd newdap chip cpu",
-        "-c", "dap create chip.dap -chain-position chip.cpu",
-        "-c", "target create chip.cpu cortex_m -dap chip.dap",
-        "-c", SCAN_TCL,
-        "-c", "init",
-        "-c", "fwp_scan",
-        "-c", "shutdown",
+        "-f",
+        "interface/cmsis-dap.cfg",
+        "-c",
+        f"adapter serial {serial}",
+        "-c",
+        "transport select swd",
+        "-c",
+        "adapter speed 1000",
+        "-c",
+        "gdb_port disabled",
+        "-c",
+        "tcl_port disabled",
+        "-c",
+        "telnet_port disabled",
+        "-c",
+        "swd newdap chip cpu",
+        "-c",
+        "dap create chip.dap -chain-position chip.cpu",
+        "-c",
+        "target create chip.cpu cortex_m -dap chip.dap",
+        "-c",
+        SCAN_TCL,
+        "-c",
+        "init",
+        "-c",
+        "fwp_scan",
+        "-c",
+        "shutdown",
     ]
     try:
-        proc = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=30
-        )
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     except FileNotFoundError:
         sys.exit("nrf-probes: openocd not found on PATH — enter the dev shell first")
     except subprocess.TimeoutExpired:
@@ -140,7 +152,9 @@ def fingerprint(serial):
         else:
             info["note"] = "no target (wiring? power?)"
     elif "Examination failed" in out and not info.get("part"):
-        info["note"] = "AP locked (APPROTECT engaged) — identity from DP/AP signature only"
+        info["note"] = (
+            "AP locked (APPROTECT engaged) — identity from DP/AP signature only"
+        )
     return info
 
 

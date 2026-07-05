@@ -10,14 +10,13 @@
     };
   };
 
-  outputs =
-    {
-      self,
-      nixpkgs,
-      flake-utils,
-      nix-nrf-dev,
-      ...
-    }:
+  outputs = {
+    self,
+    nixpkgs,
+    flake-utils,
+    nix-nrf-dev,
+    ...
+  }:
     flake-utils.lib.eachDefaultSystem (system: {
       devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
         ncsVersion = "v3.3.0";
