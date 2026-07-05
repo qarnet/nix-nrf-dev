@@ -51,6 +51,7 @@ in
         description = "Nordic nrfutil core CLI";
         homepage = "https://www.nordicsemi.com/Products/Development-tools/nRF-Util";
         license = licenses.unfree;
+        mainProgram = "nrfutil";
         platforms = [system];
         sourceProvenance = with sourceTypes; [binaryNativeCode];
       };
