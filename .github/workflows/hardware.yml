@@ -1,0 +1,37 @@
+# Hardware integration tests — runs on a self-hosted runner with CMSIS-DAP
+# probes and nRF target boards attached. Dispatch-only until phase 6 lands
+# tests/hardware/run.sh and the user registers a runner with the
+# `nrf-hardware` label.
+#
+# See tests/hardware/README.md for runner registration and security notes.
+name: Hardware
+
+on:
+  workflow_dispatch:        # manual trigger only until stable
+  # schedule:                # uncomment when stable to run nightly
+  #   - cron: '0 2 * * *'
+
+# Cancel in-progress runs on the same ref.
+concurrency:
+  group: hardware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hardware:
+    runs-on: [self-hosted, nrf-hardware]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          nix_path: nixpkgs=channel:nixos-25.11
+
+      - uses: cachix/cachix-action@v17
+        with:
+          name: qarnet
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      - name: Run hardware integration tests
+        run: bash tests/hardware/run.sh
