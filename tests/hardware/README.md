@@ -36,6 +36,27 @@ Steps summary:
      permissions guide).
    - The nRF5340 and nRF54L15 boards wired to probes, powered, and accessible.
 
+## Runner prerequisites
+
+The self-hosted runner must have:
+
+- **Nix installed** (so `cachix/install-nix-action` can configure it, or
+  pre-installed via the Determinate Nix Installer).
+- **NCS v3.3.0 installed** via nrfutil sdk-manager:
+  ```sh
+  nrfutil sdk-manager toolchain install --ncs-version v3.3.0
+  ```
+  The dev shell's `west` wrapper loads this toolchain when building blinky.
+  Without it, `west build` fails with a clear message.
+- **USB access to CMSIS-DAP probes** (user in the `dialout` or `plugdev`
+  group, or udev rules granting access — see your distro's USB serial
+  permissions guide).
+- The nRF5340 and nRF54L15 boards wired to probes, powered, and accessible.
+
+No prebuilt firmware hexes are committed to the repo — `run.sh` builds the
+Zephyr blinky sample from NCS at runtime for both targets, then flashes via
+our openocd-master + TCL recipes.
+
 ## Security notes
 
 Self-hosted runners have access to the repository's `GITHUB_TOKEN` and any
