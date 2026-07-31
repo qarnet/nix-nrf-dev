@@ -40,11 +40,26 @@ non-toolchain tools. `mkNrfShell` does NOT eval it into the shell; a `west`
 wrapper loads it only inside west's process tree. The shell itself stays
 clean — `nix`, agents, and editors launched from it work normally.
 
+## Hybrid consumers
+
+`mkNrfShell` accepts `inputsFrom` for composing additional derivations
+alongside the NCS toolchain:
+
+```nix
+devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
+  ncsVersion = "v3.3.0";
+  inputsFrom = [ myPackage ];
+};
+```
+
+This propagates the given derivations' environment variables and packages into
+the shell without polluting the scoped `west` wrapper.
+
 ## Outputs
 
 | Output | What |
 |--------|------|
-| `lib.<system>.mkNrfShell { ncsVersion, packages, extraShellHook, withMultilib }` | devShell factory |
+| `lib.<system>.mkNrfShell { ncsVersion, packages, extraShellHook, withMultilib, inputsFrom, name }` | devShell factory |
 | `packages.openocd-master` | openocd from master (pinned), wrapped for libudev |
 | `packages.openocd-master-unwrapped` | the raw build |
 | `packages.nrf-probes` | probe/target identification (read-only) |

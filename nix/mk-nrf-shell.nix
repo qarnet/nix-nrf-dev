@@ -17,6 +17,12 @@
 #   devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
 #     ncsVersion = "v3.3.0";
 #   };
+#
+# Hybrid consumers may compose additional derivations via inputsFrom:
+#   devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
+#     ncsVersion = "v3.3.0";
+#     inputsFrom = [ myPackage ];
+#   };
 {
   pkgs,
   openocd-master,
@@ -32,6 +38,10 @@
   withMultilib ? true,
   # Appended after the environment setup.
   extraShellHook ? "",
+  # Additional derivations whose environment to compose (propagated directly
+  # to pkgs.mkShell). Use this for hybrid projects that need Node, Python,
+  # or other non-Nordic tooling alongside the NCS toolchain.
+  inputsFrom ? [],
 }: let
   nrfutilExe =
     if nrfutil-core != null
@@ -71,7 +81,7 @@
   '';
 in
   pkgs.mkShell {
-    inherit name;
+    inherit name inputsFrom;
 
     packages =
       [

@@ -55,6 +55,24 @@ jobs:
       - name: Devshell provides tools
         run: nix develop --command sh -c "command -v openocd && command -v nrf-probes && nrf-probes --help"
 
+      # A8 — clean-env regression gate: prove Nordic sdk-manager variables
+      # do not poison non-toolchain tools (Node, Git, Python).
+      # Uses the dedicated clean-env-test shell to exercise actual
+      # shell-hook behavior and dynamic linking.
+      - name: Clean environment regression gate
+        run: |
+          # shellcheck disable=SC2016
+          nix develop .#clean-env-test --command sh -ceu '
+            case "${LD_LIBRARY_PATH:-}" in *ncs/toolchains*) exit 1;; esac
+            case "${PYTHONPATH:-}" in *ncs/toolchains*) exit 1;; esac
+            case "${GIT_EXEC_PATH:-}" in *ncs/toolchains*) exit 1;; esac
+            test -z "${PYTHONHOME:-}"
+            nix --version
+            node --version
+            git --version
+            python3 -c "import json"
+          '
+
       # A6 — TCL parse: openocd sources+parses the TCL before trying to talk
       # to a probe, so syntax errors surface distinctly from "no probe" errors.
       # No probe attached in CI → openocd exits non-zero at the "unable to open

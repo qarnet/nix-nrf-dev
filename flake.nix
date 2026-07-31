@@ -112,6 +112,19 @@
           packages = pre-commit.enabledPackages;
           extraShellHook = pre-commit.shellHook;
         };
+
+        # Clean-environment test shell: exercises shell-hook behavior to
+        # prove Nordic sdk-manager variables do not poison external tools
+        # (Node, Git, Python). Added for CI regression gating.
+        devShells.clean-env-test = mkNrfShell {
+          name = "nix-nrf-dev-clean-env-test";
+          withMultilib = false;
+          packages = [
+            pkgs.nodejs
+            pkgs.git
+            pkgs.python3
+          ];
+        };
       }
     )
     // {

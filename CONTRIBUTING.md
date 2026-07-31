@@ -19,6 +19,16 @@ Formatting and lint hooks run automatically via `pre-commit` (wired through
 nix fmt                       # format all files (alejandra for Nix, black for Python)
 nix flake check -L             # run all checks in a sandbox
 pre-commit run --all-files      # run hooks without committing
+nix develop .#clean-env-test --command sh -ceu '
+  case "${LD_LIBRARY_PATH:-}" in *ncs/toolchains*) exit 1;; esac
+  case "${PYTHONPATH:-}" in *ncs/toolchains*) exit 1;; esac
+  case "${GIT_EXEC_PATH:-}" in *ncs/toolchains*) exit 1;; esac
+  test -z "${PYTHONHOME:-}"
+  nix --version
+  node --version
+  git --version
+  python3 -c "import json"
+'  # prove Nordic sdk-manager variables do not poison external tools
 ```
 
 ## Commit messages
