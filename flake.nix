@@ -54,6 +54,19 @@
             ;
         };
 
+        # Internal hybrid-input fixture: plain mkShell whose packages provide
+        # the regression tools (Node 24, Git, Python). clean-env-test pulls
+        # them in via inputsFrom so CI's tool execution proves inputsFrom
+        # propagation through mkNrfShell (regression for the reproduced Node 24
+        # dynamic-link failure) instead of a direct packages list.
+        cleanEnvFixture = pkgs.mkShell {
+          packages = [
+            pkgs.nodejs_24
+            pkgs.git
+            pkgs.python3
+          ];
+        };
+
         treefmtEval = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
 
         pre-commit = git-hooks.lib.${system}.run {
@@ -115,15 +128,12 @@
 
         # Clean-environment test shell: exercises shell-hook behavior to
         # prove Nordic sdk-manager variables do not poison external tools
-        # (Node, Git, Python). Added for CI regression gating.
+        # (Node 24, Git, Python). The tools arrive via inputsFrom from the
+        # internal cleanEnvFixture. Added for CI regression gating.
         devShells.clean-env-test = mkNrfShell {
           name = "nix-nrf-dev-clean-env-test";
           withMultilib = false;
-          packages = [
-            pkgs.nodejs
-            pkgs.git
-            pkgs.python3
-          ];
+          inputsFrom = [cleanEnvFixture];
         };
       }
     )
