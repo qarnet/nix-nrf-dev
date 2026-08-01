@@ -1,0 +1,12 @@
+https://github.com/NordicSemiconductor/nrf-udev
+https://github.com/nrfconnect/sdk-nrf/blob/main/doc/nrf/test_and_optimize/test_framework/running_unit_tests.rst
+https://github.com/nrfconnect/sdk-nrf/blob/main/doc/nrf/installation/install_ncs.rst
+https://github.com/nrfconnect/sdk-nrf/blob/main/doc/nrf/installation/updating.rst
+https://github.com/nrfconnect/sdk-nrf/blob/main/doc/nrf/installation/recommended_versions.rst
+https://github.com/nrfconnect/sdk-nrf/blob/main/scripts/tools-versions-linux.yml
+https://github.com/nrfconnect/sdk-nrf/blob/main/west.yml
+https://github.com/nrfconnect/nrf-regtool
+https://github.com/nrfconnect/sdk-nrfxlib/blob/main/LICENSE
+https://github.com/nix-community/zephyr-nix
+https://github.com/adisbladis/west2nix
+https://github.com/MatthewCroughan/nrf-nix

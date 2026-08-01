@@ -26,6 +26,7 @@ direnv allow          # or: nix develop
 
 ```nix
 devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
+  backend = "nrfutil";
   ncsVersion = "v3.3.0";
 };
 ```
@@ -39,6 +40,21 @@ multilib GCC for `native_sim`.
 non-toolchain tools. `mkNrfShell` does NOT eval it into the shell; a `west`
 wrapper loads it only inside west's process tree. The shell itself stays
 clean — `nix`, agents, and editors launched from it work normally.
+
+## Backends
+
+`mkNrfShell` takes a `backend` argument (default `"nrfutil"`):
+
+- `"nrfutil"` — uses Nordic's sdk-manager for the NCS toolchain environment.
+  This is the only implemented backend. Omit the argument or pass
+  `backend = "nrfutil"` explicitly; both behave identically.
+- `"sdk-nrf"` — reserved for a future Nix-native build environment (see
+  `goals.md`). It is **not** implemented: any value other than `"nrfutil"`
+  fails at Nix evaluation with an unsupported-backend error instead of
+  silently falling back.
+
+`ncsVersion` remains per-project and customizable; `"v3.3.0"` is the tested
+default, not an architecture lock.
 
 ## Hybrid consumers
 
@@ -59,14 +75,14 @@ the shell without polluting the scoped `west` wrapper.
 
 | Output | What |
 |--------|------|
-| `lib.<system>.mkNrfShell { ncsVersion, packages, extraShellHook, withMultilib, inputsFrom, name }` | devShell factory |
+| `lib.<system>.mkNrfShell { backend, ncsVersion, packages, extraShellHook, withMultilib, inputsFrom, name }` | devShell factory (see [Backends](#backends)) |
 | `packages.openocd-master` | openocd from master (pinned), wrapped for libudev |
 | `packages.openocd-master-unwrapped` | the raw build |
 | `packages.nrf-probes` | probe/target identification (read-only) |
 | `packages.nrfutil-core` | minimal nrfutil (no J-Link dependency) |
 | `devShells.default` | dogfood shell for hacking on this repo |
 | `formatter.<system>` | treefmt wrapper (`nix fmt`) |
-| `checks.<system>` | `formatting` (treefmt) + `pre-commit` (git-hooks.nix) |
+| `checks.<system>` | `formatting` (treefmt) + `backend-selector` (eval gate: omitted/`nrfutil` evaluate, `sdk-nrf` rejected) + `pre-commit` (git-hooks.nix) |
 | `templates.default` | project skeleton (flake.nix + .envrc) |
 | `tcl/` | canonical flash recipes (see below) |
 

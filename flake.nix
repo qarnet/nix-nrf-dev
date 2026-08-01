@@ -67,6 +67,43 @@
           ];
         };
 
+        # Evaluation-level regression gate for the backend selector: omitted
+        # backend evaluates, explicit "nrfutil" evaluates, unsupported
+        # "sdk-nrf" does not. Pure Nix evaluation via builtins.tryEval —
+        # builds no SDK, runs no network bootstrap.
+        backendSelectorCheck = let
+          evaluates = expr: (builtins.tryEval (builtins.seq expr true)).success;
+          omittedOk = evaluates (mkNrfShell {
+            name = "backend-check-omitted";
+          });
+          explicitOk = evaluates (mkNrfShell {
+            name = "backend-check-explicit";
+            backend = "nrfutil";
+          });
+          unsupportedRejected =
+            !evaluates (mkNrfShell {
+              name = "backend-check-unsupported";
+              backend = "sdk-nrf";
+            });
+          pass = omittedOk && explicitOk && unsupportedRejected;
+        in
+          pkgs.runCommand "backend-selector-check"
+          {
+            inherit omittedOk explicitOk unsupportedRejected;
+          }
+          (
+            if pass
+            then ''
+              echo "backend selector check: omitted evaluates, nrfutil evaluates, sdk-nrf rejected"
+              mkdir -p "$out"
+            ''
+            else ''
+              echo "backend selector check FAILED" >&2
+              echo "omittedOk=$omittedOk explicitOk=$explicitOk unsupportedRejected=$unsupportedRejected" >&2
+              exit 1
+            ''
+          );
+
         treefmtEval = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
 
         pre-commit = git-hooks.lib.${system}.run {
@@ -115,12 +152,14 @@
 
         checks = {
           formatting = treefmtEval.config.build.check self;
+          backend-selector = backendSelectorCheck;
           inherit pre-commit;
         };
 
         # Dogfood shell for hacking on this repo / ad-hoc probe work.
         # Composes mkNrfShell with pre-commit hooks (packages + shellHook).
         devShells.default = mkNrfShell {
+          backend = "nrfutil";
           name = "nix-nrf-dev";
           packages = pre-commit.enabledPackages;
           extraShellHook = pre-commit.shellHook;
@@ -131,6 +170,7 @@
         # (Node 24, Git, Python). The tools arrive via inputsFrom from the
         # internal cleanEnvFixture. Added for CI regression gating.
         devShells.clean-env-test = mkNrfShell {
+          backend = "nrfutil";
           name = "nix-nrf-dev-clean-env-test";
           withMultilib = false;
           inputsFrom = [cleanEnvFixture];

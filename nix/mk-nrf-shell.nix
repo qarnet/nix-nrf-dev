@@ -15,11 +15,13 @@
 #
 # Usage from a consumer flake:
 #   devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
+#     backend = "nrfutil";
 #     ncsVersion = "v3.3.0";
 #   };
 #
 # Hybrid consumers may compose additional derivations via inputsFrom:
 #   devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
+#     backend = "nrfutil";
 #     ncsVersion = "v3.3.0";
 #     inputsFrom = [ myPackage ];
 #   };
@@ -29,6 +31,10 @@
   nrfutil-core,
   nrf-probes,
 }: {
+  # Backend that provides the NCS toolchain environment. "nrfutil" is the
+  # only implemented backend (Nordic sdk-manager); "sdk-nrf" is reserved for
+  # a future Nix-native backend and fails evaluation until implemented.
+  backend ? "nrfutil",
   # NCS version as installed by nrfutil sdk-manager (e.g. "v3.3.0").
   ncsVersion ? "v3.3.0",
   name ? "nrf-dev",
@@ -43,6 +49,15 @@
   # or other non-Nordic tooling alongside the NCS toolchain.
   inputsFrom ? [],
 }: let
+  # Backend selector: exact-match only, no aliases, no silent fallback.
+  supportedBackends = ["nrfutil"];
+  supportedBackendsMsg = builtins.concatStringsSep ", " supportedBackends;
+  # Throws with the invalid value and the supported list; the assert below
+  # forces it whenever the returned shell derivation is evaluated.
+  backendSupported =
+    builtins.elem backend supportedBackends
+    || throw "mkNrfShell: unsupported backend '${backend}'; supported backends: ${supportedBackendsMsg}";
+
   nrfutilExe =
     if nrfutil-core != null
     then "${nrfutil-core}/bin/nrfutil"
@@ -80,59 +95,63 @@
     exit 1
   '';
 in
-  pkgs.mkShell {
-    inherit name inputsFrom;
+  # Force backend validation when the returned shell derivation is
+  # evaluated: unsupported values fail Nix evaluation instead of silently
+  # falling back to nrfutil.
+  assert backendSupported;
+    pkgs.mkShell {
+      inherit name inputsFrom;
 
-    packages =
-      [
-        westWrapper
-        openocd-master
-        nrf-probes
-      ]
-      ++ pkgs.lib.optionals (nrfutil-core != null) [nrfutil-core]
-      ++ pkgs.lib.optionals useMultilib [pkgs.gccMultiStdenv.cc]
-      ++ packages;
+      packages =
+        [
+          westWrapper
+          openocd-master
+          nrf-probes
+        ]
+        ++ pkgs.lib.optionals (nrfutil-core != null) [nrfutil-core]
+        ++ pkgs.lib.optionals useMultilib [pkgs.gccMultiStdenv.cc]
+        ++ packages;
 
-    shellHook = ''
-      ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-        # ── ZEPHYR_BASE derivation ─────────────────────────────────────
-        # The toolchain env itself stays scoped inside the west wrapper;
-        # only ZEPHYR_BASE is exported here (needed by helper scripts and
-        # for orientation). Derive it from the toolchain layout without
-        # polluting this shell, falling back to the well-known home path.
-        if [ -z "''${ZEPHYR_BASE:-}" ]; then
-          _zephyr_candidate=""
-          _sdk_dir="$(
-            unset NRFUTIL_HOME
-            eval "$(${nrfutilExe} sdk-manager toolchain env --ncs-version ${ncsVersion} --as-script sh 2>/dev/null)" 2>/dev/null
-            printf '%s' "''${ZEPHYR_SDK_INSTALL_DIR:-}"
-          )"
-          if [ -n "$_sdk_dir" ]; then
-            _ncs_root="$(dirname "$(dirname "$(dirname "$(dirname "$_sdk_dir")")")")"
-            _zephyr_candidate="$_ncs_root/${ncsVersion}/zephyr"
+      shellHook = ''
+        ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+          # ── ZEPHYR_BASE derivation ─────────────────────────────────────
+          # The toolchain env itself stays scoped inside the west wrapper;
+          # only ZEPHYR_BASE is exported here (needed by helper scripts and
+          # for orientation). Derive it from the toolchain layout without
+          # polluting this shell, falling back to the well-known home path.
+          if [ -z "''${ZEPHYR_BASE:-}" ]; then
+            _zephyr_candidate=""
+            _sdk_dir="$(
+              unset NRFUTIL_HOME
+              eval "$(${nrfutilExe} sdk-manager toolchain env --ncs-version ${ncsVersion} --as-script sh 2>/dev/null)" 2>/dev/null
+              printf '%s' "''${ZEPHYR_SDK_INSTALL_DIR:-}"
+            )"
+            if [ -n "$_sdk_dir" ]; then
+              _ncs_root="$(dirname "$(dirname "$(dirname "$(dirname "$_sdk_dir")")")")"
+              _zephyr_candidate="$_ncs_root/${ncsVersion}/zephyr"
+            fi
+            if [ ! -d "''${_zephyr_candidate:-}" ] && [ -d "$HOME/ncs/${ncsVersion}/zephyr" ]; then
+              _zephyr_candidate="$HOME/ncs/${ncsVersion}/zephyr"
+            fi
+            if [ -n "''${_zephyr_candidate:-}" ] && [ -d "$_zephyr_candidate" ]; then
+              export ZEPHYR_BASE="$_zephyr_candidate"
+            else
+              printf 'ZEPHYR_BASE could not be derived.\n' >&2
+              printf 'Set it manually: export ZEPHYR_BASE=/path/to/ncs/${ncsVersion}/zephyr\n' >&2
+            fi
           fi
-          if [ ! -d "''${_zephyr_candidate:-}" ] && [ -d "$HOME/ncs/${ncsVersion}/zephyr" ]; then
-            _zephyr_candidate="$HOME/ncs/${ncsVersion}/zephyr"
-          fi
-          if [ -n "''${_zephyr_candidate:-}" ] && [ -d "$_zephyr_candidate" ]; then
-            export ZEPHYR_BASE="$_zephyr_candidate"
-          else
-            printf 'ZEPHYR_BASE could not be derived.\n' >&2
-            printf 'Set it manually: export ZEPHYR_BASE=/path/to/ncs/${ncsVersion}/zephyr\n' >&2
-          fi
-        fi
 
-        # Project-local helper scripts, if the project has them.
-        if [ -d "$PWD/scripts/bin" ]; then
-          export PATH="$PWD/scripts/bin:$PATH"
-        fi
-      ''}
-      echo "${name} shell (NCS ${ncsVersion}, toolchain env scoped to west)"
-      ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
-        if [ -n "''${ZEPHYR_BASE:-}" ]; then
-          echo "ZEPHYR_BASE: $ZEPHYR_BASE"
-        fi
-      ''}
-      ${extraShellHook}
-    '';
-  }
+          # Project-local helper scripts, if the project has them.
+          if [ -d "$PWD/scripts/bin" ]; then
+            export PATH="$PWD/scripts/bin:$PATH"
+          fi
+        ''}
+        echo "${name} shell (backend ${backend}, NCS ${ncsVersion}, toolchain env scoped to west)"
+        ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+          if [ -n "''${ZEPHYR_BASE:-}" ]; then
+            echo "ZEPHYR_BASE: $ZEPHYR_BASE"
+          fi
+        ''}
+        ${extraShellHook}
+      '';
+    }

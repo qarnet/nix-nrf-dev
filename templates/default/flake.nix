@@ -19,6 +19,7 @@
   }:
     flake-utils.lib.eachDefaultSystem (system: {
       devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
+        backend = "nrfutil";
         ncsVersion = "v3.3.0";
         # packages = [ ];          # extra project tools
         # extraShellHook = "";     # project-specific env
