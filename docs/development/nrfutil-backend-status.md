@@ -17,8 +17,10 @@ controlled `NRFUTIL_HOME` scheme.
   package override). `west` selects `--ncs-version` or
   `--toolchain-bundle-id` accordingly. Failure diagnostics distinguish missing
   SDK source from toolchain selection: `nrfutil sdk-manager install
-  <ncsVersion>` alone, plus `nrfutil sdk-manager toolchain install
-  --toolchain-bundle-id <bundle-id>` when an exact bundle is configured.
+  <ncsVersion>` alone; with an exact bundle configured, `nrfutil sdk-manager
+  sdk install <ncsVersion>` for the SDK source only plus `nrfutil sdk-manager
+  toolchain install --toolchain-bundle-id <bundle-id>` for that exact
+  toolchain.
 - `nrf-sdk-versions` delegates to `nrfutil sdk-manager search`; sdk-manager is
   the runtime authority for available NCS versions. No repository-owned
   supported-version list exists.

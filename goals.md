@@ -263,7 +263,9 @@ rejected at evaluation until this work lands.
 **Version direction:** the `sdk-nrf` backend must use version metadata keyed
 by NCS release — each entry derives the west manifest, Nordic Zephyr
 revision, Zephyr SDK release and targets, Python requirements, and host-tool
-versions from that release. One tested default is convenience only.
+versions from that release. The metadata may mark tested releases, but caller
+selection stays an explicit, required `ncsVersion` with no default, matching
+the current nrfutil backend API.
 Supporting multiple releases is a core acceptance criterion; the backend must
 not encode v3.3.0 as the sole architecture. v3.3.0 remains the first proof
 target because installed source and hardware test evidence exist, not because

@@ -90,9 +90,9 @@ Toolchain selection:
 This phase only selects an already-installed toolchain. If it is missing, the
 west wrapper reports the install commands: with `toolchainBundleId` omitted,
 `nrfutil sdk-manager install <ncsVersion>` (SDK source plus its matching
-toolchain); with an exact bundle configured, `nrfutil sdk-manager install
-<ncsVersion>` for the SDK source and `nrfutil sdk-manager toolchain install
---toolchain-bundle-id <bundle-id>` for that exact toolchain.
+toolchain); with an exact bundle configured, `nrfutil sdk-manager sdk install
+<ncsVersion>` for the SDK source only and `nrfutil sdk-manager toolchain
+install --toolchain-bundle-id <bundle-id>` for that exact toolchain.
 
 ## nrf-sdk-versions
 

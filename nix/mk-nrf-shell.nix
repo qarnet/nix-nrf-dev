@@ -106,12 +106,14 @@
     then "exact toolchain bundle \"$_toolchain_bundle_id\""
     else "newest compatible toolchain for NCS \"$_ncs_version\"";
   # Remediation distinguishes missing SDK source from toolchain selection:
-  # with an exact bundle, `sdk-manager install` alone would install the newest
-  # compatible toolchain for the release, not the configured bundle, so the
-  # exact toolchain must be installed separately by bundle ID. Single-line
-  # strings keep generated-script indentation aligned at the call site.
+  # with an exact bundle, `sdk-manager install` would install the SDK plus the
+  # newest compatible toolchain for the release — a needless large download
+  # before installing the configured bundle — so the SDK source alone comes
+  # from `sdk-manager sdk install` and the exact toolchain is installed
+  # separately by bundle ID. Single-line strings keep generated-script
+  # indentation aligned at the call site.
   installSdkRemediation = ''
-    echo "Install the SDK source with: nrfutil sdk-manager install \"$_ncs_version\"" >&2
+    echo "Install the SDK source only with: nrfutil sdk-manager sdk install \"$_ncs_version\"" >&2
   '';
   installToolchainRemediation = ''
     echo "Install the exact toolchain with: nrfutil sdk-manager toolchain install --toolchain-bundle-id \"$_toolchain_bundle_id\"" >&2

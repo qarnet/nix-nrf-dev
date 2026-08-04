@@ -42,8 +42,12 @@ for the XIAO nRF54L15 in an isolated home directory.
   nrfutil backend does not reject a version because it is absent from
   repository-owned metadata.
 - `nrfutil sdk-manager install <ncs-version>` installs both SDK source and its
-  matching toolchain. The `west` wrapper's failure diagnostics point there and
-  distinguish missing SDK source from toolchain selection.
+  matching toolchain; `nrfutil sdk-manager sdk install <ncs-version>` installs
+  only the SDK source. The `west` wrapper's failure diagnostics distinguish
+  missing SDK source from toolchain selection: the plain install command for
+  the default selector, or `sdk install` plus
+  `toolchain install --toolchain-bundle-id <bundle-id>` when an exact bundle
+  is configured.
 - CI checks that the wrapper exists but never runs a real `west` build.
   Existing hardware CI assumes NCS v3.3.0 already exists on the self-hosted
   runner.
@@ -89,7 +93,9 @@ Instead, make first SDK-dependent `west` invocation perform bootstrap when
 
 1. Detect whether both the selected SDK source and its toolchain exist.
 2. Run `nrfutil sdk-manager install <ncsVersion>` when either is missing, or
-   install SDK and exact toolchain separately when `toolchainBundleId` is set.
+   install SDK source (`sdk-manager sdk install <ncsVersion>`) and the exact
+   toolchain (`toolchain install --toolchain-bundle-id <bundle-id>`) when
+   `toolchainBundleId` is set.
 3. Load the selected toolchain environment.
 4. Resolve and export `ZEPHYR_BASE` for the west process.
 5. Execute real west command.
@@ -311,7 +317,9 @@ impossibility.
 The `sdk-nrf` backend must use version metadata keyed by NCS release: each
 entry derives the west manifest, Nordic Zephyr revision, Zephyr SDK release
 and targets, Python requirements, and host-tool versions from that release.
-One tested default is a convenience only. Supporting multiple releases is a
+The metadata may mark tested releases, but caller selection stays an
+explicit, required `ncsVersion` with no default, matching the current nrfutil
+backend API. Supporting multiple releases is a
 core acceptance criterion; the backend must not encode v3.3.0 as the sole
 architecture. v3.3.0 remains the first proof target because installed source
 and hardware test evidence exist, not because the backend is permanently tied
