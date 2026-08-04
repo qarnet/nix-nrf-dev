@@ -27,7 +27,7 @@ jobs:
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-          nix_path: nixpkgs=channel:nixos-25.11
+          nix_path: nixpkgs=channel:nixos-unstable
 
       - uses: cachix/cachix-action@v17
         with:
@@ -40,8 +40,9 @@ jobs:
 
       # A1 — build all packages. Cached after first run via Cachix.
       # openocd-master is ~10 min from source on first run; subsequent runs pull from cache.
+      # nrfutil pulls segger-jlink-headless (SEGGER license accepted in the flake config).
       - name: Build packages
-        run: nix build -L .#openocd-master-unwrapped .#openocd-master .#nrf-probes .#nrfutil-core
+        run: nix build -L .#openocd-master-unwrapped .#openocd-master .#nrf-probes .#nrfutil .#nrf-sdk-versions
 
       # A2 — smoke-run: verify the built binaries actually execute.
       - name: Smoke run openocd
@@ -49,11 +50,15 @@ jobs:
       - name: Smoke run nrf-probes
         run: nix run .#nrf-probes -- --help
       - name: Smoke run nrfutil
-        run: nix run .#nrfutil-core -- --version
+        run: nix run .#nrfutil -- --version
+      # nrf-sdk-versions delegates to `nrfutil sdk-manager search`; --help only,
+      # so normal PR CI never depends on live Nordic index availability.
+      - name: Smoke run nrf-sdk-versions
+        run: nix run .#nrf-sdk-versions -- --help
 
       # A5 — devshell-enter: verify the dogfood shell provides the tools.
       - name: Devshell provides tools
-        run: nix develop --command sh -c "command -v openocd && command -v nrf-probes && nrf-probes --help"
+        run: nix develop --command sh -ceu 'command -v nrfutil; command -v nrf-sdk-versions; command -v openocd; command -v nrf-probes'
 
       # A8 — clean-env regression gate: prove Nordic sdk-manager variables
       # do not poison non-toolchain tools (Node, Git, Python).

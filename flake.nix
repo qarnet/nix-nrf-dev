@@ -2,7 +2,12 @@
   description = "Reusable Nordic nRF development environment — NCS toolchain shell + openocd-master flashing tools";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    # nixos-unstable: Nixpkgs packages nRF Util and its extensions (see
+    # pkgs/by-name/nr/nrfutil); flake.lock pins the exact revision.
+    # Consumers can replace this revision via
+    # `inputs.nix-nrf-dev.inputs.nixpkgs.follows = "nixpkgs"`, which also
+    # selects the packaged nrfutil/sdk-manager versions.
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
@@ -26,7 +31,15 @@
       system: let
         pkgs = import nixpkgs {
           inherit system;
-          config.allowUnfree = true; # nrfutil-core is unfree
+          # nrfutil and its extensions are unfree. The packaged nrfutil
+          # derivation also unconditionally depends on segger-jlink-headless
+          # and sets NRF_JLINK_DLL_PATH — including when only the sdk-manager
+          # extension is composed — so SEGGER license acceptance is required
+          # (no sdk-manager-only composition avoids J-Link).
+          config = {
+            allowUnfree = true;
+            segger-jlink.acceptLicense = true;
+          };
         };
 
         openocd-master-unwrapped = import ./nix/openocd-master.nix {inherit pkgs;};
@@ -38,7 +51,17 @@
           exec ${openocd-master-unwrapped}/bin/openocd "$@"
         '';
 
-        nrfutil-core = import ./nix/nrfutil-core.nix {inherit pkgs system;};
+        # Packaged nRF Util with the sdk-manager extension. Extension archives,
+        # versions, and hashes are maintained by Nixpkgs; this repository does
+        # not duplicate them.
+        nrfutil = pkgs.nrfutil.withExtensions ["nrfutil-sdk-manager"];
+
+        # sdk-manager-backed version-list command built against the default
+        # composed nrfutil package.
+        nrf-sdk-versions = import ./nix/nrf-sdk-versions.nix {
+          inherit pkgs;
+          nrfutilPackage = nrfutil;
+        };
 
         nrf-probes = import ./nix/nrf-probes.nix {
           inherit pkgs;
@@ -49,7 +72,7 @@
           inherit
             pkgs
             openocd-master
-            nrfutil-core
+            nrfutil
             nrf-probes
             ;
         };
@@ -67,39 +90,61 @@
           ];
         };
 
-        # Evaluation-level regression gate for the backend selector: omitted
-        # backend evaluates, explicit "nrfutil" evaluates, unsupported
-        # "sdk-nrf" does not. Pure Nix evaluation via builtins.tryEval —
-        # builds no SDK, runs no network bootstrap.
+        # Evaluation-level regression gate for the backend selector:
+        # - omitted backend plus explicit ncsVersion evaluates,
+        # - explicit "nrfutil" plus explicit ncsVersion evaluates,
+        # - missing ncsVersion fails evaluation (ncsVersion is required),
+        # - unsupported "sdk-nrf" does not evaluate,
+        # - an explicit non-null toolchainBundleId evaluates.
+        # Pure Nix evaluation via builtins.tryEval — builds no SDK, runs no
+        # network bootstrap. Note: builtins.tryEval cannot catch "called
+        # without required argument" errors, so required-ness is proven with
+        # builtins.functionArgs, which marks arguments *with* a default
+        # `true` (so a required argument reads `false`).
         backendSelectorCheck = let
           evaluates = expr: (builtins.tryEval (builtins.seq expr true)).success;
+          ncsVersionRequired = (builtins.functionArgs mkNrfShell).ncsVersion == false;
           omittedOk = evaluates (mkNrfShell {
             name = "backend-check-omitted";
+            ncsVersion = "v3.3.0";
           });
           explicitOk = evaluates (mkNrfShell {
             name = "backend-check-explicit";
             backend = "nrfutil";
+            ncsVersion = "v3.3.0";
           });
           unsupportedRejected =
             !evaluates (mkNrfShell {
               name = "backend-check-unsupported";
               backend = "sdk-nrf";
+              ncsVersion = "v3.3.0";
             });
-          pass = omittedOk && explicitOk && unsupportedRejected;
+          bundleIdOk = evaluates (mkNrfShell {
+            name = "backend-check-bundle-id";
+            ncsVersion = "v3.3.0";
+            toolchainBundleId = "bundle-id-check";
+          });
+          pass = ncsVersionRequired && omittedOk && explicitOk && unsupportedRejected && bundleIdOk;
         in
           pkgs.runCommand "backend-selector-check"
           {
-            inherit omittedOk explicitOk unsupportedRejected;
+            inherit
+              ncsVersionRequired
+              omittedOk
+              explicitOk
+              unsupportedRejected
+              bundleIdOk
+              ;
           }
           (
             if pass
             then ''
-              echo "backend selector check: omitted evaluates, nrfutil evaluates, sdk-nrf rejected"
+              echo "backend selector check: ncsVersion required, omitted+ncsVersion evaluates, nrfutil+ncsVersion evaluates, sdk-nrf rejected, toolchainBundleId evaluates"
               mkdir -p "$out"
             ''
             else ''
               echo "backend selector check FAILED" >&2
-              echo "omittedOk=$omittedOk explicitOk=$explicitOk unsupportedRejected=$unsupportedRejected" >&2
+              echo "ncsVersionRequired=$ncsVersionRequired omittedOk=$omittedOk explicitOk=$explicitOk unsupportedRejected=$unsupportedRejected bundleIdOk=$bundleIdOk" >&2
               exit 1
             ''
           );
@@ -138,11 +183,15 @@
           };
         };
       in {
-        packages =
-          {
-            inherit openocd-master openocd-master-unwrapped nrf-probes;
-          }
-          // pkgs.lib.optionalAttrs (nrfutil-core != null) {inherit nrfutil-core;};
+        packages = {
+          inherit
+            openocd-master
+            openocd-master-unwrapped
+            nrf-probes
+            nrfutil
+            nrf-sdk-versions
+            ;
+        };
 
         lib = {
           inherit mkNrfShell;
@@ -160,6 +209,7 @@
         # Composes mkNrfShell with pre-commit hooks (packages + shellHook).
         devShells.default = mkNrfShell {
           backend = "nrfutil";
+          ncsVersion = "v3.3.0";
           name = "nix-nrf-dev";
           packages = pre-commit.enabledPackages;
           extraShellHook = pre-commit.shellHook;
@@ -171,6 +221,7 @@
         # internal cleanEnvFixture. Added for CI regression gating.
         devShells.clean-env-test = mkNrfShell {
           backend = "nrfutil";
+          ncsVersion = "v3.3.0";
           name = "nix-nrf-dev-clean-env-test";
           withMultilib = false;
           inputsFrom = [cleanEnvFixture];

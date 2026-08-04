@@ -13,37 +13,40 @@ for the XIAO nRF54L15 in an isolated home directory.
 
 ## Current repository behavior
 
-- `mkNrfShell` already accepts `ncsVersion`, defaulting to `"v3.3.0"` in
-  `nix/mk-nrf-shell.nix`.
-- `mkNrfShell` also accepts `backend`, defaulting to `"nrfutil"`. `nrfutil`
-  (Nordic sdk-manager) is the only implemented backend; `sdk-nrf` is reserved
-  for the future Nix-native backend and fails evaluation until implemented.
-  Omission and explicit `backend = "nrfutil"` are equivalent; any other value
-  fails at Nix evaluation rather than silently falling back.
+- `mkNrfShell` requires `ncsVersion` (e.g. `"v3.3.0"`): every caller selects
+  an NCS release explicitly; there is no `"latest"` alias or default.
+- `mkNrfShell` accepts `backend` (default `"nrfutil"`). `nrfutil` (Nordic
+  sdk-manager) is the only implemented backend; `sdk-nrf` is reserved for the
+  future Nix-native backend and fails evaluation until implemented. Omission
+  and explicit `backend = "nrfutil"` are equivalent; any other value fails at
+  Nix evaluation rather than silently falling back.
+- nrfutil and the sdk-manager extension come from Nixpkgs:
+  `pkgs.nrfutil.withExtensions [ "nrfutil-sdk-manager" ]`. Extension archives,
+  versions, and hashes are maintained by Nixpkgs and pinned via `flake.lock`
+  (consumers can replace the revision through
+  `inputs.nix-nrf-dev.inputs.nixpkgs.follows`). The derivation unconditionally
+  depends on `segger-jlink-headless`, so `config.segger-jlink.acceptLicense`
+  is required — there is no sdk-manager-only composition that avoids J-Link.
 - Consumer flakes can select another release per directory. The template
-  already passes `ncsVersion = "v3.3.0"` explicitly.
+  passes `ncsVersion = "v3.3.0"` explicitly.
 - Nordic's sdk-manager supports several SDK releases side by side under
   `$HOME/ncs/<version>` and stores toolchains separately under
   `$HOME/ncs/toolchains/<bundle-id>`.
-- The current `west` wrapper selects its toolchain with `--ncs-version`, so two
-  project directories can select different installed NCS versions through
+- The `west` wrapper selects the toolchain with `--ncs-version` by default
+  (newest compatible patched toolchain for the release), or with
+  `--toolchain-bundle-id <bundle-id>` when an exact bundle is configured, so
+  two project directories can select different installed NCS versions through
   their respective flakes and direnv environments.
-- `nix/nrfutil-core.nix` does not package the complete nRF Util core despite its
-  name. It packages Nordic's launcher executable. On first execution, that
-  launcher downloads and installs the actual core module into
-  `$NRFUTIL_HOME` or `$HOME/.nrfutil`.
-- The derivation is labelled `8.1.1`, while a clean first run currently installs
-  and reports core `8.2.0`. The fetched launcher's unversioned URL follows
-  Nordic's latest release; the fixed Nix hash prevents silent replacement but
-  causes future cold builds to fail when Nordic updates that URL.
-- The sdk-manager command is another independently versioned binary installed
-  into nRF Util home by `nrfutil install sdk-manager`.
+- `nrf-sdk-versions` delegates to `nrfutil sdk-manager search`, so
+  sdk-manager remains the runtime authority for available NCS versions; the
+  nrfutil backend does not reject a version because it is absent from
+  repository-owned metadata.
 - `nrfutil sdk-manager install <ncs-version>` installs both SDK source and its
-  matching toolchain. The command currently suggested by the `west` wrapper,
-  `toolchain install --ncs-version`, installs only the toolchain and therefore
-  cannot satisfy `ZEPHYR_BASE`.
-- CI checks that the wrapper exists but never runs a real `west` build. Existing
-  hardware CI assumes NCS v3.3.0 already exists on the self-hosted runner.
+  matching toolchain. The `west` wrapper's failure diagnostics point there and
+  distinguish missing SDK source from toolchain selection.
+- CI checks that the wrapper exists but never runs a real `west` build.
+  Existing hardware CI assumes NCS v3.3.0 already exists on the self-hosted
+  runner.
 
 ## Version model
 
@@ -51,22 +54,21 @@ Treat these as distinct inputs:
 
 | Input | Meaning | Default policy | Consumer override |
 |---|---|---|---|
-| `ncsVersion` | NCS source release, such as `v3.3.0` | One tested release per nix-nrf-dev revision | Yes, string |
+| `ncsVersion` | NCS source release, such as `v3.3.0` | One tested release per nix-nrf-dev revision | Yes, string (required) |
 | `toolchainBundleId` | Exact patched Nordic toolchain bundle | `null`, meaning latest compatible patch for `ncsVersion` | Yes, optional string |
-| `sdkManagerVersion` | nRF Util sdk-manager command | Exact tested version | Yes, from supported versions |
-| `nrfutilVersion` | nRF Util launcher/core pair | Exact tested version | Yes, from supported versions or package override |
+| nrfutil/sdk-manager versions | Packaged by Nixpkgs | Pinned via `flake.lock` | Replace the Nixpkgs revision (`inputs.nixpkgs.follows`) or pass `nrfutilPackage` to `mkNrfShell` |
 
 `ncsVersion` alone is release-level pinning. Nordic documents that
-`sdk-manager install vX.Y.Z` and `toolchain env --ncs-version vX.Y.Z` select the
-newest patched toolchain associated with that SDK release. Fully repeatable CI
-must also set `toolchainBundleId` and make the wrapper use
+`sdk-manager install vX.Y.Z` and `toolchain env --ncs-version vX.Y.Z` select
+the newest patched toolchain associated with that SDK release. Fully
+repeatable CI must also set `toolchainBundleId` and make the wrapper use
 `--toolchain-bundle-id`.
 
-Do not accept arbitrary `nrfutilVersion` strings without a corresponding source
-URL and Nix hash. Keep supported nRF Util versions in repository data, for
-example `nix/versions.nix`, or allow an advanced caller to provide an
-`nrfutilPackage` override. Keep one set of defaults shared by package creation,
-`mkNrfShell`, template, bootstrap helper, and tests.
+nrfutil/sdk-manager versions are Nixpkgs' responsibility, not repository
+metadata: Nixpkgs maintains the extension archives and hashes. An advanced
+caller who needs a different nrfutil composition supplies `nrfutilPackage`
+without replacing all of Nixpkgs. There is no repository-owned
+`supportedNcsVersions` list for the nrfutil backend.
 
 Changing a project directory's `ncsVersion` and reloading direnv selects another
 side-by-side installation. One active direnv should expose one SDK version;
@@ -85,15 +87,12 @@ start a long mutation merely because a user opened a directory.
 Instead, make first SDK-dependent `west` invocation perform bootstrap when
 `autoBootstrap = true`, which is the default:
 
-1. Detect whether the selected nRF Util core and sdk-manager command exist in
-   the controlled nRF Util home.
-2. Install the exact configured sdk-manager command when missing.
-3. Detect whether both selected SDK source and toolchain exist.
-4. Run `nrfutil sdk-manager install <ncsVersion>` when either is missing, or
+1. Detect whether both the selected SDK source and its toolchain exist.
+2. Run `nrfutil sdk-manager install <ncsVersion>` when either is missing, or
    install SDK and exact toolchain separately when `toolchainBundleId` is set.
-5. Load the selected toolchain environment.
-6. Resolve and export `ZEPHYR_BASE` for the west process.
-7. Execute real west command.
+3. Load the selected toolchain environment.
+4. Resolve and export `ZEPHYR_BASE` for the west process.
+5. Execute real west command.
 
 This removes a mandatory setup command while avoiding a long download during
 shell entry. Before downloading, print selected versions, destination, expected
@@ -113,8 +112,6 @@ mkNrfShell {
   backend = "nrfutil"; # only implemented backend; sdk-nrf is the future backend
   ncsVersion = "v3.3.0";
   toolchainBundleId = null;
-  sdkManagerVersion = defaults.sdkManagerVersion;
-  nrfutilVersion = defaults.nrfutilVersion;
   autoBootstrap = true;
 }
 ```
@@ -123,21 +120,12 @@ Boolean `autoBootstrap` keeps common configuration simple. If future behavior
 needs more states, migrate to `bootstrapMode = "on-demand" | "manual"` before
 stabilizing a 1.0 API rather than adding several booleans.
 
-### Controlled mutable state
+### Mutable state
 
-Global `$HOME/.nrfutil` makes projects requesting different core/plugin
-versions overwrite each other. Use a version-keyed nRF Util home owned by this
-library, such as:
-
-```text
-${XDG_CACHE_HOME:-$HOME/.cache}/nix-nrf-dev/nrfutil/
-  <system>/<nrfutil-version>-<sdk-manager-version>/
-```
-
-Set this path only inside wrapped `nrfutil`, `nrf-bootstrap`, and `west`
-processes so Nordic's Python and library variables remain scoped. Projects with
-the same versions share small command state; projects with different versions
-do not conflict.
+nrfutil and sdk-manager are packaged in the Nix store; the only mutable state
+is the SDK source and toolchain under Nordic's default roots (`$HOME/ncs`).
+No controlled/version-keyed `NRFUTIL_HOME` scheme is used: sdk-manager command
+state is store-owned, and there is no runtime command installation to isolate.
 
 Keep Nordic's default shared SDK root (`$HOME/ncs`) initially. It already
 supports multiple SDK releases and shared toolchain bundles. A later optional
@@ -160,47 +148,54 @@ only as explicit fallback. Current derivation from
 
 ## Phased work
 
-### Phase 1: correct nRF Util packaging and version configuration
+### Phase 1 (done): Nixpkgs nrfutil/sdk-manager migration
 
 Files:
 
-- `nix/nrfutil-core.nix`
-- new `nix/versions.nix` or equivalent package data
 - `flake.nix`
 - `nix/mk-nrf-shell.nix`
+- `nix/nrf-sdk-versions.nix`
 - `templates/default/flake.nix`
 - `README.md`
+- `.github/workflows/ci.yml`
 
 Work:
 
-1. Separate Nordic launcher version from core-module version in naming and
-   comments.
-2. Fetch versioned launcher and matching core tarball with fixed hashes.
-3. Use Nordic's documented `NRFUTIL_BOOTSTRAP_TARBALL_PATH` so first run does
-   not select latest core from network.
-4. Preserve `packages.nrfutil-core` as compatibility alias if package gets a
-   more accurate name.
-5. Add tested defaults and public overrides described above.
-6. Make toolchain selector choose bundle ID when supplied, otherwise NCS
-   version.
-7. Correct missing-install diagnostics to name both
-   `nrfutil install sdk-manager=<version>` and
-   `nrfutil sdk-manager install <ncsVersion>`.
+1. Switch the Nixpkgs input to `nixos-unstable` (pinned in `flake.lock`).
+2. Compose `pkgs.nrfutil.withExtensions [ "nrfutil-sdk-manager" ]`, expose it
+   as `packages.nrfutil`, and require SEGGER license acceptance
+   (`config.segger-jlink.acceptLicense = true`) in the Nixpkgs import.
+3. Make `ncsVersion` a required argument; add optional `toolchainBundleId`
+   and the public `nrfutilPackage` override.
+4. Select the toolchain with `--ncs-version` (or `--toolchain-bundle-id` when
+   set) with Nix shell escaping, and fix failure diagnostics to distinguish
+   SDK source from toolchain selection.
+5. Add `nrf-sdk-versions` delegating to `nrfutil sdk-manager search`, exposed
+   as `packages.nrf-sdk-versions` and instantiated from the selected
+   `nrfutilPackage` inside `mkNrfShell`.
+6. Delete the custom launcher package and update CI.
 
 Verification:
 
 ```bash
-nix build -L .#nrfutil-core
-HOME="$(mktemp -d)" nix run .#nrfutil-core -- --version
+nix fmt
 nix flake check -L
+nix build -L .#nrfutil .#nrf-sdk-versions
+nix run .#nrfutil -- --version
+nix run .#nrf-sdk-versions -- --help
+nix develop --command sh -ceu 'command -v nrfutil; command -v nrf-sdk-versions; command -v openocd; command -v nrf-probes'
 ```
 
-Observable acceptance: isolated first run reports configured nRF Util version,
-not registry's current latest, and does not read host `$HOME/.nrfutil`.
+Observable acceptance: public nrfutil backend comes from pinned/followable
+Nixpkgs with sdk-manager in the Nix store; missing `ncsVersion` fails
+evaluation; arbitrary explicit NCS strings reach sdk-manager; omitted bundle
+ID uses latest compatible patched toolchain, explicit bundle ID stays exact;
+`nrf-sdk-versions` delegates to sdk-manager; SEGGER/J-Link consequence is
+explicit.
 
-### Phase 2: bootstrap helper and sdk-manager strategy
+### Phase 2: bootstrap helper and lazy west integration
 
-Files expected if imperative install remains preferred:
+Files expected:
 
 - new `nix/nrf-bootstrap.nix`
 - new `bin/nrf-bootstrap` or generated shell wrapper
@@ -208,29 +203,21 @@ Files expected if imperative install remains preferred:
 - `flake.nix`
 - `README.md`
 
-Implement explicit helper plus lazy west integration. Install exact
-sdk-manager version through Nordic's supported command interface into
-version-keyed nRF Util home. Direct sdk-manager binary packaging is rejected:
-current source is not public, top-level redistribution terms are unclear, and
-reproducing nRF Util's private package layout would add maintenance without
-meaningful user benefit. The supported pinned command is:
+Implement explicit helper plus lazy west integration. sdk-manager is already
+packaged in the Nix store (Phase 1), so bootstrap only provisions SDK source
+and toolchain through Nordic's supported interface:
 
 ```bash
-nrfutil install sdk-manager=<version> --force
+nrfutil sdk-manager install <ncsVersion>
 ```
-
-Revisit only as part of a separately approved, fully offline NCS closure. Do
-not publish Nordic command binaries through Cachix without confirmed
-redistribution rights.
 
 Verification:
 
-- Empty controlled nRF Util home.
-- `nrf-bootstrap --yes` installs configured sdk-manager and selected SDK.
+- No SDK/toolchain installed for the selected release.
+- `nrf-bootstrap --yes` installs the selected SDK and matching toolchain.
 - Re-running helper is idempotent and downloads nothing already installed.
 - `autoBootstrap = false` performs no network or mutation and reports exact
   helper command.
-- Two controlled homes with different sdk-manager versions coexist.
 
 ### Phase 3: clean-home NCS build test
 
@@ -251,8 +238,8 @@ nix develop .#clean-env-test \
 
 Test two lifecycle entries:
 
-1. First entry starts with no nRF Util state or `$HOME/ncs`, bootstraps selected
-   sdk-manager, SDK, and toolchain.
+1. First entry starts with no nRF Util state or `$HOME/ncs`, bootstraps
+   selected sdk-manager, SDK, and toolchain.
 2. Second entry proves shell derives `ZEPHYR_BASE`, proves path belongs to clean
    home, and builds blinky:
 
@@ -281,11 +268,10 @@ CI split:
   home, then run same build.
 - normal `nix flake check`: never trigger multi-gigabyte network install.
 
-Cache key must include OS, architecture, NCS version, sdk-manager version, nRF
-Util version, and exact bundle ID when used. Restore to same absolute path.
-Measure Nordic download versus Actions cache upload/restore before committing to
-cache; unpacked toolchain alone is approximately 4.3 GiB on current Linux host,
-so caching may not be a net win.
+Cache key must include OS, architecture, NCS version, and exact bundle ID when
+used. Restore to same absolute path. Measure Nordic download versus Actions
+cache upload/restore before committing to cache; unpacked toolchain alone is
+approximately 4.3 GiB on current Linux host, so caching may not be a net win.
 
 ### Phase 4: hardware access guidance and diagnostics
 
@@ -421,9 +407,8 @@ earlier would duplicate policy and make parity testing harder.
 
 In scope:
 
-- per-project NCS release selection,
-- optional exact toolchain bundle selection,
-- pinned nRF Util and sdk-manager versions,
+- per-project NCS release selection (required `ncsVersion`),
+- optional exact toolchain bundle selection (`toolchainBundleId`),
 - side-by-side projects using different versions,
 - lazy automatic bootstrap with explicit opt-out,
 - clean-home nRF54L15 blinky build,
@@ -434,7 +419,8 @@ Out of scope for initial implementation:
 - two active NCS versions in one shell,
 - automatic host udev installation or `sudo`,
 - flashing hardware from hosted CI,
-- arbitrary unverified nRF Util version strings,
+- repository-owned nrfutil/sdk-manager version metadata or a static
+  supported-NCS-version list (Nixpkgs and sdk-manager own those),
 - macOS support expansion,
 - Linux ARM64 toolchain installation (Nordic documents sdk-manager toolchain
   installation as unsupported there),
@@ -446,23 +432,25 @@ Out of scope for initial implementation:
    before API stabilization.
 2. Pin exact toolchain bundle by default for tested release, or preserve
    Nordic's latest-compatible-patch behavior for normal users and pin only CI.
-3. Exact supported defaults for nRF Util core and sdk-manager after verifying
-   their compatibility with selected NCS default.
-4. Whether Cachix redistribution terms permit direct caching of Nordic binary
-   command/toolchain artifacts.
-5. Whether to keep `ncsVersion` default at v3.3.0 for first implementation or
-   move tested default in a separate intentional update.
+3. Whether Cachix redistribution terms permit direct caching of Nordic binary
+   toolchain artifacts (nrfutil/sdk-manager themselves are store-packaged by
+   Nixpkgs; the SDK/toolchain bundle is a separate question).
+4. Whether to keep tested example releases at v3.3.0 or move in a separate
+   intentional update.
 
 ## Source notes
 
-- Nordic documents current nRF Util as central executable plus independently
-  versioned core and command packages from an online registry.
-- Nordic documents pinned core bootstrap through
-  `NRFUTIL_BOOTSTRAP_TARBALL_PATH` and exact command installation through
-  `nrfutil install sdk-manager=<version> --force` or installation sets.
-- Nordic documents side-by-side SDKs under `$HOME/ncs/<version>`, toolchains
-  under `$HOME/ncs/toolchains/<bundle-id>`, and exact toolchain selection through
-  `--toolchain-bundle-id`.
+- Nordic documents sdk-manager as the runtime authority for available NCS
+  versions, with side-by-side SDKs under `$HOME/ncs/<version>`, toolchains
+  under `$HOME/ncs/toolchains/<bundle-id>`, and exact toolchain selection
+  through `--toolchain-bundle-id`.
+- Nordic documents `--ncs-version` as selecting the newest patched compatible
+  toolchain and `sdk-manager install vX.Y.Z` as installing SDK source plus the
+  matching toolchain.
+- Nixpkgs packages nRF Util and its extensions (`nrfutil`, sdk-manager, ...)
+  under `pkgs/by-name/nr/nrfutil`; extension archives, versions, and hashes are
+  maintained by Nixpkgs. The derivation unconditionally depends on
+  `segger-jlink-headless`.
 - Current nRF Util source is not public. Public
   `NordicSemiconductor/pc-nrfutil` is deprecated Python nRF Util v6 and is not
   source for current v7/v8 utility or sdk-manager command.

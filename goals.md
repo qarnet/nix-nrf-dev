@@ -22,7 +22,8 @@ overlays.default = final: prev: {
   openocd-master = ...;
   openocd-master-unwrapped = ...;
   nrf-probes = ...;
-  nrfutil-core = ...;
+  nrfutil = final.nrfutil.withExtensions [ "nrfutil-sdk-manager" ];
+  nrf-sdk-versions = ...;
 };
 ```
 
@@ -37,8 +38,10 @@ ours. It also composes: overlays stack, `packages.<system>` outputs don't.
 keep taking `pkgs` and call them from the overlay). Keep the existing
 `packages.<system>` outputs as thin wrappers over the overlay applied to our
 pinned nixpkgs, so nothing breaks for current consumers. Document in the
-README that overlay consumers need `config.allowUnfree = true` (or a
-per-package `allowUnfreePredicate`) for `nrfutil-core`.
+README that overlay consumers need `config.allowUnfree = true` **and**
+`config.segger-jlink.acceptLicense = true` (or equivalent per-package
+license handling): the packaged nrfutil derivation unconditionally depends
+on `segger-jlink-headless`.
 
 ### 1.2 `[ ]` System-independent `lib.mkNrfShell pkgs { ... }`
 
@@ -56,11 +59,12 @@ are optional sugar. This also makes the function usable from non-flake
 contexts and from flake-parts modules.
 
 **How:** `nix/mk-nrf-shell.nix` already takes `pkgs` — the change is mostly
-plumbing in `flake.nix`: build openocd-master/nrfutil-core/nrf-probes from
-the *given* pkgs (via the overlay from 1.1), then export both forms. Note
-the caveat: if the consumer's pkgs lacks `allowUnfree`, `nrfutil-core`
-construction must degrade gracefully (it already handles unsupported
-systems by returning `null`; extend the same pattern).
+plumbing in `flake.nix`: build openocd-master/nrfutil/nrf-probes from the
+*given* pkgs (via the overlay from 1.1), then export both forms. Note the
+caveat: if the consumer's pkgs lacks `allowUnfree`/SEGGER license acceptance,
+the nrfutil construction must degrade gracefully (nixpkgs' nrfutil only
+supports Linux; Darwin would need a documented degraded path rather than an
+evaluation error).
 
 ### 1.3 `[ ]` `nixConfig` cache hints
 
@@ -137,18 +141,19 @@ state that in the workflow's PR body template.
 
 **What:** A README section declaring exactly what works where:
 
-| Platform | openocd-master | nrf-probes | nrfutil-core | mkNrfShell |
+| Platform | openocd-master | nrf-probes | nrfutil | mkNrfShell |
 |---|---|---|---|---|
-| x86_64-linux | yes | yes | yes | full |
-| aarch64-linux | yes | yes | yes | full (no multilib) |
+| x86_64-linux | yes | yes | yes (Nixpkgs; J-Link included) | full |
+| aarch64-linux | yes | yes | yes (Nixpkgs; J-Link included) | full (no multilib) |
 | Darwin | builds | untested (sysfs!) | **no** | degraded |
 
-**Why:** The code degrades gracefully off Linux (`nrfutil-core` becomes
-`null`, the shell skips toolchain setup) but silently — a Darwin user
-discovers the limits by debugging. Library flakes state support up front.
-Note: `bin/nrf-probes` enumerates probes via `/sys/bus/usb/devices`, so it
-is Linux-only at runtime regardless of what builds; either document that or
-gate the package to Linux.
+**Why:** Nixpkgs' nrfutil only supports Linux (`x86_64-linux`,
+`aarch64-linux`) and its derivation unconditionally pulls
+`segger-jlink-headless`; on Darwin the package throws, so a Darwin user
+discovers the limit by evaluating the shell. Library flakes state support
+up front. Note: `bin/nrf-probes` enumerates probes via `/sys/bus/usb/devices`,
+so it is Linux-only at runtime regardless of what builds; either document
+that or gate the package to Linux.
 
 **How:** Verify the actual matrix (does `eachDefaultSystem` even succeed on
 Darwin today?), write it down, and consider restricting

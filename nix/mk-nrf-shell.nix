@@ -1,7 +1,8 @@
 # mkNrfShell — devShell factory for nRF Connect SDK projects.
 #
-# Provides: openocd-master (wrapped), nrf-probes, nrfutil-core, multilib GCC
-# (for native_sim -m32 builds), a scoped-env `west` wrapper, and ZEPHYR_BASE
+# Provides: openocd-master (wrapped), nrf-probes, the packaged nrfutil with
+# the sdk-manager extension, the nrf-sdk-versions helper, multilib GCC (for
+# native_sim -m32 builds), a scoped-env `west` wrapper, and ZEPHYR_BASE
 # derivation.
 #
 # Scoped toolchain env: Nordic's `nrfutil sdk-manager toolchain env` script
@@ -13,10 +14,22 @@
 # tree (~100 ms overhead per invocation). Builds still see the full
 # toolchain because cmake/ninja/gcc are spawned by west.
 #
+# The NCS release is a required argument: sdk-manager is the runtime
+# authority for available versions, and every caller selects a release
+# explicitly (no "latest" alias or default).
+#
 # Usage from a consumer flake:
 #   devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
 #     backend = "nrfutil";
 #     ncsVersion = "v3.3.0";
+#   };
+#
+# Advanced callers may replace the composed nrfutil derivation (which must
+# still provide `nrfutil` with the sdk-manager extension):
+#   devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
+#     backend = "nrfutil";
+#     ncsVersion = "v3.3.0";
+#     nrfutilPackage = myNrfutil;
 #   };
 #
 # Hybrid consumers may compose additional derivations via inputsFrom:
@@ -28,15 +41,21 @@
 {
   pkgs,
   openocd-master,
-  nrfutil-core,
+  nrfutil,
   nrf-probes,
 }: {
   # Backend that provides the NCS toolchain environment. "nrfutil" is the
   # only implemented backend (Nordic sdk-manager); "sdk-nrf" is reserved for
   # a future Nix-native backend and fails evaluation until implemented.
   backend ? "nrfutil",
-  # NCS version as installed by nrfutil sdk-manager (e.g. "v3.3.0").
-  ncsVersion ? "v3.3.0",
+  # NCS release as installed by nrfutil sdk-manager (e.g. "v3.3.0").
+  # Required: every caller selects a release explicitly.
+  ncsVersion,
+  # Exact patched Nordic toolchain bundle ID. null (omission) selects the
+  # newest compatible patched toolchain for `ncsVersion` (via
+  # --ncs-version); a non-null value selects that exact bundle (via
+  # --toolchain-bundle-id).
+  toolchainBundleId ? null,
   name ? "nrf-dev",
   # Extra packages for the shell (project-specific tools).
   packages ? [],
@@ -48,6 +67,11 @@
   # to pkgs.mkShell). Use this for hybrid projects that need Node, Python,
   # or other non-Nordic tooling alongside the NCS toolchain.
   inputsFrom ? [],
+  # Composed nrfutil derivation used for every nrfutil invocation and shell
+  # inclusion (west wrapper, nrf-sdk-versions helper). Defaults to the
+  # repository's packaged nrfutil with the sdk-manager extension; advanced
+  # callers may supply another compatible derivation.
+  nrfutilPackage ? nrfutil,
 }: let
   # Backend selector: exact-match only, no aliases, no silent fallback.
   supportedBackends = ["nrfutil"];
@@ -58,10 +82,30 @@
     builtins.elem backend supportedBackends
     || throw "mkNrfShell: unsupported backend '${backend}'; supported backends: ${supportedBackendsMsg}";
 
-  nrfutilExe =
-    if nrfutil-core != null
-    then "${nrfutil-core}/bin/nrfutil"
-    else "nrfutil";
+  nrfutilExe = "${nrfutilPackage}/bin/nrfutil";
+
+  # Nix shell escaping so embedded values survive shell parsing.
+  ncsVersionEsc = pkgs.lib.escapeShellArg ncsVersion;
+  # Toolchain selector for `nrfutil sdk-manager toolchain env`: exact bundle
+  # ID when configured, otherwise the NCS release (newest compatible patched
+  # toolchain).
+  toolchainSelectorArgs =
+    if toolchainBundleId != null
+    then "--toolchain-bundle-id ${pkgs.lib.escapeShellArg toolchainBundleId}"
+    else "--ncs-version ${ncsVersionEsc}";
+  # Human-readable selector description for diagnostics. Never silently
+  # falls back to the newest compatible bundle when an exact bundle is set.
+  toolchainSelectorDesc =
+    if toolchainBundleId != null
+    then "exact toolchain bundle ${pkgs.lib.escapeShellArg toolchainBundleId}"
+    else "newest compatible toolchain for NCS ${ncsVersionEsc}";
+
+  # sdk-manager-backed version-list command, instantiated from the selected
+  # nrfutil package so a caller package override also controls it.
+  nrfSdkVersions = import ./nrf-sdk-versions.nix {
+    inherit pkgs;
+    inherit nrfutilPackage;
+  };
 
   useMultilib = pkgs.stdenv.isLinux && withMultilib;
 
@@ -69,10 +113,11 @@
   # from the toolchain (its bin dirs are prepended to PATH by the env
   # script, so the first non-wrapper `west` on PATH is the real one).
   westWrapper = pkgs.writeShellScriptBin "west" ''
-    unset NRFUTIL_HOME
-    _env="$(${nrfutilExe} sdk-manager toolchain env --ncs-version ${ncsVersion} --as-script sh)" || {
-      echo "west wrapper: 'nrfutil sdk-manager toolchain env --ncs-version ${ncsVersion}' failed" >&2
-      echo "Is the NCS toolchain installed? (nrfutil sdk-manager toolchain install --ncs-version ${ncsVersion})" >&2
+    _env="$(${nrfutilExe} sdk-manager toolchain env ${toolchainSelectorArgs} --as-script sh)" || {
+      echo "west wrapper: 'nrfutil sdk-manager toolchain env ${toolchainSelectorArgs}' failed" >&2
+      echo "Selected toolchain: ${toolchainSelectorDesc}" >&2
+      echo "Is the NCS SDK source and its matching toolchain installed?" >&2
+      echo "Install both with: nrfutil sdk-manager install ${ncsVersionEsc}" >&2
       exit 1
     }
     eval "$_env"
@@ -107,8 +152,9 @@ in
           westWrapper
           openocd-master
           nrf-probes
+          nrfutilPackage
+          nrfSdkVersions
         ]
-        ++ pkgs.lib.optionals (nrfutil-core != null) [nrfutil-core]
         ++ pkgs.lib.optionals useMultilib [pkgs.gccMultiStdenv.cc]
         ++ packages;
 
@@ -122,8 +168,7 @@ in
           if [ -z "''${ZEPHYR_BASE:-}" ]; then
             _zephyr_candidate=""
             _sdk_dir="$(
-              unset NRFUTIL_HOME
-              eval "$(${nrfutilExe} sdk-manager toolchain env --ncs-version ${ncsVersion} --as-script sh 2>/dev/null)" 2>/dev/null
+              eval "$(${nrfutilExe} sdk-manager toolchain env ${toolchainSelectorArgs} --as-script sh 2>/dev/null)" 2>/dev/null
               printf '%s' "''${ZEPHYR_SDK_INSTALL_DIR:-}"
             )"
             if [ -n "$_sdk_dir" ]; then
@@ -146,7 +191,9 @@ in
             export PATH="$PWD/scripts/bin:$PATH"
           fi
         ''}
-        echo "${name} shell (backend ${backend}, NCS ${ncsVersion}, toolchain env scoped to west)"
+        echo "${name} shell (backend ${backend}, NCS ${ncsVersion}${
+          pkgs.lib.optionalString (toolchainBundleId != null) ", toolchain bundle ${toolchainBundleId}"
+        }, toolchain env scoped to west)"
         ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
           if [ -n "''${ZEPHYR_BASE:-}" ]; then
             echo "ZEPHYR_BASE: $ZEPHYR_BASE"

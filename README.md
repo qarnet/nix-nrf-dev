@@ -24,6 +24,10 @@ direnv allow          # or: nix develop
 }
 ```
 
+The `inputs.nixpkgs.follows = "nixpkgs"` directive lets the consumer's own
+Nixpkgs revision replace the one pinned in nix-nrf-dev's `flake.lock` — and
+with it the packaged nrfutil/sdk-manager versions.
+
 ```nix
 devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
   backend = "nrfutil";
@@ -32,14 +36,25 @@ devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
 ```
 
 The shell provides `west` + Zephyr toolchain (via nrfutil sdk-manager),
-`ZEPHYR_BASE`, `openocd` (master build), `nrf-probes`, `nrfutil`, and
-multilib GCC for `native_sim`.
+`ZEPHYR_BASE`, `openocd` (master build), `nrf-probes`, `nrfutil`, the
+`nrf-sdk-versions` helper, and multilib GCC for `native_sim`.
 
 **Scoped toolchain environment:** Nordic's sdk-manager env script exports
 `PYTHONHOME`, `PYTHONPATH`, `LD_LIBRARY_PATH` and `GIT_EXEC_PATH` — toxic to
 non-toolchain tools. `mkNrfShell` does NOT eval it into the shell; a `west`
 wrapper loads it only inside west's process tree. The shell itself stays
 clean — `nix`, agents, and editors launched from it work normally.
+
+## SEGGER / J-Link
+
+The packaged nrfutil derivation in Nixpkgs unconditionally depends on
+`segger-jlink-headless` and sets `NRF_JLINK_DLL_PATH` — **including when only
+the sdk-manager extension is composed**. This repository therefore configures
+`allowUnfree = true` and `segger-jlink.acceptLicense = true` in its Nixpkgs
+import. Any consumer that replaces Nixpkgs via `inputs.nixpkgs.follows` must
+set the same config (or equivalent `allowUnfreePredicate` / license handling)
+or nrfutil and its extensions will fail to build. There is no sdk-manager-only
+composition that avoids J-Link.
 
 ## Backends
 
@@ -53,8 +68,58 @@ clean — `nix`, agents, and editors launched from it work normally.
   fails at Nix evaluation with an unsupported-backend error instead of
   silently falling back.
 
-`ncsVersion` remains per-project and customizable; `"v3.3.0"` is the tested
-default, not an architecture lock.
+`ncsVersion` is a **required** argument — every caller selects an NCS release
+explicitly (there is no `"latest"` alias or default). `"v3.3.0"` is the tested
+release used by this repository's own shells, examples, and template, but it
+is not an architecture lock.
+
+Toolchain selection:
+
+- Omit `toolchainBundleId` (normal case) → the west wrapper runs
+  `nrfutil sdk-manager toolchain env --ncs-version <ncsVersion>`, selecting
+  the newest compatible patched toolchain for that release.
+- Set `toolchainBundleId = "<bundle-id>"` → the wrapper runs
+  `nrfutil sdk-manager toolchain env --toolchain-bundle-id <bundle-id>`,
+  selecting that exact bundle. If it fails, the error names the exact bundle
+  rather than falling back to the newest compatible one.
+
+This phase only selects an already-installed toolchain. If the SDK/toolchain
+for the selected release is missing, the west wrapper reports:
+`nrfutil sdk-manager install <ncsVersion>`.
+
+## nrf-sdk-versions
+
+Lists NCS releases currently advertised by Nordic sdk-manager. It delegates to
+`nrfutil sdk-manager search` without parsing or maintaining a local version
+list, so sdk-manager remains the runtime authority:
+
+```
+$ nrf-sdk-versions
+$ nrf-sdk-versions --json
+$ nrf-sdk-versions --help
+```
+
+Native sdk-manager output, options, network behavior, and exit status are
+preserved.
+
+## Advanced: overriding nrfutil
+
+`mkNrfShell` accepts a public `nrfutilPackage` override (defaulting to this
+repository's composed package: Nixpkgs nrfutil with the sdk-manager
+extension). Every nrfutil invocation — the `west` wrapper and the
+`nrf-sdk-versions` helper included — uses the selected package, so an advanced
+caller can substitute another compatible derivation:
+
+```nix
+devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
+  ncsVersion = "v3.3.0";
+  nrfutilPackage = myNrfutil; # must provide `nrfutil` with sdk-manager
+};
+```
+
+Without `nrfutilPackage`, replacing the Nixpkgs revision via
+`inputs.nixpkgs.follows` is the supported way to change nrfutil/sdk-manager
+versions.
 
 ## Hybrid consumers
 
@@ -75,14 +140,15 @@ the shell without polluting the scoped `west` wrapper.
 
 | Output | What |
 |--------|------|
-| `lib.<system>.mkNrfShell { backend, ncsVersion, packages, extraShellHook, withMultilib, inputsFrom, name }` | devShell factory (see [Backends](#backends)) |
+| `lib.<system>.mkNrfShell { backend, ncsVersion, toolchainBundleId, nrfutilPackage, packages, extraShellHook, withMultilib, inputsFrom, name }` | devShell factory — `ncsVersion` required; `toolchainBundleId`/`nrfutilPackage` optional (see [Backends](#backends) and [Advanced: overriding nrfutil](#advanced-overriding-nrfutil)) |
 | `packages.openocd-master` | openocd from master (pinned), wrapped for libudev |
 | `packages.openocd-master-unwrapped` | the raw build |
 | `packages.nrf-probes` | probe/target identification (read-only) |
-| `packages.nrfutil-core` | minimal nrfutil (no J-Link dependency) |
+| `packages.nrfutil` | Nixpkgs nrfutil composed with the sdk-manager extension (includes SEGGER J-Link, see [SEGGER / J-Link](#segger--j-link)) |
+| `packages.nrf-sdk-versions` | sdk-manager-backed NCS version list (see [nrf-sdk-versions](#nrf-sdk-versions)) |
 | `devShells.default` | dogfood shell for hacking on this repo |
 | `formatter.<system>` | treefmt wrapper (`nix fmt`) |
-| `checks.<system>` | `formatting` (treefmt) + `backend-selector` (eval gate: omitted/`nrfutil` evaluate, `sdk-nrf` rejected) + `pre-commit` (git-hooks.nix) |
+| `checks.<system>` | `formatting` (treefmt) + `backend-selector` (eval gate: `ncsVersion` required, omitted/`nrfutil` evaluate, `sdk-nrf` rejected, `toolchainBundleId` evaluates) + `pre-commit` (git-hooks.nix) |
 | `templates.default` | project skeleton (flake.nix + .envrc) |
 | `tcl/` | canonical flash recipes (see below) |
 
