@@ -45,9 +45,10 @@ on `segger-jlink-headless`.
 
 ### 1.2 `[ ]` System-independent `lib.mkNrfShell pkgs { ... }`
 
-**What:** Offer `lib.mkNrfShell = pkgs: { ncsVersion ? ..., ... }: ...` at
+**What:** Offer `lib.mkNrfShell = pkgs: { ncsVersion, ... }: ...` at
 the top level, alongside (not replacing) the current per-system
-`lib.${system}.mkNrfShell`.
+`lib.${system}.mkNrfShell`. `ncsVersion` stays a required argument in both
+forms: every caller selects an NCS release explicitly.
 
 **Why:** Today `mkNrfShell` closes over our own
 `import nixpkgs { config.allowUnfree = true; }`. Even when the consumer sets

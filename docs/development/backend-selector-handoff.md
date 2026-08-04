@@ -97,7 +97,8 @@ Add `backend` to documented signature table. Explain:
 - `"sdk-nrf"` is reserved for future Nix-native environment and currently
   fails evaluation.
 - `ncsVersion` remains per-project and customizable; v3.3.0 is tested default,
-  not architecture lock.
+  not architecture lock. (Superseded by the later Nixpkgs nrfutil migration:
+  `ncsVersion` is now a required argument with no default.)
 
 ### Design and roadmap documentation
 

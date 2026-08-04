@@ -15,8 +15,10 @@ controlled `NRFUTIL_HOME` scheme.
 - `mkNrfShell` requires `ncsVersion` (no default/`"latest"` alias) and accepts
   optional `toolchainBundleId` (exact bundle) and `nrfutilPackage` (advanced
   package override). `west` selects `--ncs-version` or
-  `--toolchain-bundle-id` accordingly; failure diagnostics point to
-  `nrfutil sdk-manager install <ncsVersion>`.
+  `--toolchain-bundle-id` accordingly. Failure diagnostics distinguish missing
+  SDK source from toolchain selection: `nrfutil sdk-manager install
+  <ncsVersion>` alone, plus `nrfutil sdk-manager toolchain install
+  --toolchain-bundle-id <bundle-id>` when an exact bundle is configured.
 - `nrf-sdk-versions` delegates to `nrfutil sdk-manager search`; sdk-manager is
   the runtime authority for available NCS versions. No repository-owned
   supported-version list exists.

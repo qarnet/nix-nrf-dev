@@ -54,7 +54,7 @@ Treat these as distinct inputs:
 
 | Input | Meaning | Default policy | Consumer override |
 |---|---|---|---|
-| `ncsVersion` | NCS source release, such as `v3.3.0` | One tested release per nix-nrf-dev revision | Yes, string (required) |
+| `ncsVersion` | NCS source release, such as `v3.3.0` | None — required explicit selection (one tested release per nix-nrf-dev revision) | Yes, string (required) |
 | `toolchainBundleId` | Exact patched Nordic toolchain bundle | `null`, meaning latest compatible patch for `ncsVersion` | Yes, optional string |
 | nrfutil/sdk-manager versions | Packaged by Nixpkgs | Pinned via `flake.lock` | Replace the Nixpkgs revision (`inputs.nixpkgs.follows`) or pass `nrfutilPackage` to `mkNrfShell` |
 
@@ -122,10 +122,12 @@ stabilizing a 1.0 API rather than adding several booleans.
 
 ### Mutable state
 
-nrfutil and sdk-manager are packaged in the Nix store; the only mutable state
-is the SDK source and toolchain under Nordic's default roots (`$HOME/ncs`).
-No controlled/version-keyed `NRFUTIL_HOME` scheme is used: sdk-manager command
-state is store-owned, and there is no runtime command installation to isolate.
+nrfutil and sdk-manager binaries are packaged in the Nix store; this phase
+installs no command binaries at runtime and does not isolate `NRFUTIL_HOME`.
+The mutable SDK source and toolchain live under Nordic's default roots
+(`$HOME/ncs`), and nrfutil/sdk-manager may still write their own config,
+index/cache, and log state under their normal home (`$HOME/.nrfutil` or
+`$NRFUTIL_HOME` when set) — nothing redirects or controls that state.
 
 Keep Nordic's default shared SDK root (`$HOME/ncs`) initially. It already
 supports multiple SDK releases and shared toolchain bundles. A later optional

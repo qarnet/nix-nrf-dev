@@ -50,11 +50,15 @@ clean — `nix`, agents, and editors launched from it work normally.
 The packaged nrfutil derivation in Nixpkgs unconditionally depends on
 `segger-jlink-headless` and sets `NRF_JLINK_DLL_PATH` — **including when only
 the sdk-manager extension is composed**. This repository therefore configures
-`allowUnfree = true` and `segger-jlink.acceptLicense = true` in its Nixpkgs
-import. Any consumer that replaces Nixpkgs via `inputs.nixpkgs.follows` must
-set the same config (or equivalent `allowUnfreePredicate` / license handling)
-or nrfutil and its extensions will fail to build. There is no sdk-manager-only
-composition that avoids J-Link.
+`allowUnfree = true` and `segger-jlink.acceptLicense = true` in its own
+Nixpkgs import. `inputs.nixpkgs.follows` only replaces the Nixpkgs *source*
+revision; nix-nrf-dev still imports that source with its own config, so
+consumers using the default package need no extra configuration. Consumers
+who construct or override nrfutil from their own `pkgs` — a `nrfutilPackage`
+override, or their own `pkgs.nrfutil.withExtensions [ "nrfutil-sdk-manager" ]`
+— must configure `allowUnfree = true` and `segger-jlink.acceptLicense = true`
+(or equivalent per-package license handling) or that package will fail to
+build. There is no sdk-manager-only composition that avoids J-Link.
 
 ## Backends
 
@@ -83,9 +87,12 @@ Toolchain selection:
   selecting that exact bundle. If it fails, the error names the exact bundle
   rather than falling back to the newest compatible one.
 
-This phase only selects an already-installed toolchain. If the SDK/toolchain
-for the selected release is missing, the west wrapper reports:
-`nrfutil sdk-manager install <ncsVersion>`.
+This phase only selects an already-installed toolchain. If it is missing, the
+west wrapper reports the install commands: with `toolchainBundleId` omitted,
+`nrfutil sdk-manager install <ncsVersion>` (SDK source plus its matching
+toolchain); with an exact bundle configured, `nrfutil sdk-manager install
+<ncsVersion>` for the SDK source and `nrfutil sdk-manager toolchain install
+--toolchain-bundle-id <bundle-id>` for that exact toolchain.
 
 ## nrf-sdk-versions
 
