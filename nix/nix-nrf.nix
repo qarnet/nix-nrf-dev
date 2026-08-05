@@ -18,7 +18,8 @@
 #     read-only SDK/toolchain and probe-access diagnostics). The base
 #     `packages.nix-nrf` has no NCS default, so its doctor skips the SDK
 #     selection but still diagnoses hardware; the shell-specific nix-nrf
-#     passes the configured selector.
+#     passes the configured selector and, via mkNrfShell's internal udevRules
+#     closure wiring, the exact udev-rules package path.
 #
 # Delegation uses exact Nix store executable paths derived from the selected
 # packages — never ambient PATH lookup — and `exec`, so delegated stdout,
@@ -32,7 +33,11 @@
   ncsVersion ? null,
   toolchainBundleId ? null,
   # The udev-rules package (see ./nrf-udev-rules.nix) whose exact store path
-  # the doctor reports in its remediation. null keeps the doctor fully
+  # the doctor wrapper reports in its remediation (NIX_NRF_DOCTOR_UDEV_RULES).
+  # flake.nix and mkNrfShell (internal `udevRules` closure wiring) always pass
+  # the real package, so both the standalone and the shell-specific doctor
+  # name the exact packaged rule file. The null default exists only as a
+  # safety net for direct external instantiation; a null doctor is fully
   # functional but omits the exact packaged-rule-path line.
   udevRules ? null,
 }: let

@@ -231,6 +231,8 @@ Remediation
     Install result/lib/udev/rules.d/60-openocd.rules using your distribution's
     documented udev procedure, reload rules, then replug probe.
 
+  Packaged udev rule: /nix/store/...-nix-nrf-udev-rules/lib/udev/rules.d/60-openocd.rules
+
   OpenOCD should not run as root.
 
 PASS
@@ -244,7 +246,10 @@ nodes — hidraw for CMSIS-DAP (USB-node fallback when the probe exposes no
 HID interface, e.g. CMSIS-DAP v2 bulk), USB bus node for J-Link. The base
 `packages.nix-nrf` has no NCS default, so its doctor skips the SDK check but
 still diagnoses hardware; the shell's `nix-nrf` checks the configured
-selector.
+selector. Both the standalone package and the shell's `nix-nrf` doctor carry
+the exact packaged udev-rule store path (the shell's comes from internal
+closure wiring in `mkNrfShell`, not a consumer option) and print it as
+`Packaged udev rule:` in the remediation.
 
 Exit: `0` when the SDK is pass/skip and at least one candidate is accessible,
 `1` for SDK or hardware failure, `2` for CLI usage errors. `--json` emits one

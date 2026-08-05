@@ -89,6 +89,10 @@
             openocd-master
             nrfutil
             ;
+          # Internal closure wiring: the shell-specific `nix-nrf doctor`
+          # reports the exact udev-rules store path in its remediation.
+          # Not a public mkNrfShell consumer option.
+          udevRules = nrfUdevRules;
         };
 
         # Internal hybrid-input fixture: plain mkShell whose packages provide
@@ -320,6 +324,50 @@
             mkdir -p "$out"
           '';
 
+        # Shell doctor udev-rules wiring gate: proves the shell-instantiated
+        # `nix-nrf doctor` (from devShells.default, built through mkNrfShell's
+        # internal udevRules closure wiring) reports the exact packaged udev
+        # rule path in its remediation. Runs the real shell `nix-nrf doctor`
+        # against a temporary fake sysfs/dev root with one blocked candidate —
+        # no host USB, no network, no SDK. Regresses the pre-fix state where
+        # mkNrfShell omitted udevRules and the shell doctor dropped the exact
+        # packaged-rule-path line.
+        doctorUdevWiringCheck = let
+          devShell = self.devShells.${system}.default;
+          nixNrf = let
+            matches = builtins.filter (p: p.name == "nix-nrf") (devShell.nativeBuildInputs or []);
+          in
+            if matches == []
+            then null
+            else builtins.head matches;
+        in
+          pkgs.runCommand "nix-nrf-doctor-udev-wiring-check"
+          {
+            inherit nixNrf;
+            expectedUdevRules = nrfUdevRules;
+          }
+          ''
+            [ -n "$nixNrf" ] || {
+              echo "doctor udev-rules wiring check: nix-nrf not found in devShell inputs" >&2
+              exit 1
+            }
+            mkdir -p sysfs/1-9 dev/bus/usb/001
+            echo "Fake CMSIS-DAP" > sysfs/1-9/product
+            echo 1 > sysfs/1-9/busnum
+            echo 2 > sysfs/1-9/devnum
+            NIX_NRF_DOCTOR_SYSFS_ROOT="$PWD/sysfs" \
+            NIX_NRF_DOCTOR_DEV_ROOT="$PWD/dev" \
+            NIX_NRF_DOCTOR_SKIP_SDK=1 \
+            "$nixNrf"/bin/nix-nrf doctor > doctor.out 2>&1 || true
+            grep -q "Packaged udev rule: $expectedUdevRules/lib/udev/rules.d/60-openocd.rules" doctor.out || {
+              echo "doctor udev-rules wiring check: exact packaged udev rule path missing from shell doctor output" >&2
+              cat doctor.out >&2
+              exit 1
+            }
+            echo "doctor udev-rules wiring check passed: shell doctor reports $expectedUdevRules" >&2
+            mkdir -p "$out"
+          '';
+
         treefmtEval = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
 
         pre-commit = git-hooks.lib.${system}.run {
@@ -379,6 +427,7 @@
           bootstrap-tests = bootstrapTests;
           bootstrap-quoting = bootstrapQuotingCheck;
           doctor-tests = doctorTests;
+          doctor-udev-wiring = doctorUdevWiringCheck;
           udev-rules = udevRulesCheck;
           inherit pre-commit;
         };

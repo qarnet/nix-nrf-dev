@@ -1,10 +1,12 @@
 # mkNrfShell — devShell factory for nRF Connect SDK projects.
 #
 # Provides: openocd-master (wrapped), the nix-nrf CLI facade (which owns the
-# internal `nix-nrf probes` and `nix-nrf bootstrap` command modules), the
-# packaged nrfutil with the sdk-manager extension, multilib GCC (for native_sim
-# -m32 builds), a scoped-env `west` wrapper with lazy SDK/toolchain bootstrap,
-# and ZEPHYR_BASE derivation.
+# internal `nix-nrf probes`, `nix-nrf bootstrap`, and `nix-nrf doctor`
+# command modules), the packaged nrfutil with the sdk-manager extension,
+# multilib GCC (for native_sim -m32 builds), a scoped-env `west` wrapper with
+# lazy SDK/toolchain bootstrap, and ZEPHYR_BASE derivation. The shell-specific
+# `nix-nrf doctor` carries the exact udev-rules package path (internal
+# `udevRules` closure wiring from flake.nix).
 #
 # Scoped toolchain env: Nordic's `nrfutil sdk-manager toolchain env` script
 # exports PYTHONHOME, PYTHONPATH, LD_LIBRARY_PATH, GIT_EXEC_PATH, ... —
@@ -53,6 +55,14 @@
   pkgs,
   openocd-master,
   nrfutil,
+  # Internal closure wiring, always supplied by flake.nix at the module
+  # import: the exact udev-rules package whose store path the shell-specific
+  # `nix-nrf doctor` wrapper reports in its remediation
+  # (NIX_NRF_DOCTOR_UDEV_RULES). Required here so the wiring can never be
+  # silently dropped — it is not a public consumer option; the public
+  # `mkNrfShell { ... }` call signature is unchanged (only flake.nix imports
+  # this module).
+  udevRules,
 }: {
   # Backend that provides the NCS toolchain environment. "nrfutil" is the
   # only implemented backend (Nordic sdk-manager); "sdk-nrf" is reserved for
@@ -132,6 +142,7 @@
       nrfutilPackage
       ncsVersion
       toolchainBundleId
+      udevRules
       ;
     openocd = openocd-master;
   };
