@@ -21,16 +21,19 @@ controlled `NRFUTIL_HOME` scheme.
   sdk install <ncsVersion>` for the SDK source only plus `nrfutil sdk-manager
   toolchain install --toolchain-bundle-id <bundle-id>` for that exact
   toolchain.
-- `nrf-sdk-versions` delegates to `nrfutil sdk-manager search`; sdk-manager is
+- `nix-nrf versions` delegates to `nrfutil sdk-manager search`; sdk-manager is
   the runtime authority for available NCS versions. No repository-owned
-  supported-version list exists.
+  supported-version list exists. `nix-nrf probes` delegates to the packaged
+  `nrf-probes`, which remains available standalone as a temporary
+  compatibility command.
 - The packaged nrfutil derivation unconditionally depends on
   `segger-jlink-headless`; the flake config sets
   `segger-jlink.acceptLicense = true`. There is no sdk-manager-only
   composition that avoids J-Link.
-- CI builds `.#nrfutil` and `.#nrf-sdk-versions`, smoke-tests nrfutil
-  version, runs `nrf-sdk-versions --help`, and checks the devshell provides
-  `nrfutil`, `nrf-sdk-versions`, `openocd`, `nrf-probes`.
+- CI builds `.#nrfutil` and `.#nix-nrf`, smoke-tests `nix-nrf --help`,
+  `nix-nrf versions --help`, and `nix-nrf probes --help`, verifies unknown
+  subcommands exit 2, and checks the devshell provides `nrfutil`, `nix-nrf`,
+  `openocd`, `nrf-probes`, `west`.
 
 ## Open follow-up (not this phase)
 

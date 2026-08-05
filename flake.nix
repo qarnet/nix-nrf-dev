@@ -56,16 +56,17 @@
         # not duplicate them.
         nrfutil = pkgs.nrfutil.withExtensions ["nrfutil-sdk-manager"];
 
-        # sdk-manager-backed version-list command built against the default
-        # composed nrfutil package.
-        nrf-sdk-versions = import ./nix/nrf-sdk-versions.nix {
-          inherit pkgs;
-          nrfutilPackage = nrfutil;
-        };
-
         nrf-probes = import ./nix/nrf-probes.nix {
           inherit pkgs;
           openocd = openocd-master;
+        };
+
+        # Public project CLI facade: fixed dispatcher over the default
+        # composed nrfutil (versions) and the packaged nrf-probes (probes).
+        nix-nrf = import ./nix/nix-nrf.nix {
+          inherit pkgs;
+          nrfutilPackage = nrfutil;
+          nrfProbesPackage = nrf-probes;
         };
 
         mkNrfShell = import ./nix/mk-nrf-shell.nix {
@@ -189,8 +190,9 @@
             openocd-master-unwrapped
             nrf-probes
             nrfutil
-            nrf-sdk-versions
+            nix-nrf
             ;
+          default = nix-nrf;
         };
 
         lib = {

@@ -37,10 +37,11 @@ for the XIAO nRF54L15 in an isolated home directory.
   `--toolchain-bundle-id <bundle-id>` when an exact bundle is configured, so
   two project directories can select different installed NCS versions through
   their respective flakes and direnv environments.
-- `nrf-sdk-versions` delegates to `nrfutil sdk-manager search`, so
+- `nix-nrf versions` delegates to `nrfutil sdk-manager search`, so
   sdk-manager remains the runtime authority for available NCS versions; the
   nrfutil backend does not reject a version because it is absent from
-  repository-owned metadata.
+  repository-owned metadata. `nrf-probes` remains available standalone as a
+  temporary compatibility command; prefer `nix-nrf probes`.
 - `nrfutil sdk-manager install <ncs-version>` installs both SDK source and its
   matching toolchain; `nrfutil sdk-manager sdk install <ncs-version>` installs
   only the SDK source. The `west` wrapper's failure diagnostics distinguish

@@ -23,7 +23,7 @@ overlays.default = final: prev: {
   openocd-master-unwrapped = ...;
   nrf-probes = ...;
   nrfutil = final.nrfutil.withExtensions [ "nrfutil-sdk-manager" ];
-  nrf-sdk-versions = ...;
+  nix-nrf = ...; # composed from the nrfutil + nrf-probes entries above
 };
 ```
 

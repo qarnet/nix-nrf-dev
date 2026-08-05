@@ -1,9 +1,9 @@
 # mkNrfShell — devShell factory for nRF Connect SDK projects.
 #
-# Provides: openocd-master (wrapped), nrf-probes, the packaged nrfutil with
-# the sdk-manager extension, the nrf-sdk-versions helper, multilib GCC (for
-# native_sim -m32 builds), a scoped-env `west` wrapper, and ZEPHYR_BASE
-# derivation.
+# Provides: openocd-master (wrapped), nrf-probes (temporary compatibility
+# command), the packaged nrfutil with the sdk-manager extension, the nix-nrf
+# CLI facade, multilib GCC (for native_sim -m32 builds), a scoped-env `west`
+# wrapper, and ZEPHYR_BASE derivation.
 #
 # Scoped toolchain env: Nordic's `nrfutil sdk-manager toolchain env` script
 # exports PYTHONHOME, PYTHONPATH, LD_LIBRARY_PATH, GIT_EXEC_PATH, ... —
@@ -68,7 +68,7 @@
   # or other non-Nordic tooling alongside the NCS toolchain.
   inputsFrom ? [],
   # Composed nrfutil derivation used for every nrfutil invocation and shell
-  # inclusion (west wrapper, nrf-sdk-versions helper). Defaults to the
+  # inclusion (west wrapper, nix-nrf versions subcommand). Defaults to the
   # repository's packaged nrfutil with the sdk-manager extension; advanced
   # callers may supply another compatible derivation.
   nrfutilPackage ? nrfutil,
@@ -122,11 +122,12 @@
     echo "Install the SDK and its matching toolchain with: nrfutil sdk-manager install \"$_ncs_version\"" >&2
   '';
 
-  # sdk-manager-backed version-list command, instantiated from the selected
-  # nrfutil package so a caller package override also controls it.
-  nrfSdkVersions = import ./nrf-sdk-versions.nix {
+  # Public CLI facade, instantiated from the selected nrfutil package and the
+  # packaged nrf-probes so a caller package override also controls `versions`.
+  nixNrf = import ./nix-nrf.nix {
     inherit pkgs;
     inherit nrfutilPackage;
+    nrfProbesPackage = nrf-probes;
   };
 
   useMultilib = pkgs.stdenv.isLinux && withMultilib;
@@ -181,7 +182,7 @@ in
           openocd-master
           nrf-probes
           nrfutilPackage
-          nrfSdkVersions
+          nixNrf
         ]
         ++ pkgs.lib.optionals useMultilib [pkgs.gccMultiStdenv.cc]
         ++ packages;
