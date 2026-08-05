@@ -15,7 +15,7 @@
 #                                    relative to the workspace
 #   NIX_NRF_WEST_PIP_CONSTRAINTS     newline-separated pip constraint lines
 #                                    applied via `pip install -c` (release-
-#                                    specific pins, e.g. cbor2<6)
+#                                    specific pins, e.g. cbor2==5.9.0)
 #
 # No builder file below hardcodes any release-specific value: everything comes
 # from the metadata attrset passed in.

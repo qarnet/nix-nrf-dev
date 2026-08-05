@@ -189,18 +189,20 @@ west build -p always -b xiao_nrf54l15/nrf54l15/cpuapp --sysbuild zephyr/samples/
 ```
 
 The prototype supports only `x86_64-linux`. The real clean-home proof
-(`tests/west-backend/run.sh`) downloads several GiB and runs only with
-explicit approval; normal CI never downloads a workspace.
+(`tests/west-backend/run.sh`) downloads several GiB; each run requires its
+own fresh explicit approval — approval is never permanent. Normal CI never
+downloads a workspace.
 
 **Proven 2026-08-05 (Linux x86_64):** `bash tests/west-backend/run.sh`
 exited 0 from a script-created isolated `/tmp` HOME: `nix-nrf-west-setup
 --yes` completed in 436 s (west init + west update + venv requirements with
-the metadata `cbor2<6` constraint), the scoped west wrapper then built
-`xiao_nrf54l15/nrf54l15/cpuapp` sysbuild blinky in 18 s, artifacts
-`zephyr.elf`/`domains.yaml` were asserted non-empty, and the temp home was
-removed on exit. Workspace (incl. venv) 6.4 G, build 29 M; Zephyr SDK came
-from `/nix/store/...-zephyr-sdk-0.17.0`; `nrfutil` absent throughout. See
-`docs/development/west-backend-status.md`.
+the then-current metadata constraint `cbor2<6`, which installed
+`cbor2==5.9.0`; since tightened to the exact `cbor2==5.9.0` pin), the scoped
+west wrapper then built `xiao_nrf54l15/nrf54l15/cpuapp` sysbuild blinky in
+18 s, artifacts `zephyr.elf`/`domains.yaml` were asserted non-empty, and the
+temp home was removed on exit. Workspace (incl. venv) 6.4 G, build 29 M;
+Zephyr SDK came from `/nix/store/...-zephyr-sdk-0.17.0`; `nrfutil` absent
+throughout. See `docs/development/west-backend-status.md`.
 
 Public `backend = "west"` integration follows only after this proof — the
 next phase.

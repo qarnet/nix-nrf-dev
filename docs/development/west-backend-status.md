@@ -35,7 +35,8 @@ only `"nrfutil"`, and `"west"` is not even reserved in the selector yet.
   `$out/bin/nix-nrf-west-setup`), wrapped with the exact Nix Python and
   metadata defaults. Read-only `--check`; mutating setup creates the venv,
   pins `west==<tested>`, runs `west init -m ... --mr <ncsVersion>`, `west
-  update`, and installs the requirement files   in declared order, applying the metadata `pipConstraints` via
+  update`, and installs the requirement files in declared order, applying the
+  metadata `pipConstraints` via
   `pip install -c` on every venv pip invocation. A
   user-supplied `--workspace` is normalized to an absolute path (tilde +
   CWD resolution) before any subprocess runs, so relative paths are never
@@ -89,10 +90,11 @@ only `"nrfutil"`, and `"west"` is not even reserved in the selector yet.
   present, `setup.sh` absent. Host spot-check: `arm-zephyr-eabi-gdb --version`
   works (ncurses patched), `sdk_version` file = 0.17.0, setup hook exports
   `ZEPHYR_SDK_INSTALL_DIR` into `/nix/store`.
-- Fixture tests — `python3 tests/unit/test_nix_nrf_west_setup.py`: 30 tests
+- Fixture tests — `python3 tests/unit/test_nix_nrf_west_setup.py`: 32 tests
   OK (also as `checks.west-setup-tests`), covering every parsed west
   constraint operator (==, >=, >, <=, < including strict boundaries and
-  mixed ranges) and relative/tilde `--workspace` normalization.
+  mixed ranges), relative/tilde `--workspace` normalization, and pip
+  constraint application.
 - `checks.west-backend-quoting` — passes with the fixed variable composition
   and FAILS when the escapeShellArg-in-double-quotes defect is reintroduced
   (verified both ways).
@@ -107,18 +109,22 @@ only `"nrfutil"`, and `"west"` is not even reserved in the selector yet.
 
 ## Real clean-home proof (2026-08-05, Linux x86_64)
 
-`bash tests/west-backend/run.sh` exited 0. The script created an isolated
-`/tmp` HOME (`/tmp/nix-nrf-west-home-w2adfa5L`), ran the cold setup, built
-blinky via the scoped west wrapper, asserted the artifacts, and removed the
-script-created home on exit (default cleanup; `NIX_NRF_CLEAN_KEEP`/west
-equivalent not set). No developer `$HOME/ncs` state, no nrfutil, no
-hardware.
+`bash tests/west-backend/run.sh` exited 0. This run received explicit user
+approval; each future real run requires its own fresh explicit approval (the
+helper's interactive confirmation and the script's documented approval
+requirement still apply — approval is never permanent). The script created
+an isolated `/tmp` HOME (`/tmp/nix-nrf-west-home-w2adfa5L`), ran the cold
+setup, built blinky via the scoped west wrapper, asserted the artifacts, and
+removed the script-created home on exit (default cleanup; the keep-variable
+`NIX_NRF_WEST_CLEAN_KEEP` was not set). No developer `$HOME/ncs` state, no
+nrfutil, no hardware.
 
 Lifecycle 1 (cold setup):
 
 - `nix-nrf-west-setup --yes` — **setup elapsed: 436 s**; `west init`
   (`sdk-nrf` v3.3.0) + full `west update` (25+ projects) + pip requirement
-  installs with the metadata constraint `cbor2<6`.
+  installs with the then-current metadata constraint `cbor2<6`, which
+  resolved and installed `cbor2==5.9.0`.
 - Workspace: `$HOME/ncs/v3.3.0` with `.west/config`, `nrf/west.yml`,
   `zephyr/zephyr-env.sh`, `.venv/bin/west` — all asserted.
 - Readiness re-check via `nix-nrf-west-setup --check --print-workspace`
@@ -151,9 +157,16 @@ First proof attempt (same day) failed during readiness: `zcbor==0.8.1`
 imported `CBORDecodeValueError`, removed in `cbor2` 6.x, which the loose NCS
 requirement files resolve to today (unbounded `cbor2>=5.4.2.post1`; NCS's
 own `requirements-fixed.txt` pins `cbor2==5.9.0`). Fixed by the metadata
-`pipConstraints = ["cbor2<6"]` applied via `pip install -c`; the import
-check also uses the actual module name `nrfregtool` (nrf-regtool 9.2.1).
-Second run passed end-to-end.
+`pipConstraints` applied via `pip install -c`; the import check also uses
+the actual module name `nrfregtool` (nrf-regtool 9.2.1). Second run passed
+end-to-end.
+
+Constraint pinning history: the proof runs used the metadata constraint
+`cbor2<6`, which happened to resolve and install `cbor2==5.9.0`. After
+review the metadata was tightened to the exact `cbor2==5.9.0` pin — the
+verbatim `requirements-fixed.txt` value — because `<6` would admit any
+future, unverified 5.x release. No second multi-gigabyte proof was required:
+the effective installed cbor2 version is unchanged.
 
 ## Limitations
 
@@ -177,8 +190,8 @@ Second run passed end-to-end.
   `cbor2` 6.x, while `nrf/scripts/requirements-build.txt` allows
   `cbor2>=5.4.2.post1` unbounded (current resolution: 6.1.4). NCS's own
   `requirements-fixed.txt` pins `cbor2==5.9.0`; the prototype encodes that
-  as the metadata `pipConstraints = ["cbor2<6"]` and applies it via
-  `pip install -c`. Additionally, `nrf-regtool` 9.2.1 provides the
+  verbatim as the metadata `pipConstraints = ["cbor2==5.9.0"]` and applies
+  it via `pip install -c`. Additionally, `nrf-regtool` 9.2.1 provides the
   `nrfregtool` module (not `nrf_regtool`), which the readiness import check
   uses.
 - No scheduled CI workflow; normal CI runs only the fixture tests, metadata

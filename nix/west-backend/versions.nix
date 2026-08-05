@@ -61,7 +61,9 @@
     # resolution: requirements-fixed.txt pins cbor2==5.9.0 for Python 3.12,
     # while nrf/scripts/requirements-build.txt allows cbor2>=5.4.2.post1 and
     # current PyPI resolves 6.x — which breaks zcbor 0.8.1 (cbor2 6 removed
-    # the CBORDecodeValueError alias zcbor imports).
-    pipConstraints = ["cbor2<6"];
+    # the CBORDecodeValueError alias zcbor imports). The exact 5.9.0 pin (not
+    # a `<6` range) matches requirements-fixed.txt verbatim and never admits
+    # an unverified 5.x release.
+    pipConstraints = ["cbor2==5.9.0"];
   };
 }

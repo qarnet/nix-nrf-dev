@@ -98,7 +98,7 @@ def required_requirements():
 def pip_constraints():
     """Configured pip constraint lines (may be empty). These ground the loose
     NCS requirement files in the release's own pinned resolution (e.g.
-    cbor2<6 for NCS v3.3.0, matching its requirements-fixed.txt)."""
+    cbor2==5.9.0 for NCS v3.3.0, matching its requirements-fixed.txt)."""
     raw = os.environ.get("NIX_NRF_WEST_PIP_CONSTRAINTS", "")
     return [line for line in raw.splitlines() if line.strip()]
 
@@ -390,7 +390,7 @@ def run_setup(args, workspace):
         )
         created_venv = True
 
-    # Pip constraints (release-specific, e.g. cbor2<6 for NCS v3.3.0) are
+    # Pip constraints (release-specific, e.g. cbor2==5.9.0 for NCS v3.3.0) are
     # written into the venv before any pip invocation and applied via `-c`.
     constraints_path = write_constraints(workspace, pip_constraints())
 

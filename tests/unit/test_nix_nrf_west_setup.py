@@ -169,7 +169,7 @@ class WestSetupTestCase(unittest.TestCase):
         self.env["NIX_NRF_WEST_NCS_VERSION"] = "v3.3.0"
         self.env["NIX_NRF_WEST_TESTED_WEST_VERSION"] = "1.4.0"
         self.env["NIX_NRF_WEST_REQUIREMENTS"] = REQUIREMENTS
-        self.env["NIX_NRF_WEST_PIP_CONSTRAINTS"] = "cbor2<6"
+        self.env["NIX_NRF_WEST_PIP_CONSTRAINTS"] = "cbor2==5.9.0"
         self.env["FAKE_WEST_SETUP_LOG_DIR"] = str(self.fake_dir)
         self.env.pop("NIX_NRF_WEST_SETUP_YES", None)
         self.env.pop("NIX_NRF_WEST_WORKSPACE", None)
@@ -376,7 +376,7 @@ class WestSetupTestCase(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         constraints = self.workspace / ".venv" / "nix-nrf-pip-constraints.txt"
         self.assertTrue(constraints.is_file())
-        self.assertEqual(constraints.read_text(), "cbor2<6\n")
+        self.assertEqual(constraints.read_text(), "cbor2==5.9.0\n")
         for line in self.mutations():
             if "python -m pip install" in line:
                 self.assertIn(f"-c {constraints}", line)
