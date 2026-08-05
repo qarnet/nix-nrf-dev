@@ -47,8 +47,10 @@ removed; the proof history below is preserved.
   [--print-sdk-path]`; the printed SDK path is the west workspace root
   (`$HOME/ncs/<version>`), satisfying the shared doctor/shell read-only
   contract. Approval is `--yes` / `NIX_NRF_BOOTSTRAP_YES=1` (the temporary
-  `NIX_NRF_WEST_SETUP_YES` is removed). Read-only `--check`; mutating setup
-  creates the venv, pins `west==<tested>`, runs `west init -m ... --mr
+  `NIX_NRF_WEST_SETUP_YES` is removed). Read-only `--check`; a ready
+  non-check invocation is a no-op (never prompts, never mutates — nrfutil
+  parity, so the lazy west wrapper needs no approval when ready); mutating
+  setup creates the venv, pins `west==<tested>`, runs `west init -m ... --mr
   <ncsVersion>`, `west update`, and installs the requirement files in declared
   order, applying the metadata `pipConstraints` via `pip install -c` on every
   venv pip invocation. A user-supplied `--workspace` is normalized to an
@@ -90,8 +92,9 @@ removed; the proof history below is preserved.
 - `checks.west-bootstrap-tests` — fake-boundary fixture tests for the
   bootstrap module (readiness, approval incl. `NIX_NRF_BOOTSTRAP_YES` and the
   removed old variable, public program prefix, command order, requirement
-  order, re-run without re-init, incompatible-workspace rejection without
-  deletion, failure propagation, `--check` non-mutation, `--print-sdk-path`
+  order, ready re-run no-op, ready `--print-sdk-path` without approval,
+  incompatible-workspace rejection without deletion, failure propagation,
+  `--check` non-mutation, `--print-sdk-path`
   stdout, isolated-HOME default workspace, relative/tilde `--workspace`
   normalization, and every parsed west-constraint operator including strict
   boundaries). The gate also builds the packaged module and asserts it
@@ -138,10 +141,12 @@ removed; the proof history below is preserved.
   works (ncurses patched), `sdk_version` file = 0.17.0, setup hook exports
   `ZEPHYR_SDK_INSTALL_DIR` into `/nix/store`.
 - Fixture tests — `python3 tests/unit/test_nix_nrf_west_bootstrap.py`: the
-  bootstrap suite grew from the prototype's 32 cases to 35 (public
+  bootstrap suite grew from the prototype's 32 cases to 37 (public
   `nix-nrf bootstrap` program prefix, `NIX_NRF_BOOTSTRAP_YES` approval,
   removed `NIX_NRF_WEST_SETUP_YES` no-effect, `--print-sdk-path` exact
-  stdout, temporary-command removal) — OK standalone and as
+  stdout, temporary-command removal, ready re-run no-op, ready
+  `--print-sdk-path` without approval, missing-workspace mutating path still
+  requiring approval) — OK standalone and as
   `checks.west-bootstrap-tests`, covering every parsed west constraint
   operator (==, >=, >, <=, < including strict boundaries and mixed
   ranges), relative/tilde `--workspace` normalization, and pip constraint
@@ -231,15 +236,17 @@ the effective installed cbor2 version is unchanged.
   `libpython3.10.so.1.0` (Python 3.10 EOL, absent from pinned Nixpkgs) and
   the legacy `libcrypt.so.1` ABI (Nixpkgs libxcrypt ships `libcrypt.so.2`).
   Plain `gdb` and all compilers work.
-- `nix-nrf bootstrap` re-runs always refresh `west update` + requirement
-  installs (documented mutation); a ready re-run performs no re-init and no
-  re-pin of west.
+- `nix-nrf bootstrap` on a fully ready workspace is a no-op (nrfutil parity):
+  never prompts, never mutates. The mutating path — venv creation, west init,
+  `west update`, and requirement installs — runs only when something is
+  missing (approval-gated). This is what keeps the lazy `autoBootstrap =
+  true` west wrapper approval-free on every ready invocation.
 - West version readiness resolves `-r` includes in the requirement files and
   compares every parsed operator (==, >=, >, <=, <); it accepts any version
   satisfying the resolved constraints (e.g. `west>=1.4.0`) and never demands
-  the tested 1.4.0 pin after requirement installation. A re-run always
-  refreshes `west update` + requirement installs, which may access the
-  network; the setup helper warns accordingly.
+  the tested 1.4.0 pin after requirement installation. The mutating path
+  warns that completing setup runs `west update` + requirement installs,
+  which may access the network.
 - NCS v3.3.0's loose requirement files cannot alone produce a working venv
   on today's PyPI: `zcbor==0.8.1` imports `CBORDecodeValueError`, removed in
   `cbor2` 6.x, while `nrf/scripts/requirements-build.txt` allows

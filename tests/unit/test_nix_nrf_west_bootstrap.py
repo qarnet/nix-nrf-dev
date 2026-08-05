@@ -365,35 +365,33 @@ class WestBootstrapTestCase(unittest.TestCase):
             ],
         )
 
-    # 6. Re-run never calls west init again; it refreshes update +
-    #    requirements for the current manifest (documented mutation) and
-    #    does not re-create the venv or re-pin west.
-    def test_rerun_does_not_call_west_init_again(self):
+    # 6. A re-run on a fully ready workspace is a no-op (nrfutil parity):
+    #    no prompt, no west update, no requirement reinstall, no re-init, no
+    #    re-pin. The mutating path runs only when something is missing.
+    def test_rerun_on_ready_workspace_is_noop(self):
+        self.make_ready_workspace()
         proc = self.run_bootstrap("--yes")
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertTrue(any("west init" in line for line in self.mutations()))
-        first_mutations = list(self.mutations())
+        self.assertEqual(self.mutations(), [])
 
-        proc = self.run_bootstrap("--yes")
+    # 6b. The lazy `autoBootstrap = true` wrapper contract: a ready
+    # `--print-sdk-path` invocation (no --check, no --yes) prints the exact
+    # workspace root and mutates nothing.
+    def test_ready_print_sdk_path_no_approval_no_mutation(self):
+        self.make_ready_workspace()
+        proc = self.run_bootstrap("--print-sdk-path")
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        rerun = self.mutations()[len(first_mutations) :]
-        self.assertFalse(any("west init" in line for line in rerun))
-        self.assertFalse(any("nix-python" in line for line in rerun))
-        self.assertFalse(any("python -m pip install west==" in line for line in rerun))
-        self.assertTrue(any("west update" in line for line in rerun))
-        self.assertEqual(
-            [
-                line
-                for line in rerun
-                if " -r " in line and line.startswith("python -m pip install")
-            ],
-            [
-                f"python -m pip install -c {self.workspace}/.venv/nix-nrf-pip-constraints.txt -r {self.workspace}/{req}"
-                for req in REQUIREMENTS.splitlines()
-            ],
-        )
+        self.assertEqual(proc.stdout, str(self.workspace) + "\n")
+        self.assertEqual(self.mutations(), [])
 
-    # 6b. Release-specific pip constraints are written into the venv and
+    # 6c. A missing workspace still prompts/installs on the mutating path.
+    def test_missing_mutating_path_requires_approval(self):
+        proc = self.run_bootstrap("--print-sdk-path")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("nix-nrf bootstrap --yes", proc.stderr)
+        self.assertEqual(self.mutations(), [])
+
+    # 6d. Release-specific pip constraints are written into the venv and
     # applied via `-c` on every venv pip invocation.
     def test_pip_constraints_written_and_applied(self):
         proc = self.run_bootstrap("--yes")

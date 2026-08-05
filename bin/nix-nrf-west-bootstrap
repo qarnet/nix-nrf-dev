@@ -504,12 +504,22 @@ def main(argv=None):
             print(workspace)
         return 0
 
+    # ── Ready short-circuit (nrfutil-parity) ───────────────────────────────
+    # Nothing is missing: never prompt and never mutate, exactly like the
+    # nrfutil backend ("prompting when setup is missing"). This keeps the
+    # lazy `autoBootstrap = true` west wrapper approval-free on every ready
+    # invocation while a missing workspace still prompts/installs below.
+    if not problems:
+        if args.print_sdk_path:
+            print(workspace)
+        return 0
+
     # ── Mutating setup ─────────────────────────────────────────────────────
     # Print version, workspace, and the network/size warning before approval.
     status(f"NCS version: {os.environ.get('NIX_NRF_WEST_NCS_VERSION', '?')}")
     status(f"workspace: {workspace}")
     status("this downloads several gigabytes from GitHub (west workspace)")
-    status("re-running still runs `west update` and reinstalls requirements, which may fetch updates or downloads")
+    status("completing setup runs `west update` and reinstalls requirements, which may fetch updates or downloads")
 
     if not args.yes and os.environ.get("NIX_NRF_BOOTSTRAP_YES") != "1":
         if not approve(args):

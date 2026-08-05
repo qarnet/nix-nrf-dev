@@ -799,7 +799,10 @@
             PYEOF
 
             # ── Scoped west: exact venv west, expected exports ──────────────
-            NIX_NRF_BOOTSTRAP_YES=1 "$westPkg/bin/west" list --format=json > wrapper.out
+            # No approval needed: the ready workspace short-circuits the
+            # bootstrap (nrfutil parity), exactly the regression the real
+            # clean-room run exposed.
+            "$westPkg/bin/west" list --format=json > wrapper.out
             grep -F "argv=list --format=json ZEPHYR_BASE=$HOME/ncs/v3.3.0/zephyr ZEPHYR_TOOLCHAIN_VARIANT=zephyr ZEPHYR_SDK_INSTALL_DIR=$expectedSdk PATH=" "$HOME/venv.log" >/dev/null || {
             echo "FAIL: scoped west did not reach the venv west with the expected environment" >&2
             cat "$HOME/venv.log" >&2
