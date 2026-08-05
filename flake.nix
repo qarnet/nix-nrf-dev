@@ -56,17 +56,13 @@
         # not duplicate them.
         nrfutil = pkgs.nrfutil.withExtensions ["nrfutil-sdk-manager"];
 
-        nrf-probes = import ./nix/nrf-probes.nix {
-          inherit pkgs;
-          openocd = openocd-master;
-        };
-
         # Public project CLI facade: fixed dispatcher over the default
-        # composed nrfutil (versions) and the packaged nrf-probes (probes).
+        # composed nrfutil (versions) and the internal probe command module
+        # (probes), which nix-nrf owns via nix/nix-nrf-probes.nix.
         nix-nrf = import ./nix/nix-nrf.nix {
           inherit pkgs;
           nrfutilPackage = nrfutil;
-          nrfProbesPackage = nrf-probes;
+          openocd = openocd-master;
         };
 
         mkNrfShell = import ./nix/mk-nrf-shell.nix {
@@ -74,7 +70,6 @@
             pkgs
             openocd-master
             nrfutil
-            nrf-probes
             ;
         };
 
@@ -188,7 +183,6 @@
           inherit
             openocd-master
             openocd-master-unwrapped
-            nrf-probes
             nrfutil
             nix-nrf
             ;

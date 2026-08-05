@@ -3,7 +3,7 @@
 This directory contains hardware integration tests for nix-nrf-dev, run on a
 self-hosted GitHub Actions runner with CMSIS-DAP probes and nRF target boards
 attached. The tests verify the full flashing workflow end-to-end on real
-hardware: probe identification via `nrf-probes`, and flashing both nRF5340
+hardware: probe identification via `nix-nrf probes`, and flashing both nRF5340
 and nRF54L15 via the TCL recipes.
 
 The workflow lives at `.github/workflows/hardware.yml` and is triggered:
@@ -82,10 +82,10 @@ secrets available to the workflow. This has implications:
 Once `tests/hardware/run.sh` lands (phase 6), the workflow will:
 
 1. Enter the nix dev shell (`nix develop`).
-2. Run `nrf-probes` and assert the table shows the expected nRF5340 and
+2. Run `nix-nrf probes` and assert the table shows the expected nRF5340 and
    nRF54L15 targets.
-3. Run `nrf-probes --find nrf53` and `nrf-probes --find nrf54l` to capture
-   probe serials.
+3. Run `nix-nrf probes --find nrf53` and `nix-nrf probes --find nrf54l` to
+   capture probe serials.
 4. Flash a known-good blinky hex to the nRF5340 via `tcl/nrf53_flash.tcl`.
 5. Flash a known-good blinky hex to the nRF54L15 via `tcl/nrf54l_flash.tcl`.
 6. Assert each step exits 0.

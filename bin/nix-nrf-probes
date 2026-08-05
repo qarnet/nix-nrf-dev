@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# nrf-probes — identify which chip is attached to each CMSIS-DAP probe.
+# nix-nrf probes — identify which chip is attached to each CMSIS-DAP probe.
 #
 # Enumerates CMSIS-DAP probes from sysfs and fingerprints each target with a
 # read-only OpenOCD session: DPIDR, AP IDR map, then FICR INFO.PART/VARIANT
 # for the detected family. Never writes to the target.
 #
 # Usage:
-#   nrf-probes                 # table of all probes and their targets
-#   nrf-probes SERIAL [...]    # only these probe serials
-#   nrf-probes --find nrf53    # print serial of the unique probe whose target
-#                             # is an nRF53; exit 1 none / 2 ambiguous
+#   nix-nrf probes                 # table of all probes and their targets
+#   nix-nrf probes SERIAL [...]    # only these probe serials
+#   nix-nrf probes --find nrf53    # print serial of the unique probe whose
+#                                  # target is an nRF53; exit 1 none / 2 ambiguous
 #
 # The probe<->board mapping must never be assumed from documentation: probes
 # get replugged. This script is the source of truth.
@@ -136,7 +136,9 @@ def fingerprint(serial):
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
     except FileNotFoundError:
-        sys.exit("nrf-probes: openocd not found on PATH — enter the dev shell first")
+        sys.exit(
+            "nix-nrf probes: openocd not found on PATH — enter the dev shell first"
+        )
     except subprocess.TimeoutExpired:
         return {"note": "timeout talking to probe"}
 
@@ -186,7 +188,8 @@ def variant_ascii(info):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Identify chips attached to CMSIS-DAP probes (read-only)."
+        prog="nix-nrf probes",
+        description="Identify chips attached to CMSIS-DAP probes (read-only).",
     )
     parser.add_argument("serials", nargs="*", help="probe serials (default: all)")
     parser.add_argument(
@@ -202,9 +205,11 @@ def main():
         probes = [p for p in probes if p[0] in args.serials]
         missing = set(args.serials) - {s for s, _ in probes}
         if missing:
-            sys.exit(f"nrf-probes: no CMSIS-DAP probe with serial {', '.join(missing)}")
+            sys.exit(
+                f"nix-nrf probes: no CMSIS-DAP probe with serial {', '.join(missing)}"
+            )
     if not probes:
-        sys.exit("nrf-probes: no CMSIS-DAP probes found")
+        sys.exit("nix-nrf probes: no CMSIS-DAP probes found")
 
     results = [(serial, product, fingerprint(serial)) for serial, product in probes]
 
@@ -221,9 +226,14 @@ def main():
         for serial, product, info in results:
             print(f"  {serial}  {product}  ->  {chip_name(info)}", file=sys.stderr)
         if not matches:
-            print(f"nrf-probes: no probe with a {args.find} target", file=sys.stderr)
+            print(
+                f"nix-nrf probes: no probe with a {args.find} target", file=sys.stderr
+            )
             return 1
-        print(f"nrf-probes: multiple probes with a {args.find} target", file=sys.stderr)
+        print(
+            f"nix-nrf probes: multiple probes with a {args.find} target",
+            file=sys.stderr,
+        )
         return 2
 
     header = ("SERIAL", "PROBE", "TARGET", "DPIDR", "PART", "VARIANT", "NOTE")

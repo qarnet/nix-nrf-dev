@@ -36,8 +36,9 @@ devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
 ```
 
 The shell provides `west` + Zephyr toolchain (via nrfutil sdk-manager),
-`ZEPHYR_BASE`, `openocd` (master build), `nrf-probes`, `nrfutil`, the `nix-nrf`
-CLI facade, and multilib GCC for `native_sim`.
+`ZEPHYR_BASE`, `openocd` (master build), `nrfutil`, the `nix-nrf`
+CLI facade (`nix-nrf versions`, `nix-nrf probes`), and multilib GCC for
+`native_sim`.
 
 **Scoped toolchain environment:** Nordic's sdk-manager env script exports
 `PYTHONHOME`, `PYTHONPATH`, `LD_LIBRARY_PATH` and `GIT_EXEC_PATH` — toxic to
@@ -113,11 +114,9 @@ $ nix-nrf help probes
 
 `nix-nrf versions` delegates to `nrfutil sdk-manager search` without parsing
 or maintaining a local version list, so sdk-manager remains the runtime
-authority. `nix-nrf probes` delegates to the packaged `nrf-probes`.
-
-The standalone `nrf-probes` command remains available as a **temporary
-compatibility command** while repository callers migrate; prefer
-`nix-nrf probes`. The old `nrf-sdk-versions` command is removed; use
+authority. `nix-nrf probes` runs the internal probe command module
+(`$out/libexec/nix-nrf/probes`); there is no standalone `nrf-probes` binary or
+package. The old `nrf-sdk-versions` command is removed; use
 `nix-nrf versions`.
 
 ## Advanced: overriding nrfutil
@@ -161,9 +160,8 @@ the shell without polluting the scoped `west` wrapper.
 | `lib.<system>.mkNrfShell { backend, ncsVersion, toolchainBundleId, nrfutilPackage, packages, extraShellHook, withMultilib, inputsFrom, name }` | devShell factory — `ncsVersion` required; `toolchainBundleId`/`nrfutilPackage` optional (see [Backends](#backends) and [Advanced: overriding nrfutil](#advanced-overriding-nrfutil)) |
 | `packages.openocd-master` | openocd from master (pinned), wrapped for libudev |
 | `packages.openocd-master-unwrapped` | the raw build |
-| `packages.nrf-probes` | probe/target identification (read-only); temporary compatibility command, prefer `nix-nrf probes` |
 | `packages.nrfutil` | Nixpkgs nrfutil composed with the sdk-manager extension (includes SEGGER J-Link, see [SEGGER / J-Link](#segger--j-link)) |
-| `packages.nix-nrf` | project CLI facade: `versions` (sdk-manager-backed NCS version list) and `probes` (see [nix-nrf CLI](#nix-nrf-cli)) |
+| `packages.nix-nrf` | project CLI facade: `versions` (sdk-manager-backed NCS version list) and `probes` (internal probe command module, see [nix-nrf CLI](#nix-nrf-cli)) |
 | `packages.default` | alias for `packages.nix-nrf` |
 | `devShells.default` | dogfood shell for hacking on this repo |
 | `formatter.<system>` | treefmt wrapper (`nix fmt`) |
@@ -189,9 +187,6 @@ E6635C08CB1F502B
 
 Works on APPROTECT-locked chips via the DP/AP signature. Flash scripts should
 select probes with `--find <family>` instead of hardcoding serials.
-
-The standalone `nrf-probes` command remains available as a temporary
-compatibility alias; prefer `nix-nrf probes`.
 
 ## Flash recipes (`tcl/`)
 

@@ -6,11 +6,11 @@
 direnv allow     # or: nix develop
 ```
 
-The shell provides `openocd` (master build), `nrf-probes`, `nrfutil`, the
+The shell provides `openocd` (master build), `nrfutil`, the
 `nix-nrf` CLI facade (`nix-nrf versions`, `nix-nrf probes`), the scoped `west`
 wrapper, and the NCS toolchain (via nrfutil sdk-manager for the configured NCS
-version). `nrf-probes` remains as a temporary compatibility command; prefer
-`nix-nrf probes`.
+version). Probe identification is the `nix-nrf probes` subcommand; there is no
+standalone `nrf-probes` command.
 
 ## Before committing
 
@@ -43,11 +43,11 @@ type(scope): description
 
 Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `ci`,
 `perf`, `build`. Scope is optional but encouraged (e.g. `flake`, `tcl`,
-`nrf-probes`, `ci`).
+`nix-nrf`, `ci`).
 
 Examples:
 
-- `feat(nrf-probes): add --find flag`
+- `feat(nix-nrf): add --find flag to probes`
 - `fix(tcl): correct nRF5340 UICR address`
 - `docs(readme): document scoped toolchain env`
 - `chore(flake): add treefmt-nix and git-hooks.nix`
@@ -72,7 +72,7 @@ openocd. To add one:
 
 1. Add `tcl/<chip>_flash.tcl` with the flashing procs.
 2. Document it in `README.md` under "Flash recipes (`tcl/`)".
-3. If the chip needs probe identification, ensure `bin/nrf-probes` knows its
+3. If the chip needs probe identification, ensure `bin/nix-nrf-probes` knows its
    family signature (DPIDR → AP IDR map → FICR PART/VARIANT).
 
 ## CI and the openocd-master build
@@ -89,5 +89,5 @@ test procedure.
 ## What this repo is not
 
 This is a Nix flake library, not a firmware project. The `tcl/` recipes and
-`bin/nrf-probes` are reusable tools consumed by other repos; they are not
+`bin/nix-nrf-probes` are reusable tools consumed by other repos; they are not
 flashed here. Do not add board-specific firmware or build artifacts.

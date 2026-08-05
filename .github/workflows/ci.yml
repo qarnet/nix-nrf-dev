@@ -41,14 +41,14 @@ jobs:
       # A1 — build all packages. Cached after first run via Cachix.
       # openocd-master is ~10 min from source on first run; subsequent runs pull from cache.
       # nrfutil pulls segger-jlink-headless (SEGGER license accepted in the flake config).
+      # nrf-probes is not a package: probe identification is the internal
+      # `nix-nrf probes` subcommand, built as part of .#nix-nrf.
       - name: Build packages
-        run: nix build -L .#openocd-master-unwrapped .#openocd-master .#nrf-probes .#nrfutil .#nix-nrf
+        run: nix build -L .#openocd-master-unwrapped .#openocd-master .#nrfutil .#nix-nrf
 
       # A2 — smoke-run: verify the built binaries actually execute.
       - name: Smoke run openocd
         run: nix run .#openocd-master -- --version
-      - name: Smoke run nrf-probes
-        run: nix run .#nrf-probes -- --help
       - name: Smoke run nrfutil
         run: nix run .#nrfutil -- --version
       - name: Smoke run nix-nrf help
@@ -69,10 +69,10 @@ jobs:
           test "$rc" -eq 2
 
       # A5 — devshell-enter: verify the dogfood shell provides the tools and
-      # the removed nrf-sdk-versions is absent. Fresh CI has no stale
-      # environment, so `! command -v` is reliable here.
+      # the removed nrf-probes/nrf-sdk-versions are absent. Fresh CI has no
+      # stale environment, so `! command -v` is reliable here.
       - name: Devshell provides tools
-        run: nix develop --command sh -ceu 'command -v nrfutil; command -v nix-nrf; command -v openocd; command -v nrf-probes; command -v west; ! command -v nrf-sdk-versions'
+        run: nix develop --command sh -ceu 'command -v nrfutil; command -v nix-nrf; command -v openocd; command -v west; ! command -v nrf-probes; ! command -v nrf-sdk-versions'
 
       # A8 — clean-env regression gate: prove Nordic sdk-manager variables
       # do not poison non-toolchain tools (Node, Git, Python).
@@ -147,4 +147,5 @@ jobs:
           cd /tmp/tpltest
           nix flake init -t "path:$repo"
           nix flake check -L --override-input nix-nrf-dev "path:$repo"
-          nix develop --override-input nix-nrf-dev "path:$repo" --command sh -c "command -v openocd && command -v nrf-probes && command -v nix-nrf"
+          nix develop --override-input nix-nrf-dev "path:$repo" --command sh -c "command -v openocd && command -v nix-nrf && ! command -v nrf-probes"
+          nix develop --override-input nix-nrf-dev "path:$repo" --command sh -c "nix-nrf probes --help" >/dev/null

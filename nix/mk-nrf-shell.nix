@@ -1,9 +1,9 @@
 # mkNrfShell — devShell factory for nRF Connect SDK projects.
 #
-# Provides: openocd-master (wrapped), nrf-probes (temporary compatibility
-# command), the packaged nrfutil with the sdk-manager extension, the nix-nrf
-# CLI facade, multilib GCC (for native_sim -m32 builds), a scoped-env `west`
-# wrapper, and ZEPHYR_BASE derivation.
+# Provides: openocd-master (wrapped), the nix-nrf CLI facade (which owns the
+# internal `nix-nrf probes` command module), the packaged nrfutil with the
+# sdk-manager extension, multilib GCC (for native_sim -m32 builds), a
+# scoped-env `west` wrapper, and ZEPHYR_BASE derivation.
 #
 # Scoped toolchain env: Nordic's `nrfutil sdk-manager toolchain env` script
 # exports PYTHONHOME, PYTHONPATH, LD_LIBRARY_PATH, GIT_EXEC_PATH, ... —
@@ -42,7 +42,6 @@
   pkgs,
   openocd-master,
   nrfutil,
-  nrf-probes,
 }: {
   # Backend that provides the NCS toolchain environment. "nrfutil" is the
   # only implemented backend (Nordic sdk-manager); "sdk-nrf" is reserved for
@@ -123,11 +122,11 @@
   '';
 
   # Public CLI facade, instantiated from the selected nrfutil package and the
-  # packaged nrf-probes so a caller package override also controls `versions`.
+  # wrapped openocd-master so a caller package override also controls
+  # `versions`; the probes module is owned internally by nix-nrf.
   nixNrf = import ./nix-nrf.nix {
-    inherit pkgs;
-    inherit nrfutilPackage;
-    nrfProbesPackage = nrf-probes;
+    inherit pkgs nrfutilPackage;
+    openocd = openocd-master;
   };
 
   useMultilib = pkgs.stdenv.isLinux && withMultilib;
@@ -175,12 +174,10 @@ in
   assert backendSupported;
     pkgs.mkShell {
       inherit name inputsFrom;
-
       packages =
         [
           westWrapper
           openocd-master
-          nrf-probes
           nrfutilPackage
           nixNrf
         ]

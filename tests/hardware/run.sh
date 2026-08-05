@@ -4,7 +4,7 @@
 # tests/hardware/run.sh — hardware integration test for nix-nrf-dev.
 #
 # Builds the Zephyr blinky sample for both target boards, identifies probes
-# via nrf-probes, and flashes both boards via our openocd-master + TCL
+# via nix-nrf probes, and flashes both boards via our openocd-master + TCL
 # recipes. Asserts each step exits 0. Does NOT assert visible LED blink
 # (would need a camera or GPIO probe — out of scope).
 #
@@ -35,20 +35,20 @@ cd "$REPO_ROOT"
 # ── 0. Verify tools are present ─────────────────────────────────────────────
 step "Verify tools"
 command -v openocd >/dev/null 2>&1 || fail "tools" "openocd not on PATH — enter the nix dev shell first"
-command -v nrf-probes >/dev/null 2>&1 || fail "tools" "nrf-probes not on PATH — enter the nix dev shell first"
+command -v nix-nrf >/dev/null 2>&1 || fail "tools" "nix-nrf not on PATH — enter the nix dev shell first"
 command -v west >/dev/null 2>&1 || fail "tools" "west not on PATH — enter the nix dev shell first"
-echo "OK: openocd, nrf-probes, west present"
+echo "OK: openocd, nix-nrf, west present"
 
 # ── 1. Identify probes and targets ──────────────────────────────────────────
-step "nrf-probes enumeration"
-nrf-probes || fail "nrf-probes" "nrf-probes failed to enumerate probes"
+step "nix-nrf probes enumeration"
+nix-nrf probes || fail "nix-nrf-probes" "nix-nrf probes failed to enumerate probes"
 
 step "Find nRF5340 probe"
-SER53="$(nrf-probes --find nrf53)" || fail "find-nrf53" "no unique nRF5340 probe found (exit $?)"
+SER53="$(nix-nrf probes --find nrf53)" || fail "find-nrf53" "no unique nRF5340 probe found (exit $?)"
 echo "OK: nRF5340 probe serial: $SER53"
 
 step "Find nRF54L15 probe"
-SER54L="$(nrf-probes --find nrf54l)" || fail "find-nrf54l" "no unique nRF54L15 probe found (exit $?)"
+SER54L="$(nix-nrf probes --find nrf54l)" || fail "find-nrf54l" "no unique nRF54L15 probe found (exit $?)"
 echo "OK: nRF54L15 probe serial: $SER54L"
 
 # ── 2. Build blinky from NCS ────────────────────────────────────────────────

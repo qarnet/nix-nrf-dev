@@ -21,9 +21,8 @@ nixpkgs:
 overlays.default = final: prev: {
   openocd-master = ...;
   openocd-master-unwrapped = ...;
-  nrf-probes = ...;
   nrfutil = final.nrfutil.withExtensions [ "nrfutil-sdk-manager" ];
-  nix-nrf = ...; # composed from the nrfutil + nrf-probes entries above
+  nix-nrf = ...; # owns the internal probes module; openocd passed in
 };
 ```
 
@@ -60,8 +59,10 @@ are optional sugar. This also makes the function usable from non-flake
 contexts and from flake-parts modules.
 
 **How:** `nix/mk-nrf-shell.nix` already takes `pkgs` — the change is mostly
-plumbing in `flake.nix`: build openocd-master/nrfutil/nrf-probes from the
-*given* pkgs (via the overlay from 1.1), then export both forms. Note the
+plumbing in `flake.nix`: build openocd-master/nrfutil from the
+*given* pkgs (via the overlay from 1.1) and construct `nix-nrf` from them
+(the probes command module is owned internally by `nix-nrf`), then export both
+forms. Note the
 caveat: if the consumer's pkgs lacks `allowUnfree`/SEGGER license acceptance,
 the nrfutil construction must degrade gracefully (nixpkgs' nrfutil only
 supports Linux; Darwin would need a documented degraded path rather than an
@@ -142,7 +143,7 @@ state that in the workflow's PR body template.
 
 **What:** A README section declaring exactly what works where:
 
-| Platform | openocd-master | nrf-probes | nrfutil | mkNrfShell |
+| Platform | openocd-master | nix-nrf probes | nrfutil | mkNrfShell |
 |---|---|---|---|---|
 | x86_64-linux | yes | yes | yes (Nixpkgs; J-Link included) | full |
 | aarch64-linux | yes | yes | yes (Nixpkgs; J-Link included) | full (no multilib) |
@@ -152,7 +153,7 @@ state that in the workflow's PR body template.
 `aarch64-linux`) and its derivation unconditionally pulls
 `segger-jlink-headless`; on Darwin the package throws, so a Darwin user
 discovers the limit by evaluating the shell. Library flakes state support
-up front. Note: `bin/nrf-probes` enumerates probes via `/sys/bus/usb/devices`,
+up front. Note: `bin/nix-nrf-probes` enumerates probes via `/sys/bus/usb/devices`,
 so it is Linux-only at runtime regardless of what builds; either document
 that or gate the package to Linux.
 
@@ -223,9 +224,9 @@ hook; update README examples to use it. Superseded in spirit by 3.2 (the
 flash CLI embeds the recipes), but this is a 20-minute step worth doing
 now.
 
-### 2.3 `[ ]` Unit tests for `bin/nrf-probes`
+### 2.3 `[ ]` Unit tests for `bin/nix-nrf-probes`
 
-**What:** A pytest suite run as `checks.nrf-probes-tests`, testing the pure
+**What:** A pytest suite run as `checks.nix-nrf-probes-tests`, testing the pure
 logic against fixtures: sysfs-enumeration parsing, `FWP|`-line parsing of
 openocd output, family-signature classification (DPIDR/AP-map → family),
 `--find` disambiguation (0 / 1 / many matches → exit 0/1/2), and
@@ -238,7 +239,7 @@ signatures) is exactly the kind of thing a future contributor breaks while
 adding nRF52 support. Testing it requires no hardware: inject fake sysfs
 trees (tmpdir) and canned openocd stdout.
 
-**How:** Light refactor of `bin/nrf-probes` to make enumeration and openocd
+**How:** Light refactor of `bin/nix-nrf-probes` to make enumeration and openocd
 invocation injectable (module-level functions already mostly allow this);
 add `tests/unit/test_nrf_probes.py`; wire a `checks` derivation:
 `pkgs.runCommand` + `python3.withPackages (ps: [ps.pytest])`. black already
@@ -318,7 +319,7 @@ nrf-flash --chip nrf53 --serial E6635C08 fw.hex  # explicit
 nrf-flash --recover --chip nrf53                 # APPROTECT recovery
 ```
 
-Internally: `nrf-probes --find` → select recipe (`nrf53_flash.tcl` /
+Internally: `nix-nrf probes --find` → select recipe (`nrf53_flash.tcl` /
 `nrf54l_flash.tcl`) → invoke wrapped openocd with the right cfg + transport
 + speed incantation.
 
@@ -330,7 +331,7 @@ policy ("never assume the mapping, always `--find`") the *default* instead
 of a documented convention, and gives flash behavior a stable CLI surface
 that scripts and CI can rely on while the TCL underneath evolves.
 
-**How:** Python (same conventions as `bin/nrf-probes` — black, wrapped with
+**How:** Python (same conventions as `bin/nix-nrf-probes` — black, wrapped with
 openocd on PATH, unset PYTHONHOME/PYTHONPATH). Embed the TCL via the
 derivation (subsumes 2.2's `NRF_TCL_DIR` for this use). Chip→(cfg, recipe,
 proc) table mirrors `PART_NAMES`. Clear error taxonomy: no probe /
@@ -346,7 +347,7 @@ exact fix for anything missing:
   invoke the explicit `nrf-bootstrap` path, which uses
   `nrfutil sdk-manager install <version>` for the `nrfutil` backend.
 - udev rules present / probe device nodes accessible? → point at 2.1.
-- Probes enumerable? Run `nrf-probes`, report.
+- Probes enumerable? Run `nix-nrf probes`, report.
 - `ZEPHYR_BASE` derivable? multilib GCC present for native_sim?
 
 **Why:** Every first-run failure mode currently surfaces as a confusing
@@ -357,7 +358,8 @@ shellHook already contains fragments of this logic (ZEPHYR_BASE probing) —
 this centralizes it. Becomes *less* necessary as 3.1/2.1 land, so keep it a
 thin, honest checklist rather than an auto-fixer.
 
-**How:** Shell or Python script packaged like `nrf-probes`; call it from
+**How:** Shell or Python script packaged as an internal `nix-nrf` subcommand
+module (like the probes module); call it from
 `mkNrfShell`'s hook in a "warn once" mode and expose it as
 `packages.nrf-doctor`.
 
@@ -367,7 +369,7 @@ thin, honest checklist rather than an auto-fixer.
 
 - `nrf-rtt [--chip ...]` — start openocd with an RTT server attached
   (`rtt setup` / `rtt server start`) and stream the channel, using
-  `nrf-probes` for selection.
+  `nix-nrf probes` for selection.
 - A documented/generated openocd gdb config so `west debug` and raw
   `arm-zephyr-eabi-gdb` attach work against our openocd-master, including
   the dual-core nRF5340 case (app vs net core attach).
@@ -410,14 +412,14 @@ hardware test rig.
 
 ### 3.6 `[ ]` nRF52 flash recipe
 
-**What:** `tcl/nrf52_flash.tcl` + wiring into `nrf-probes` (signatures
+**What:** `tcl/nrf52_flash.tcl` + wiring into `nix-nrf probes` (signatures
 already exist in `PART_NAMES`) and the future `nrf-flash` CLI.
 
 **Why:** Cheapest family to support — upstream openocd has a mature `nrf5`
 flash driver and `nrf52_recover`, so the recipe is mostly "use the standard
 driver + handle APPROTECT on rev2+ parts". nRF52840 is the most widely
 owned Nordic chip (every dongle/DK drawer has one), so this single file
-significantly widens who can use the flake. `nrf-probes` classifying seven
+significantly widens who can use the flake. `nix-nrf probes` classifying seven
 nRF52 variants it can't flash is a visible loose end.
 
 **How:** Write the recipe following the nrf53 file's structure

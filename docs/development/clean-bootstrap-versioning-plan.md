@@ -40,8 +40,8 @@ for the XIAO nRF54L15 in an isolated home directory.
 - `nix-nrf versions` delegates to `nrfutil sdk-manager search`, so
   sdk-manager remains the runtime authority for available NCS versions; the
   nrfutil backend does not reject a version because it is absent from
-  repository-owned metadata. `nrf-probes` remains available standalone as a
-  temporary compatibility command; prefer `nix-nrf probes`.
+  repository-owned metadata. Probe identification is the `nix-nrf probes`
+  subcommand (internal command module); there is no standalone `nrf-probes`.
 - `nrfutil sdk-manager install <ncs-version>` installs both SDK source and its
   matching toolchain; `nrfutil sdk-manager sdk install <ncs-version>` installs
   only the SDK source. The `west` wrapper's failure diagnostics distinguish
@@ -409,7 +409,7 @@ supported default until experiment proves equivalent build and hardware
 behavior.
 
 Keep both backends (`nrfutil`, `sdk-nrf`) in this repository during prototype
-work so OpenOCD, `nrf-probes`, version policy, tests, and templates stay
+work so OpenOCD, `nix-nrf probes`, version policy, tests, and templates stay
 shared. Consider a separate `sdk-nrf` library only after Nix-native
 workspace/toolchain code has a stable API and independent users; splitting
 earlier would duplicate policy and make parity testing harder.
