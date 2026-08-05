@@ -117,8 +117,8 @@ removed; the proof history below is preserved.
 - `tests/west-backend/run.sh` — clean-room proof script (real setup + blinky
   sysbuild from an isolated HOME), updated to the public shell/API names
   (enters `mkNrfShell { backend = "west"; }` via `nix develop --expr`; uses
-  `nix-nrf bootstrap`). Dry-run/`bash -n` validated; the real run is
-  explicitly approved and not part of normal CI.
+  `nix-nrf bootstrap`). Dry-run/`bash -n` validated; the real run requires
+  fresh explicit approval for each run and is not part of normal CI.
 
 ## Zephyr SDK asset hashes (verified against official sha256.sum)
 
@@ -253,7 +253,8 @@ the effective installed cbor2 version is unchanged.
   and platforms are out of scope until their own metadata/proof exist.
 - No scheduled CI workflow; normal CI runs the fixture/metadata/quoting/
   boundary gates and builds the west SDK package (no workspace download).
-  The real clean-home proof remains manual and explicitly approved.
+  The real clean-home proof remains manual and requires fresh explicit
+  approval for each run.
 
 ## Follow-up (next phases)
 

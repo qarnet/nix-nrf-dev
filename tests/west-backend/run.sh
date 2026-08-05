@@ -175,11 +175,11 @@ if [ "${NIX_NRF_WEST_DRY_RUN:-}" = "1" ]; then
   exit 0
 fi
 
-# ── Lifecycle 1: cold explicit setup ─────────────────────────────────────────
-step "Lifecycle 1: cold explicit setup (NCS ${NCS_VERSION})"
+# ── Lifecycle 1: cold explicit bootstrap ─────────────────────────────────────
+step "Lifecycle 1: cold explicit bootstrap (NCS ${NCS_VERSION})"
 echo "selected release: ${NCS_VERSION} (public mkNrfShell backend = west)"
 
-[ -z "$(ls -A "$CLEAN_HOME")" ] || fail "precondition" "clean home not empty before setup"
+[ -z "$(ls -A "$CLEAN_HOME")" ] || fail "precondition" "clean home not empty before bootstrap"
 [ ! -e "$CLEAN_HOME/ncs" ] || fail "precondition" "clean home already contains an ncs directory"
 echo "OK: isolated home is empty"
 
@@ -210,7 +210,7 @@ nix develop --impure --expr "$WEST_SHELL_EXPR" \
     echo "OK: HOME isolated; backend-aware nix-nrf present; no nrfutil; Nix Zephyr SDK exported"
     t0=$SECONDS
     nix-nrf bootstrap --yes
-    echo "setup elapsed: $((SECONDS - t0))s"
+    echo "bootstrap elapsed: $((SECONDS - t0))s"
     workspace="$(nix-nrf bootstrap --check --print-sdk-path)"
     echo "workspace: $workspace"
     test "$workspace" = "$HOME/ncs/$NIX_NRF_WEST_EXPECTED_NCS_VERSION" || { echo "unexpected workspace: $workspace" >&2; exit 1; }

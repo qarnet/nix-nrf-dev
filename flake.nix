@@ -211,6 +211,16 @@
               ncsVersion = "v3.3.0";
               nrfutilPackage = pkgs.hello;
             });
+          # Explicit `nrfutilPackage = null` must be rejected with the
+          # backend-specific message (guarded before any outPath access), not
+          # a null attribute/type error.
+          westNullNrfutilPackageRejected =
+            !evaluates (mkNrfShell {
+              name = "backend-check-west-nrfutil-null";
+              backend = "west";
+              ncsVersion = "v3.3.0";
+              nrfutilPackage = null;
+            });
           westAutoOmittedOk = evaluates (mkNrfShell {
             name = "backend-check-west-auto-omitted";
             backend = "west";
@@ -269,6 +279,7 @@
             && unsupportedRejected
             && westBundleIdRejected
             && westNrfutilPackageRejected
+            && westNullNrfutilPackageRejected
             && westAutoOmittedOk
             && westAutoTrueOk
             && westAutoFalseOk
@@ -291,6 +302,7 @@
               unsupportedRejected
               westBundleIdRejected
               westNrfutilPackageRejected
+              westNullNrfutilPackageRejected
               westAutoOmittedOk
               westAutoTrueOk
               westAutoFalseOk
@@ -305,12 +317,12 @@
           (
             if pass
             then ''
-              echo "backend selector check: ncsVersion required, omitted equals nrfutil, omitted+ncsVersion evaluates, nrfutil+ncsVersion evaluates, west+v3.3.0 evaluates, west unknown release rejected, sdk-nrf rejected, west toolchainBundleId rejected, west nrfutilPackage override rejected, west autoBootstrap omitted/true/false evaluates, toolchainBundleId evaluates, autoBootstrap omitted/true/false evaluates, exact bundle in either bootstrap mode evaluates"
+              echo "backend selector check: ncsVersion required, omitted equals nrfutil, omitted+ncsVersion evaluates, nrfutil+ncsVersion evaluates, west+v3.3.0 evaluates, west unknown release rejected, sdk-nrf rejected, west toolchainBundleId rejected, west nrfutilPackage override (incl. explicit null) rejected, west autoBootstrap omitted/true/false evaluates, toolchainBundleId evaluates, autoBootstrap omitted/true/false evaluates, exact bundle in either bootstrap mode evaluates"
               mkdir -p "$out"
             ''
             else ''
               echo "backend selector check FAILED" >&2
-              echo "ncsVersionRequired=$ncsVersionRequired omittedEqualsNrfutil=$omittedEqualsNrfutil omittedOk=$omittedOk explicitOk=$explicitOk westOk=$westOk westUnknownRejected=$westUnknownRejected unsupportedRejected=$unsupportedRejected westBundleIdRejected=$westBundleIdRejected westNrfutilPackageRejected=$westNrfutilPackageRejected westAutoOmittedOk=$westAutoOmittedOk westAutoTrueOk=$westAutoTrueOk westAutoFalseOk=$westAutoFalseOk bundleIdOk=$bundleIdOk autoBootstrapOmittedOk=$autoBootstrapOmittedOk autoBootstrapTrueOk=$autoBootstrapTrueOk autoBootstrapFalseOk=$autoBootstrapFalseOk bundleIdAutoTrueOk=$bundleIdAutoTrueOk bundleIdAutoFalseOk=$bundleIdAutoFalseOk" >&2
+              echo "ncsVersionRequired=$ncsVersionRequired omittedEqualsNrfutil=$omittedEqualsNrfutil omittedOk=$omittedOk explicitOk=$explicitOk westOk=$westOk westUnknownRejected=$westUnknownRejected unsupportedRejected=$unsupportedRejected westBundleIdRejected=$westBundleIdRejected westNrfutilPackageRejected=$westNrfutilPackageRejected westNullNrfutilPackageRejected=$westNullNrfutilPackageRejected westAutoOmittedOk=$westAutoOmittedOk westAutoTrueOk=$westAutoTrueOk westAutoFalseOk=$westAutoFalseOk bundleIdOk=$bundleIdOk autoBootstrapOmittedOk=$autoBootstrapOmittedOk autoBootstrapTrueOk=$autoBootstrapTrueOk autoBootstrapFalseOk=$autoBootstrapFalseOk bundleIdAutoTrueOk=$bundleIdAutoTrueOk bundleIdAutoFalseOk=$bundleIdAutoFalseOk" >&2
               exit 1
             ''
           );
@@ -457,28 +469,47 @@
         # The gate instantiates the PUBLIC `mkNrfShell` with `backend =
         # "west"` (the same module the flake exports). The nasty instance
         # feeds a test-only versions attrset whose entry carries single
-        # quotes + spaces in the NCS and Python values (the Zephyr SDK
-        # metadata stays real so the wrapper's embedded SDK package builds
-        # from the official assets); the clean instance uses the real
-        # versions.nix. Both source the shell hook with a fake HOME and run
-        # the real scoped wrapper against a fake-ready workspace, asserting
-        # every composed value contains no quote artifact and the default
-        # workspace path stays `$HOME/ncs/v3.3.0`.
+        # quotes + spaces in the NCS, SDK, and Python values; a test-only
+        # constant SDK builder stands in for the real zephyr-sdk builder so
+        # the nasty `zephyrSdk.version` is exercised through the public
+        # factory without fetching or building a bogus SDK (the real builder
+        # validates sdk_version against the metadata and would fail). The
+        # clean instance uses the real versions.nix. Both source the shell
+        # hook with a fake HOME and run the real scoped wrapper against a
+        # fake-ready workspace, asserting every composed value contains no
+        # quote artifact and the default workspace path stays
+        # `$HOME/ncs/v3.3.0`.
         westBackendQuotingCheck = let
           nastyNcsVersion = "v3.3.0 with 'quote' and spaces";
+          nastySdkVersion = "0.17.0'sdk";
           nastyPython = "3.12'py";
           nastyMetadata =
             westBackendEntry
             // {
               ncsVersion = nastyNcsVersion;
               python = nastyPython;
+              zephyrSdk =
+                westBackendEntry.zephyrSdk
+                // {
+                  version = nastySdkVersion;
+                };
             };
+          # Test-only SDK builder: constant derivation, no network, no
+          # SDK validation. Only the quoting gate uses it; production
+          # construction always passes the real zephyr-sdk builder.
+          fakeSdkBuilder = {
+            pkgs,
+            sdk,
+          }:
+            pkgs.runCommand "fake-zephyr-sdk" {} ''
+              mkdir -p $out
+              printf '%s' ${pkgs.lib.escapeShellArg sdk.version} > $out/sdk_version
+            '';
           nastyModule = import ./nix/mk-nrf-shell.nix {
             inherit
               pkgs
               openocd-master
               nrfutil
-              westZephyrSdkBuilder
               westEnvironmentBuilder
               westBootstrapBuilder
               westVersionsCommandBuilder
@@ -487,6 +518,7 @@
             westVersions = {
               "${nastyNcsVersion}" = nastyMetadata;
             };
+            westZephyrSdkBuilder = fakeSdkBuilder;
           };
           nastyShell = nastyModule {
             backend = "west";
@@ -508,9 +540,9 @@
             cleanShellHook = cleanShell.shellHook;
             inherit
               nastyNcsVersion
+              nastySdkVersion
               nastyPython
               ;
-            nastySdkVersion = westBackendEntry.zephyrSdk.version;
           }
           ''
             set -eu
@@ -736,6 +768,12 @@
             PYEOF
             "$nixNrfPkg/bin/nix-nrf" versions --help >/dev/null
 
+            # ── nix-nrf --help: backend-aware west descriptions ─────────────
+            "$nixNrfPkg/bin/nix-nrf" --help > main-help.txt
+            grep -F "versions   List NCS releases supported by the west backend metadata" main-help.txt >/dev/null || { echo "FAIL: west versions help wording missing" >&2; cat main-help.txt >&2; exit 1; }
+            grep -F "bootstrap  Ensure the west workspace and version-local venv exist" main-help.txt >/dev/null || { echo "FAIL: west bootstrap help wording missing" >&2; cat main-help.txt >&2; exit 1; }
+            grep -F "doctor     Diagnose west workspace/Zephyr SDK and probe access (read-only)" main-help.txt >/dev/null || { echo "FAIL: west doctor help wording missing" >&2; cat main-help.txt >&2; exit 1; }
+
             # ── nix-nrf bootstrap --check --print-sdk-path: exact workspace ─
             "$nixNrfPkg/bin/nix-nrf" bootstrap --check --quiet --print-sdk-path > sdk-path.txt
             [ "$(cat sdk-path.txt)" = "$HOME/ncs/v3.3.0" ] || {
@@ -895,6 +933,27 @@
             mkdir -p "$out"
           '';
 
+        # Public `nix-nrf --help` wording gate: the standalone (nrfutil)
+        # facade must keep today's byte-for-byte command descriptions
+        # (versions via sdk-manager, bootstrap/doctor on SDK/toolchain).
+        # The west shell's backend-aware descriptions are asserted in
+        # checks.west-shell-boundary.
+        nixNrfHelpCheck =
+          pkgs.runCommand "nix-nrf-help-check"
+          {
+            # Aliased: a `nix-nrf` env var name (with dash) is not usable
+            # from bash.
+            nixNrf = nix-nrf;
+          }
+          ''
+              "$nixNrf/bin/nix-nrf" --help > help.txt
+            grep -F "versions   List NCS releases advertised by Nordic sdk-manager" help.txt >/dev/null || { echo "FAIL: standalone versions wording changed" >&2; cat help.txt >&2; exit 1; }
+            grep -F "bootstrap  Ensure the selected NCS SDK source and toolchain exist" help.txt >/dev/null || { echo "FAIL: standalone bootstrap wording changed" >&2; cat help.txt >&2; exit 1; }
+            grep -F "doctor     Diagnose SDK/toolchain and probe access (read-only)" help.txt >/dev/null || { echo "FAIL: standalone doctor wording changed" >&2; cat help.txt >&2; exit 1; }
+            echo "nix-nrf help wording check passed" >&2
+            mkdir -p "$out"
+          '';
+
         # Fake-boundary doctor test gate: runs
         # tests/unit/test_nix_nrf_doctor.py against temporary fake
         # sysfs/dev roots and a fake bootstrap command, with sandboxed
@@ -1049,6 +1108,7 @@
           bootstrap-quoting = bootstrapQuotingCheck;
           doctor-tests = doctorTests;
           doctor-udev-wiring = doctorUdevWiringCheck;
+          nix-nrf-help = nixNrfHelpCheck;
           udev-rules = udevRulesCheck;
           west-bootstrap-tests = westBootstrapTests;
           west-versions-tests = westVersionsTests;

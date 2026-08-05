@@ -385,7 +385,7 @@ in
   || throw "mkNrfShell: backend 'west' does not support toolchainBundleId (Nix owns the exact Zephyr SDK; the west workspace/venv own the source)";
   assert backend
   != "west"
-  || nrfutilPackage.outPath == nrfutil.outPath
+  || (nrfutilPackage != null && nrfutilPackage.outPath == nrfutil.outPath)
   || throw "mkNrfShell: backend 'west' does not support a non-default nrfutilPackage override (no nrfutil participates in the west backend)";
     if backend == "west"
     then westShell

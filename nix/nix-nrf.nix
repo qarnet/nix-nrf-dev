@@ -103,12 +103,23 @@ assert bootstrapCommand
       then doctorEnvironmentLabel
       else "SDK/toolchain";
   };
-  # Human help line for `versions`: differs per backend (west lists
-  # repository-supported metadata releases, nrfutil delegates to sdk-manager).
+  # Human help lines: `versions`/`bootstrap`/`doctor` descriptions differ per
+  # backend. The west shell names its `west workspace/Zephyr SDK`; the
+  # nrfutil/standalone wording stays byte-for-byte current. `bootstrapCommand`
+  # being provided marks the west mode (its exact module is what bootstrap and
+  # doctor operate on).
   versionsDesc =
     if versionsCommand != null
     then "versions   List NCS releases supported by the west backend metadata"
     else "versions   List NCS releases advertised by Nordic sdk-manager";
+  bootstrapDesc =
+    if bootstrapCommand != null
+    then "bootstrap  Ensure the west workspace and version-local venv exist"
+    else "bootstrap  Ensure the selected NCS SDK source and toolchain exist";
+  doctorDesc =
+    if bootstrapCommand != null
+    then "doctor     Diagnose west workspace/Zephyr SDK and probe access (read-only)"
+    else "doctor     Diagnose SDK/toolchain and probe access (read-only)";
   versionsHelp =
     if versionsCommand != null
     then "exec \"$nrf_versions_exe\" --help"
@@ -132,11 +143,11 @@ in
         cat <<'EOF'
       Usage: nix-nrf <command> [options]
 
-      Commands:
-        ${versionsDesc}
-        probes     Identify CMSIS-DAP probes and targets (read-only)
-        bootstrap  Ensure the selected NCS SDK source and toolchain exist
-        doctor     Diagnose SDK/toolchain and probe access (read-only)
+        Commands:
+          ${versionsDesc}
+          probes     Identify CMSIS-DAP probes and targets (read-only)
+          ${bootstrapDesc}
+          ${doctorDesc}
 
       Run `nix-nrf help <command>` for command-specific help.
       EOF
