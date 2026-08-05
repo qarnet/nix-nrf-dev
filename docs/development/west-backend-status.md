@@ -228,6 +228,48 @@ verbatim `requirements-fixed.txt` value — because `<6` would admit any
 future, unverified 5.x release. No second multi-gigabyte proof was required:
 the effective installed cbor2 version is unchanged.
 
+## Public clean-room proof (2026-08-06, Linux x86_64, public API rerun)
+
+`bash tests/west-backend/run.sh` exited 0 through the public
+`mkNrfShell { backend = "west"; ncsVersion = "v3.3.0"; }` entry, entered via
+`nix develop --impure --expr` with `--ignore-env` and an isolated,
+script-created `/tmp` HOME (`/tmp/nix-nrf-west-home-1GfoWCCw`, 85 GiB free).
+This run is distinct from the 2026-08-05 prototype-phase proof below: it
+exercises the public backend selector, the backend-aware `nix-nrf
+bootstrap`, the shell's scoped west wrapper with the ready no-op contract,
+and `nix-nrf versions`/`nix-nrf doctor` surfaces.
+
+Lifecycle 1 (cold bootstrap through the public command):
+
+- `nix-nrf bootstrap --yes` — **bootstrap elapsed: 474 s** (west init + west
+  update + venv requirement installs; `cbor2==5.9.0` installed via the
+  metadata `pipConstraints`).
+- Workspace: `$HOME/ncs/v3.3.0` with `.west/config`, `nrf/west.yml`,
+  `zephyr/zephyr-env.sh`, `.venv/bin/west` — all asserted.
+- Venv west **v1.4.0**; compilers `arm-zephyr-eabi-gcc (Zephyr SDK 0.17.0)
+  12.2.0` and `riscv64-zephyr-elf-gcc (Zephyr SDK 0.17.0) 12.2.0`.
+- Nix Zephyr SDK:
+  `ZEPHYR_SDK_INSTALL_DIR=/nix/store/9abvnlm91zvpb5sgjxrsfl5szrfvdxns-zephyr-sdk-0.17.0`
+  (store path, not clean HOME, no Nordic toolchain bundle).
+- `nrfutil` absent from PATH and the temporary `nix-nrf-west-setup` command
+  absent from PATH (both asserted).
+
+Lifecycle 2 (fresh shell, scoped west wrapper):
+
+- Shell hook read-only: "setup: ready", `ZEPHYR_BASE` derived.
+- The wrapper's lazy `nix-nrf bootstrap --print-sdk-path` on the ready
+  workspace was a **no-op** — zero approval prompts across the whole run
+  (the ready short-circuit contract).
+- `west build -p always -b xiao_nrf54l15/nrf54l15/cpuapp --sysbuild` of
+  blinky — **build elapsed: 19 s**; artifacts asserted non-empty:
+  `$HOME/build/blinky/blinky/zephyr/zephyr.elf` and
+  `$HOME/build/blinky/domains.yaml`; FLASH 32968 B (2.25% of 1428 KB), RAM
+  6744 B (3.50%).
+- Sizes: workspace (incl. venv) **6.4 G**, build **29 M**.
+- Cleanup: script-created home removed on exit (default cleanup;
+  `NIX_NRF_WEST_CLEAN_KEEP` not set). No developer `$HOME/ncs` state, no
+  hardware.
+
 ## Limitations
 
 - The west backend supports only `x86_64-linux`; any other system fails

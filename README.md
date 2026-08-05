@@ -237,6 +237,19 @@ removed on exit. Workspace (incl. venv) 6.4 G, build 29 M; Zephyr SDK came
 from `/nix/store/...-zephyr-sdk-0.17.0`; `nrfutil` absent throughout. See
 `docs/development/west-backend-status.md`.
 
+**Proven 2026-08-06 (Linux x86_64, public API rerun):** `bash
+tests/west-backend/run.sh` exited 0 through the public
+`backend = "west"` shell from a script-created isolated `/tmp` HOME:
+`nix-nrf bootstrap --yes` 474 s (west init + west update + venv requirements
+with the metadata `cbor2==5.9.0` pin), scoped `west` sysbuild blinky 19 s,
+workspace (incl. venv) 6.4 G / build 29 M, artifacts `zephyr.elf` and
+`domains.yaml` asserted non-empty, west v1.4.0, compilers `(Zephyr SDK
+0.17.0) 12.2.0`, `ZEPHYR_SDK_INSTALL_DIR` under `/nix/store`, `nrfutil` and
+the temporary `nix-nrf-west-setup` command absent from PATH, zero approval
+prompts on the ready second entry (the lazy bootstrap is a no-op when the
+workspace is ready), and the temp home removed on exit. See
+`docs/development/west-backend-status.md`.
+
 ## nix-nrf CLI
 
 `nix-nrf` is the project's command facade: `nix-nrf versions`, `nix-nrf probes`,
