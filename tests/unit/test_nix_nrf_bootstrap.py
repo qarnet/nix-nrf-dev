@@ -347,6 +347,72 @@ class BootstrapTestCase(unittest.TestCase):
         self.assertIn("install incomplete", proc.stderr)
         self.assertEqual(self.commands(), ["sdk-manager install v3.3.0"])
 
+    # stdout contract regressions: the mutating path must never emit the SDK
+    # path before install, so `--print-sdk-path` yields exactly one line on
+    # success and an empty stdout on failed/incomplete mutation.
+    def test_check_prints_sdk_path_once_when_toolchain_missing(self):
+        # Installed SDK + missing toolchain + --check --print-sdk-path: the
+        # shell hook relies on this single emission (exit stays 1).
+        self.write_state("sdk_ok")
+        proc = self.run_bootstrap("--check", "--print-sdk-path")
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(proc.stdout, str(self.sdk_dir) + "\n")
+        self.assertEqual(self.commands(), [])
+
+    def test_sdk_ready_toolchain_missing_yes_exact_one_line(self):
+        # Installed SDK + missing toolchain + --yes --print-sdk-path (exact
+        # bundle): exactly one output line, one toolchain install, exit 0.
+        # Regresses the pre-fix duplicate-line stdout (path emitted before
+        # --check handling AND again after install).
+        self.write_state("sdk_ok")
+        proc = self.run_bootstrap(
+            "--yes",
+            "--print-sdk-path",
+            "--toolchain-bundle-id",
+            "bundle-1",
+        )
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(proc.stdout, str(self.sdk_dir) + "\n")
+        self.assertEqual(
+            self.commands(),
+            ["sdk-manager toolchain install --toolchain-bundle-id bundle-1"],
+        )
+
+    def test_incomplete_mutation_keeps_stdout_empty(self):
+        # Pre-existing SDK + toolchain install succeeds without changing state:
+        # post-install recheck fails, exit 1, no stale path on stdout.
+        self.write_state("sdk_ok")
+        self.write_state("noop_install")
+        proc = self.run_bootstrap(
+            "--yes",
+            "--print-sdk-path",
+            "--toolchain-bundle-id",
+            "bundle-1",
+        )
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(proc.stdout, "")
+        self.assertEqual(
+            self.commands(),
+            ["sdk-manager toolchain install --toolchain-bundle-id bundle-1"],
+        )
+
+    def test_failed_mutation_keeps_stdout_empty(self):
+        # Pre-existing SDK + failing toolchain install: exit 1, stdout empty.
+        self.write_state("sdk_ok")
+        self.write_state("fail_install")
+        proc = self.run_bootstrap(
+            "--yes",
+            "--print-sdk-path",
+            "--toolchain-bundle-id",
+            "bundle-1",
+        )
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(proc.stdout, "")
+        self.assertEqual(
+            self.commands(),
+            ["sdk-manager toolchain install --toolchain-bundle-id bundle-1"],
+        )
+
     # 10. Missing configured/default NCS version: argparse-style exit 2.
     def test_missing_ncs_version_exits_2(self):
         env = dict(self.env)

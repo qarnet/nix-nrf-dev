@@ -26,12 +26,19 @@ pkgs.runCommand "nix-nrf-bootstrap"
   patchShebangs $out/libexec/nix-nrf/bootstrap
   # NCS toolchain shells export PYTHONPATH/PYTHONHOME for their own
   # python; unset them so the wrapped store python uses its stdlib.
+  # Caller-controlled selector values are shell-escaped before
+  # interpolation so wrapProgram arguments never break the generated
+  # build script (spaces/quotes in ncsVersion or toolchainBundleId).
   wrapProgram $out/libexec/nix-nrf/bootstrap \
     --set NIX_NRF_NRFUTIL ${nrfutilPackage}/bin/nrfutil \
     --unset PYTHONPATH \
     --unset PYTHONHOME \
-    ${pkgs.lib.optionalString (ncsVersion != null) "--set NIX_NRF_NCS_VERSION ${ncsVersion}"} \
+    ${
+    pkgs.lib.optionalString (
+      ncsVersion != null
+    ) "--set NIX_NRF_NCS_VERSION ${pkgs.lib.escapeShellArg ncsVersion}"
+  } \
     ${pkgs.lib.optionalString (
     toolchainBundleId != null
-  ) "--set NIX_NRF_TOOLCHAIN_BUNDLE_ID ${toolchainBundleId}"}
+  ) "--set NIX_NRF_TOOLCHAIN_BUNDLE_ID ${pkgs.lib.escapeShellArg toolchainBundleId}"}
 ''

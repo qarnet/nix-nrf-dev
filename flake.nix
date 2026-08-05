@@ -216,6 +216,50 @@
             mkdir -p "$out"
           '';
 
+        # Shell-quoting regression for the internal bootstrap module:
+        # instantiate and build nix/nix-nrf-bootstrap.nix with caller
+        # selector values containing spaces and single/double quotes,
+        # proving wrapProgram generation succeeds without shell injection
+        # or syntax break, then round-trip the generated wrapper's exports
+        # to prove the exact values — and the exact selected nrfutil store
+        # path — survive.
+        bootstrapQuotingCheck = let
+          nastyNcsVersion = "v3.3.0 with space 'and quote'";
+          nastyBundleId = "bundle \"with\" 'quotes' and spaces";
+          module = import ./nix/nix-nrf-bootstrap.nix {
+            inherit pkgs;
+            nrfutilPackage = nrfutil;
+            ncsVersion = nastyNcsVersion;
+            toolchainBundleId = nastyBundleId;
+          };
+        in
+          pkgs.runCommand "nix-nrf-bootstrap-quoting-check"
+          {
+            inherit module;
+            expectedNcsVersion = nastyNcsVersion;
+            expectedBundleId = nastyBundleId;
+            expectedNrfutil = "${nrfutil}/bin/nrfutil";
+          }
+          ''
+            wrapper="$module/libexec/nix-nrf/bootstrap"
+            eval "$(grep -E '^export NIX_NRF_(NRFUTIL|NCS_VERSION|TOOLCHAIN_BUNDLE_ID)=' "$wrapper")"
+            [ "$NIX_NRF_NCS_VERSION" = "$expectedNcsVersion" ] || {
+              echo "NCS_VERSION mismatch: '$NIX_NRF_NCS_VERSION' != '$expectedNcsVersion'" >&2
+              exit 1
+            }
+            [ "$NIX_NRF_TOOLCHAIN_BUNDLE_ID" = "$expectedBundleId" ] || {
+              echo "TOOLCHAIN_BUNDLE_ID mismatch: '$NIX_NRF_TOOLCHAIN_BUNDLE_ID' != '$expectedBundleId'" >&2
+              exit 1
+            }
+            [ "$NIX_NRF_NRFUTIL" = "$expectedNrfutil" ] || {
+              echo "NRFUTIL mismatch: '$NIX_NRF_NRFUTIL' != '$expectedNrfutil'" >&2
+              exit 1
+            }
+            "$wrapper" --help >/dev/null
+            echo "bootstrap quoting check passed" >&2
+            mkdir -p "$out"
+          '';
+
         treefmtEval = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
 
         pre-commit = git-hooks.lib.${system}.run {
@@ -270,6 +314,7 @@
           formatting = treefmtEval.config.build.check self;
           backend-selector = backendSelectorCheck;
           bootstrap-tests = bootstrapTests;
+          bootstrap-quoting = bootstrapQuotingCheck;
           inherit pre-commit;
         };
 

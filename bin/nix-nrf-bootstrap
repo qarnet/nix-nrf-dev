@@ -303,12 +303,15 @@ def main(argv=None):
     missing = missing_components(sdk_path, toolchain_ready)
     missing_msg = ", ".join(missing)
 
-    # An installed SDK root may still be emitted while the full selection is
-    # not ready (e.g. toolchain missing) — stdout stays machine-readable.
-    if args.print_sdk_path and sdk_path is not None:
-        print(sdk_path)
-
     if args.check:
+        # An installed SDK root may still be emitted when the full selection
+        # is not ready (e.g. toolchain missing): the shell hook needs it to
+        # derive ZEPHYR_BASE. --check never mutates; the exit stays 1. The
+        # mutating path below emits no pre-install stdout, so a successful
+        # ready/install run prints exactly one path line and a failed or
+        # incomplete mutation prints none.
+        if args.print_sdk_path and sdk_path is not None:
+            print(sdk_path)
         status(f"NCS version {ncs_version} not ready; missing: {missing_msg}")
         status("no changes made (--check)")
         return 1
