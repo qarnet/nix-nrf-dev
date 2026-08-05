@@ -11,7 +11,8 @@
 # sdk-manager interfaces (verified against nrfutil 8.2.0):
 #   nrfutil sdk-manager list --json --skip-overhead
 #     -> one JSON object or JSON-lines; the object with `versions` carries
-#        per-release {version, sdkStatus, dirNames[], toolchainStatus, ...}
+#        per-release {version, sdkStatus, dirNames[], toolchainStatus, ...};
+#        empty stdout when nothing is installed (fresh state)
 #   nrfutil sdk-manager config show --json --skip-overhead
 #     -> {"default": {"install_dir": ...}}; null means $HOME/ncs on Linux
 #   nrfutil sdk-manager toolchain env <selector> --as-script sh
@@ -96,10 +97,12 @@ def list_versions(nrfutil_exe):
 
 def parse_versions_list(output):
     """Parse either one JSON object or JSON-lines output; return the object
-    carrying `versions`. Malformed output is a hard error, never "missing"."""
+    carrying `versions`. An empty output means nothing is installed yet
+    (sdk-manager prints empty stdout on a fresh state). Malformed output is a
+    hard error, never "missing"."""
     text = output.strip()
     if not text:
-        fail("sdk-manager list returned no output")
+        return {"versions": []}
     try:
         data = json.loads(text)
     except json.JSONDecodeError:

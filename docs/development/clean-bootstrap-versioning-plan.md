@@ -52,9 +52,11 @@ for the XIAO nRF54L15 in an isolated home directory.
   the default selector, or `sdk install` plus
   `toolchain install --toolchain-bundle-id <bundle-id>` when an exact bundle
   is configured.
-- CI checks that the wrapper exists but never runs a real `west` build.
-  Existing hardware CI assumes NCS v3.3.0 already exists on the self-hosted
-  runner.
+- CI checks that the wrapper exists but never runs a real `west` build in
+  normal PR CI. The manual clean-room workflow
+  (`.github/workflows/clean-room.yml`) does run a real `west` build from an
+  empty isolated HOME (see Phase 3). Existing hardware CI assumes NCS v3.3.0
+  already exists on the self-hosted runner.
 
 ## Version model
 
@@ -135,7 +137,8 @@ Verified sdk-manager interfaces (nrfutil 8.2.0, read-only live help and JSON):
 
 - `nrfutil sdk-manager list --json --skip-overhead` returns one JSON object or
   JSON-lines; the object with `versions` carries per-release `version`,
-  `sdkStatus`, `dirNames[]`, `toolchainStatus`, and `toolchainPath`.
+  `sdkStatus`, `dirNames[]`, `toolchainStatus`, and `toolchainPath`. Empty
+  stdout means nothing is installed (fresh state).
 - `nrfutil sdk-manager config show --json --skip-overhead` returns
   `{"default": {"install_dir": ...}}`; `install_dir: null` means the Linux
   default `$HOME/ncs`.
@@ -259,13 +262,17 @@ Behavior (proven by the fake-boundary unit tests, no network or real SDK):
 - `autoBootstrap = false` performs no network or mutation and reports the
   exact `nix-nrf bootstrap` command.
 
-### Phase 3: clean-home NCS build test
+### Phase 3 (done): clean-home NCS build test
 
 Files:
 
-- new `tests/clean-room/run.sh`
-- `.github/workflows/ci.yml` or new dedicated workflow
-- `CONTRIBUTING.md`
+- new `tests/clean-room/run.sh` (guarded harness)
+- new `tests/clean-room/README.md`
+- new `.github/workflows/clean-room.yml` (manual-only workflow)
+- `CONTRIBUTING.md`, `README.md`
+- `bin/nix-nrf-bootstrap` + `tests/unit/test_nix_nrf_bootstrap.py` (empty
+  sdk-manager list output now reads as fresh state — discovered and fixed
+  during the real clean-room run)
 
 Use Nix's environment isolation rather than inheriting developer state:
 
@@ -312,6 +319,52 @@ Cache key must include OS, architecture, NCS version, and exact bundle ID when
 used. Restore to same absolute path. Measure Nordic download versus Actions
 cache upload/restore before committing to cache; unpacked toolchain alone is
 approximately 4.3 GiB on current Linux host, so caching may not be a net win.
+
+Implemented workflow policy (matches the current phase): a separate
+manual-only workflow (`clean-room.yml`, `workflow_dispatch`, no schedule)
+runs `tests/clean-room/run.sh` on the `nrf-hardware` self-hosted runner with
+a 120-minute timeout. It does not set `NIX_NRF_CLEAN_KEEP`, so a
+script-created home cleans on completion or failure. No SDK/toolchain cache
+was added; the run proved the current release-level selector. Normal
+`.github/workflows/ci.yml` is unchanged and never downloads SDK/toolchain
+bundles.
+
+### Phase 3 measured evidence (real run, 2026-08-05)
+
+Command and result (Linux x86_64, Nix 2.34.8, run from the repository root):
+
+```bash
+bash tests/clean-room/run.sh
+```
+
+Exit status **0** — all lifecycle assertions passed.
+
+- Host platform: Linux x86_64 (nixpkgs nixos-unstable, pinned in flake.lock).
+- Clean home: script-created `/tmp/nix-nrf-clean-home-fEND22Oo` (removed on
+  exit; free space on `/` was 102 GiB before, 103 GiB after).
+- Lifecycle 1: isolated HOME verified empty with neither `.nrfutil` nor
+  `ncs` before entry; `nix-nrf bootstrap --yes` installed NCS v3.3.0 and the
+  selected toolchain under `$HOME/ncs`; read-only
+  `nix-nrf bootstrap --check --print-sdk-path` printed exactly
+  `$HOME/ncs/v3.3.0` with `zephyr/` present; at least one toolchain
+  directory exists under `$HOME/ncs/toolchains`.
+- **Bootstrap elapsed: 458 s** (SDK source + toolchain bundle
+  `911f4c5c26`; toolchain provides Python 3.12.4, CMake 4.2.1, west 1.5.0,
+  Zephyr SDK 0.17.0).
+- Lifecycle 2 (second independent `nix develop`): `ZEPHYR_BASE` derived as
+  `$HOME/ncs/v3.3.0/zephyr`; `--check --quiet --print-sdk-path` reported
+  ready without mutation; real build succeeded:
+  `west build -p always -b xiao_nrf54l15/nrf54l15/cpuapp --sysbuild -d "$HOME/build/blinky" "$ZEPHYR_BASE/samples/basic/blinky"`.
+- **Build elapsed: 66 s.** Build summary: FLASH 32968 B / RAM 6744 B,
+  Zephyr 4.3.99 (ncs-v3.3.0).
+- Artifacts (asserted regular, non-empty):
+  - `$HOME/build/blinky/blinky/zephyr/zephyr.elf`
+  - `$HOME/build/blinky/domains.yaml`
+- **Measured installed size: 13 G** (`du -sh "$HOME/ncs"`).
+- Cleanup: script-created home removed after the run; caller-owned paths and
+  the developer `~/ncs` were never touched.
+- GitHub workflow: **not dispatched** — manual-only and ready for a later
+  dispatch; this phase's evidence is the local real run.
 
 ### Phase 4: hardware access guidance and diagnostics
 

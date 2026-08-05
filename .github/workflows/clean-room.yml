@@ -1,0 +1,43 @@
+# Clean room — manual-only proof that a fresh isolated HOME can bootstrap
+# NCS v3.3.0 + toolchain and build the XIAO nRF54L15 sysbuild blinky.
+#
+# Deliberately NOT part of normal PR CI: a cold multi-gigabyte SDK/toolchain
+# bootstrap is too large and slow for `.github/workflows/ci.yml`. Dispatch
+# manually on the known self-hosted runner when a full cold-bootstrap proof
+# is wanted. No schedule yet, no hardware/probe/flashing step.
+#
+# See tests/clean-room/README.md for the test's behavior and safety controls.
+name: Clean room
+
+on:
+  workflow_dispatch:        # manual trigger only
+
+# Cancel in-progress runs on the same ref.
+concurrency:
+  group: clean-room-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  clean-room:
+    runs-on: [self-hosted, nrf-hardware]
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          nix_path: nixpkgs=channel:nixos-unstable
+
+      - uses: cachix/cachix-action@v17
+        with:
+          name: qarnet
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      # Real cold bootstrap + blinky build under an isolated, script-created
+      # HOME. No NIX_NRF_CLEAN_KEEP, so the script-created home cleans on
+      # completion or failure.
+      - name: Run clean-room bootstrap and build
+        env:
+          NIX_NRF_CLEAN_MIN_FREE_GIB: '25'
+        run: bash tests/clean-room/run.sh

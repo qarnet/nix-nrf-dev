@@ -44,7 +44,9 @@ BOOTSTRAP_SCRIPT = _resolve_bootstrap_script()
 # Fake nrfutil: reads/writes a state directory pointed at by
 # FAKE_NRFUTIL_DIR. Markers:
 #   sdk_dir / sdk_ok / toolchain_ok   installed SDK dir and readiness flags
-#   list_override / config_override   raw output to print (malformed-JSON tests)
+#   list_override / config_override   raw output to print (malformed-JSON tests;
+#                                     an empty list_override models sdk-manager's
+#                                     empty stdout on a fresh state)
 #   fail_list / fail_config           make the read-only command exit nonzero
 #   fail_install                      make install commands exit nonzero
 #   noop_install                      install commands succeed without changing state
@@ -88,7 +90,10 @@ if cmd == "list":
     if has("fail_list"):
         print("fake nrfutil: forced list failure", file=sys.stderr)
         sys.exit(1)
-    if has("list_override"):
+    # The override models real sdk-manager output for the current state;
+    # once an install has happened the installed state is authoritative
+    # (real sdk-manager's list reflects the install).
+    if has("list_override") and not has("sdk_ok"):
         sys.stdout.write((state / "list_override").read_text())
         sys.exit(0)
     versions = []
@@ -317,6 +322,23 @@ class BootstrapTestCase(unittest.TestCase):
         proc = self.run_bootstrap("--yes")
         self.assertEqual(proc.returncode, 1)
         self.assertIn("nix-nrf bootstrap: error", proc.stderr)
+        self.assertEqual(self.commands(), [])
+
+    # 8b. Empty list output (sdk-manager prints nothing on a fresh state) must
+    #     read as "nothing installed", never as malformed state: --yes installs
+    #     from scratch, --check reports missing without mutation. Regresses the
+    #     clean-room failure where bootstrap aborted on a fresh HOME.
+    def test_empty_list_output_installs_from_scratch(self):
+        self.write_state("list_override", "")
+        proc = self.run_bootstrap("--yes")
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(self.commands(), ["sdk-manager install v3.3.0"])
+
+    def test_empty_list_output_check_exits_1_no_mutation(self):
+        self.write_state("list_override", "")
+        proc = self.run_bootstrap("--check")
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("missing", proc.stderr.lower())
         self.assertEqual(self.commands(), [])
 
     def test_malformed_config_json_exits_1(self):

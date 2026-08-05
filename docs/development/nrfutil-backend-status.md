@@ -43,12 +43,17 @@ controlled `NRFUTIL_HOME` scheme.
   `nix-nrf bootstrap --help`, verifies unknown subcommands exit 2, and checks
   the devshell provides `nrfutil`, `nix-nrf`, `openocd`, `west` while
   `nrf-probes` is absent.
+- Clean-home bootstrap/build is proven: `tests/clean-room/run.sh` bootstraps
+  NCS v3.3.0 and the selected toolchain under an isolated, script-created
+  HOME, re-enters the shell, derives `ZEPHYR_BASE` from that installation,
+  and builds the XIAO nRF54L15 sysbuild blinky (see
+  `docs/development/clean-bootstrap-versioning-plan.md`, Phase 3 evidence).
 
 ## Open follow-up (not this phase)
 
-- Clean-home multi-gigabyte bootstrap download/build and version-keyed
-  SDK/toolchain CI caching — see
-  `docs/development/clean-bootstrap-versioning-plan.md` (phases 3+).
+- Version-keyed SDK/toolchain CI caching — see
+  `docs/development/clean-bootstrap-versioning-plan.md` (Phase 3 CI-split
+  discussion; the current manual clean-room workflow bypasses any cache).
 - Parallel-bootstrap locking: confirm whether sdk-manager serializes installs
   itself; document a lock as follow-up if it does not.
 - Nix-native `sdk-nrf` backend — reserved, rejected at evaluation until

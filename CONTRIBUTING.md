@@ -34,6 +34,31 @@ nix develop .#clean-env-test --command sh -ceu '
 '  # prove Nordic sdk-manager variables do not poison external tools
 ```
 
+## Clean-room bootstrap test
+
+`tests/clean-room/run.sh` proves the project works from an empty, isolated
+home directory: it bootstraps NCS v3.3.0 and the selected toolchain with
+`nix-nrf bootstrap --yes` inside an isolated `HOME`, re-enters the shell,
+derives `ZEPHYR_BASE` from the isolated installation, and builds the XIAO
+nRF54L15 sysbuild blinky with a real `west build`. It never flashes hardware.
+
+```bash
+bash tests/clean-room/run.sh
+```
+
+**This downloads several GiB from Nordic and requires at least 25 GiB free**
+on the filesystem hosting the isolated home (configurable via
+`NIX_NRF_CLEAN_MIN_FREE_GIB`). The isolated home defaults to a
+script-created temporary directory that is removed on exit unless
+`NIX_NRF_CLEAN_KEEP=1`; a caller-provided `NIX_NRF_CLEAN_HOME` is never
+removed. See `tests/clean-room/README.md` for the full safety contract.
+
+The clean-room test is **not** part of the normal pre-commit/flake-check
+gate, and normal PR CI never downloads SDK/toolchain bundles. It runs
+manually via `.github/workflows/clean-room.yml` (`workflow_dispatch`, no
+schedule) on the `nrf-hardware` self-hosted runner. Use `nix-nrf bootstrap`
+locally when you need the SDK/toolchain in your own home.
+
 ## Commit messages
 
 This repo uses [Conventional Commits](https://www.conventionalcommits.org/):

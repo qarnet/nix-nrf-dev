@@ -132,6 +132,32 @@ Shell entry is always non-mutating: the shell hook runs the read-only
 A bootstrap that installs a missing SDK happens inside west's process; re-enter
 the shell (or `direnv reload`) to pick up `ZEPHYR_BASE` for non-west commands.
 
+## Clean bootstrap verification (clean-room)
+
+`tests/clean-room/run.sh` proves the whole flow from an empty, isolated Linux
+home: it bootstraps NCS v3.3.0 and the selected toolchain under a
+script-created `HOME`, re-enters the shell, derives `ZEPHYR_BASE` from the
+isolated installation, and runs a real `west build -p always --sysbuild` of
+the XIAO nRF54L15 blinky sample, verifying the resulting `zephyr.elf` and
+`domains.yaml`. It never flashes hardware.
+
+```bash
+bash tests/clean-room/run.sh   # downloads several GiB; needs >= 25 GiB free
+```
+
+The isolated home is removed on exit unless `NIX_NRF_CLEAN_KEEP=1`; a
+caller-provided `NIX_NRF_CLEAN_HOME` is never removed. The test runs
+manually via `.github/workflows/clean-room.yml` (`workflow_dispatch` on the
+`nrf-hardware` self-hosted runner, no schedule) — normal PR CI never
+downloads SDK/toolchain bundles. See `tests/clean-room/README.md`.
+
+**Proven 2026-08-05 (Linux x86_64):** `bash tests/clean-room/run.sh` exited 0
+with bootstrap 458 s, blinky sysbuild 66 s, and a measured clean-home NCS
+install of 13 G under `$HOME/ncs/v3.3.0` with toolchain bundle `911f4c5c26`;
+artifacts `blinky/zephyr/zephyr.elf` and `domains.yaml` were asserted
+non-empty. The GitHub workflow was not dispatched; evidence is the local real
+run (see `docs/development/clean-bootstrap-versioning-plan.md`, Phase 3).
+
 ## nix-nrf CLI
 
 `nix-nrf` is the project's command facade: `nix-nrf versions`, `nix-nrf probes`,

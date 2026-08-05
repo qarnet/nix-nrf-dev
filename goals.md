@@ -451,6 +451,6 @@ minimal as-is. Extend the CI template-init step to loop over all templates.
 | 1 — mechanical | 1.3, 1.4, 1.7, 2.2, 1.6 | Hours of work, no design risk, immediate consumer benefit |
 | 2 — structure | 1.1, 1.2 (consider 1.8 here), 2.1, 1.5 | The overlay/lib refactor defines the public API; tag v0.1.0 after |
 | 3 — robustness | 2.3, 3.3, 3.6 | Tests + doctor + easiest new chip |
-| 4 — hermeticity | 3.1 | Evaluate fixed NCS workspace + minimal Zephyr SDK targets after clean bootstrap is proven |
+| 4 — hermeticity | 3.1 | Evaluate fixed NCS workspace + minimal Zephyr SDK targets now that clean bootstrap from an empty HOME is proven (`tests/clean-room/run.sh`, Phase 3) |
 | 5 — daily-driver | 3.2, 3.4, 3.5 | Flash CLI, RTT/debug, recovery — the "powerful" layer |
 | 6 — polish | 3.7 | Templates once the zero-edit experience is real |
