@@ -1,5 +1,12 @@
 # Nix-Native `sdk-nrf` v3.3.0 Prototype Handoff
 
+Status: superseded before implementation. No code from this handoff was
+implemented. The accepted next direction is the smaller hybrid `west` backend:
+Nix packages the exact Zephyr SDK, host tools, and Python interpreter while the
+official mutable west workspace and version-local Python virtual environment
+remain responsible for NCS source and Python requirements. See
+`docs/development/west-backend-environment-handoff.md`.
+
 ## Goal
 
 Prove one NCS application can build from fixed Nix inputs without nrfutil,
