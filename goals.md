@@ -317,6 +317,21 @@ supported default until the `sdk-nrf` backend has hardware-verified parity
 (the `tests/hardware/run.sh` blinky build is the acceptance test). This is the
 largest work item in this file — expect iteration.
 
+**Status (superseded in direction, 2026-08):** the accepted path is now the
+smaller **hybrid west backend** (see
+`docs/development/west-backend-environment-handoff.md` and
+`docs/development/west-backend-status.md`): Nix packages the exact Zephyr SDK,
+host tools, and Python interpreter, while the official mutable west workspace
+and a version-local venv own the NCS source and requirements. The pure
+`sdk-nrf` prototype plan was marked superseded before implementation. The
+`west` backend prototype phase adds `devShells.west-prototype`,
+`packages.west-zephyr-sdk-v3_3_0`, and `nix-nrf-west-setup`; `mkNrfShell`
+still rejects `backend = "west"` (like `"sdk-nrf"`) until public
+integration. The real clean-home proof (setup + blinky sysbuild from an
+isolated HOME) passed 2026-08-05 (`bash tests/west-backend/run.sh`, setup
+436 s, build 18 s; see `docs/development/west-backend-status.md`), so public
+backend integration is now the next phase.
+
 ### 3.2 `[ ]` Unified `nrf-flash` CLI
 
 **What:** One command that composes the existing pieces:
@@ -467,6 +482,6 @@ minimal as-is. Extend the CI template-init step to loop over all templates.
 | 1 — mechanical | 1.3, 1.4, 1.7, 2.2, 1.6 | Hours of work, no design risk, immediate consumer benefit |
 | 2 — structure | 1.1, 1.2 (consider 1.8 here), 2.1, 1.5 | The overlay/lib refactor defines the public API; tag v0.1.0 after |
 | 3 — robustness | 2.3, 3.3, 3.6 | Tests + doctor + easiest new chip |
-| 4 — hermeticity | 3.1 | Evaluate fixed NCS workspace + minimal Zephyr SDK targets now that clean bootstrap from an empty HOME is proven (`tests/clean-room/run.sh`, Phase 3) |
+| 4 — hermeticity | 3.1 | Evaluate the hybrid west backend (exact Zephyr SDK targets + host tools from Nix, mutable west workspace + venv for NCS source/requirements) now that clean bootstrap from an empty HOME is proven (`tests/clean-room/run.sh`) — see the west backend prototype phase |
 | 5 — daily-driver | 3.2, 3.4, 3.5 | Flash CLI, RTT/debug, recovery — the "powerful" layer |
 | 6 — polish | 3.7 | Templates once the zero-edit experience is real |

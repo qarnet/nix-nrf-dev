@@ -210,6 +210,235 @@
             ''
           );
 
+        # ── West backend prototype (experimental; not public backend) ──────
+        # Version metadata lives entirely in nix/west-backend/versions.nix;
+        # the caller wiring below only selects the metadata key and exposes
+        # the mandated temporary outputs. Public `backend = "west"` remains
+        # unimplemented; mkNrfShell still supports only "nrfutil".
+        westBackendVersions = import ./nix/west-backend/versions.nix;
+        # Metadata key exposed by this prototype. Caller wiring, not a
+        # builder literal: the builder files stay release-agnostic.
+        westBackendNcsVersion = "v3.3.0";
+        westBackendEntry = westBackendVersions.${westBackendNcsVersion};
+        westZephyrSdk = import ./nix/west-backend/zephyr-sdk.nix {
+          inherit pkgs;
+          sdk = westBackendEntry.zephyrSdk;
+        };
+        westSetupHelper = import ./nix/nix-nrf-west-setup.nix {
+          inherit pkgs;
+          python = pkgs.python312;
+          metadata = westBackendEntry;
+        };
+        westPrototype = import ./nix/west-backend/environment.nix {
+          inherit pkgs;
+          openocd = openocd-master;
+          nixNrf = nix-nrf;
+          sdkPackage = westZephyrSdk;
+          metadata = westBackendEntry;
+          setupHelper = westSetupHelper;
+        };
+
+        # Fake-boundary west-setup test gate: runs
+        # tests/unit/test_nix_nrf_west_setup.py against temporary fake
+        # python/venv/west/pip boundaries with sandboxed Python stdlib.
+        # Proves readiness, approval, command order, requirement order,
+        # re-run behavior, incompatible-workspace rejection, failure
+        # propagation, and --check non-mutation — no network, no real venv,
+        # no real west workspace.
+        westSetupTests =
+          pkgs.runCommand "nix-nrf-west-setup-tests"
+          {
+            nativeBuildInputs = [pkgs.python3];
+            setupScript = ./bin/nix-nrf-west-setup;
+            testFile = ./tests/unit/test_nix_nrf_west_setup.py;
+          }
+          ''
+            cp "$setupScript" nix-nrf-west-setup
+            chmod +x nix-nrf-west-setup
+            cp "$testFile" test_nix_nrf_west_setup.py
+            NIX_NRF_WEST_SETUP_SCRIPT="$PWD/nix-nrf-west-setup" python3 test_nix_nrf_west_setup.py
+            echo "west setup tests passed" >&2
+            mkdir -p "$out"
+          '';
+
+        # Cheap metadata schema gate: asserts every nix/west-backend
+        # versions.nix entry has the required shape (ncsVersion matches its
+        # key, testedWestVersion/python/requirements strings, zephyrSdk
+        # version/targets/assets with x86_64-linux URLs + fixed hashes).
+        # Pure Nix evaluation — fetches and builds nothing.
+        westBackendMetadataCheck = let
+          isString = x: builtins.isString x;
+          isStringList = xs: builtins.isList xs && builtins.all isString xs;
+          entryOk = key: e:
+            e.ncsVersion
+            == key
+            && isString e.testedWestVersion
+            && isString e.python
+            && isString e.zephyrSdk.version
+            && isStringList e.zephyrSdk.targets
+            && builtins.length e.zephyrSdk.targets > 0
+            && (e.zephyrSdk.assets ? "x86_64-linux")
+            && isString e.zephyrSdk.assets."x86_64-linux".minimal.url
+            && isString e.zephyrSdk.assets."x86_64-linux".minimal.sha256
+            && builtins.isList e.zephyrSdk.assets."x86_64-linux".toolchains
+            && builtins.length e.zephyrSdk.assets."x86_64-linux".toolchains > 0
+            && builtins.all (
+              t: isString t.target && isString t.url && isString t.sha256
+            )
+            e.zephyrSdk.assets."x86_64-linux".toolchains
+            && isStringList e.requirements
+            && builtins.length e.requirements > 0
+            && isStringList (e.pipConstraints or []);
+          results = map (k: {
+            key = k;
+            ok = entryOk k westBackendVersions.${k};
+          }) (builtins.attrNames westBackendVersions);
+          pass = builtins.all (r: r.ok) results;
+          detail = builtins.concatStringsSep "\n" (
+            map (r: "  ${r.key}: ${
+              if r.ok
+              then "ok"
+              else "INVALID"
+            }")
+            results
+          );
+        in
+          pkgs.runCommand "west-backend-metadata-check"
+          {
+            inherit detail;
+          }
+          (
+            if pass
+            then ''
+              echo "west-backend metadata check: all entries valid" >&2
+              echo "$detail" >&2
+              mkdir -p "$out"
+            ''
+            else ''
+              echo "west-backend metadata check FAILED" >&2
+              echo "$detail" >&2
+              exit 1
+            ''
+          );
+
+        # Quote-embedding regression for the west prototype environment:
+        # metadata values may contain shell metacharacters, so the shell hook
+        # and the scoped west wrapper must assign escaped values to variables
+        # OUTSIDE double quotes and compose paths/messages from those
+        # variables — never interpolate an escapeShellArg output directly
+        # inside double quotes (which would embed literal quote characters
+        # into the value, e.g. `$HOME/ncs/'v3.3.0'`).
+        #
+        # The gate instantiates the environment with nasty metadata (single
+        # quotes + spaces in NCS/SDK/Python values), sources the shell hook
+        # with a fake HOME, runs the real scoped wrapper against a
+        # fake-ready workspace at the nasty path, and asserts every composed
+        # value contains no quote artifact. A clean-metadata instance proves
+        # the default workspace path stays `$HOME/ncs/v3.3.0`.
+        westBackendQuotingCheck = let
+          nastyNcsVersion = "v3.3.0 with 'quote' and spaces";
+          nastySdkVersion = "0.17.0'sdk";
+          nastyPython = "3.12'py";
+          nastyMetadata =
+            westBackendEntry
+            // {
+              ncsVersion = nastyNcsVersion;
+              python = nastyPython;
+              zephyrSdk =
+                westBackendEntry.zephyrSdk
+                // {
+                  version = nastySdkVersion;
+                };
+            };
+          nastySetupHelper = import ./nix/nix-nrf-west-setup.nix {
+            inherit pkgs;
+            python = pkgs.python312;
+            metadata = nastyMetadata;
+          };
+          nastyShell = import ./nix/west-backend/environment.nix {
+            inherit pkgs;
+            openocd = openocd-master;
+            nixNrf = nix-nrf;
+            sdkPackage = westZephyrSdk;
+            metadata = nastyMetadata;
+            setupHelper = nastySetupHelper;
+          };
+        in
+          pkgs.runCommand "west-prototype-quoting-check"
+          {
+            inherit (nastyShell) shellHook;
+            nastyWest = nastyShell.passthru.westWrapper;
+            cleanShellHook = westPrototype.shellHook;
+            inherit
+              nastyNcsVersion
+              nastySdkVersion
+              nastyPython
+              ;
+          }
+          ''
+            set -eu
+
+            # ── Shell hook with quote-containing metadata ───────────────────
+            # Exact matches catch the defect directly: without the variable
+            # composition, `$_workspace` would be `$HOME/ncs/'v3.3.0 with
+            # 'quote' and spaces'` (literal escape quotes embedded) and fail
+            # both the equality and the missing-value assertions below.
+            printf '%s\n' "$shellHook" > hook.sh
+            mkdir -p home
+            HOME="$PWD/home" bash -c '
+              set -eu
+              source "$1"
+              [ "$_workspace" = "$HOME/ncs/$2" ] || { echo "FAIL: workspace mismatch (quote artifact?): $_workspace" >&2; exit 1; }
+              [ "$_sdk_version" = "$3" ] || { echo "FAIL: sdk version mismatch: $_sdk_version" >&2; exit 1; }
+              [ "$_python_version" = "$4" ] || { echo "FAIL: python version mismatch: $_python_version" >&2; exit 1; }
+              [ -n "$_workspace" ] || { echo "FAIL: workspace variable empty" >&2; exit 1; }
+              echo "shell hook quoting check OK: $_workspace" >&2
+            ' bash hook.sh "$nastyNcsVersion" "$nastySdkVersion" "$nastyPython"
+
+            # ── Shell hook with clean (default) metadata ────────────────────
+            printf '%s\n' "$cleanShellHook" > clean-hook.sh
+            HOME="$PWD/home" bash -c '
+              set -eu
+              source "$1"
+              [ "$_workspace" = "$HOME/ncs/v3.3.0" ] || { echo "FAIL: default workspace mismatch: $_workspace" >&2; exit 1; }
+              echo "clean shell hook check OK: $_workspace" >&2
+            ' bash clean-hook.sh
+
+            # ── Scoped west wrapper against a fake-ready workspace ──────────
+            ws="home/ncs/$nastyNcsVersion"
+            mkdir -p "$ws/.west" "$ws/nrf/scripts" "$ws/zephyr/scripts" "$ws/bootloader/mcuboot/scripts" "$ws/.venv/bin"
+            printf '[manifest]\npath = nrf\nfile = west.yml\n' > "$ws/.west/config"
+            printf 'manifest:\n' > "$ws/nrf/west.yml"
+            printf '#!/bin/sh\n' > "$ws/zephyr/zephyr-env.sh"
+            printf -- '-r requirements-base.txt\n' > "$ws/zephyr/scripts/requirements.txt"
+            printf 'west>=0.14.0\n' > "$ws/zephyr/scripts/requirements-base.txt"
+            printf -- '-r requirements-base.txt\n' > "$ws/nrf/scripts/requirements.txt"
+            printf 'west>=1.4.0\n' > "$ws/nrf/scripts/requirements-base.txt"
+            printf 'pyelftools>=0.29\n' > "$ws/bootloader/mcuboot/scripts/requirements.txt"
+            for n in python pip; do
+              printf '#!/bin/sh\nexit 0\n' > "$ws/.venv/bin/$n"
+              chmod +x "$ws/.venv/bin/$n"
+            done
+            cat > "$ws/.venv/bin/west" <<'FAKEWEST'
+            #!/bin/sh
+            if [ "$1" = "--version" ]; then
+              echo "West version: v1.4.0"
+              exit 0
+            fi
+            echo "FAKE_WEST argv=$* ZEPHYR_BASE=$ZEPHYR_BASE"
+            FAKEWEST
+            chmod +x "$ws/.venv/bin/west"
+
+            HOME="$PWD/home" "$nastyWest/bin/west" list --format=json > wrapper.out
+            grep -F "FAKE_WEST argv=list --format=json ZEPHYR_BASE=$PWD/home/ncs/$nastyNcsVersion/zephyr" wrapper.out >/dev/null || {
+              echo "FAIL: wrapper did not reach the venv west with the correct ZEPHYR_BASE" >&2
+              cat wrapper.out >&2
+              exit 1
+            }
+            echo "west wrapper quoting check OK" >&2
+            mkdir -p "$out"
+          '';
+
         # Fake-boundary bootstrap test gate: runs
         # tests/unit/test_nix_nrf_bootstrap.py against a temporary fake
         # nrfutil executable/state directory with sandboxed Python stdlib.
@@ -413,6 +642,10 @@
           # Host configuration consumes udev-rules (via nixosModules.default);
           # keep it separate from nix-nrf.
           udev-rules = nrfUdevRules;
+          # Experimental west backend prototype: exact Zephyr SDK from
+          # official release assets. Exposed as a temporary package only —
+          # public `backend = "west"` integration is a later phase.
+          west-zephyr-sdk-v3_3_0 = westZephyrSdk;
         };
 
         lib = {
@@ -429,31 +662,41 @@
           doctor-tests = doctorTests;
           doctor-udev-wiring = doctorUdevWiringCheck;
           udev-rules = udevRulesCheck;
+          west-setup-tests = westSetupTests;
+          west-backend-metadata = westBackendMetadataCheck;
+          west-backend-quoting = westBackendQuotingCheck;
           inherit pre-commit;
         };
 
-        # Dogfood shell for hacking on this repo / ad-hoc probe work.
-        # Composes mkNrfShell with pre-commit hooks (packages + shellHook).
-        # autoBootstrap defaults to true: lazy SDK/toolchain bootstrap on the
-        # first `west` invocation.
-        devShells.default = mkNrfShell {
-          backend = "nrfutil";
-          ncsVersion = "v3.3.0";
-          name = "nix-nrf-dev";
-          packages = pre-commit.enabledPackages;
-          extraShellHook = pre-commit.shellHook;
-        };
+        devShells = {
+          # Dogfood shell for hacking on this repo / ad-hoc probe work.
+          # Composes mkNrfShell with pre-commit hooks (packages + shellHook).
+          # autoBootstrap defaults to true: lazy SDK/toolchain bootstrap on
+          # the first `west` invocation.
+          default = mkNrfShell {
+            backend = "nrfutil";
+            ncsVersion = "v3.3.0";
+            name = "nix-nrf-dev";
+            packages = pre-commit.enabledPackages;
+            extraShellHook = pre-commit.shellHook;
+          };
 
-        # Clean-environment test shell: exercises shell-hook behavior to
-        # prove Nordic sdk-manager variables do not poison external tools
-        # (Node 24, Git, Python). The tools arrive via inputsFrom from the
-        # internal cleanEnvFixture. Added for CI regression gating.
-        devShells.clean-env-test = mkNrfShell {
-          backend = "nrfutil";
-          ncsVersion = "v3.3.0";
-          name = "nix-nrf-dev-clean-env-test";
-          withMultilib = false;
-          inputsFrom = [cleanEnvFixture];
+          # Clean-environment test shell: exercises shell-hook behavior to
+          # prove Nordic sdk-manager variables do not poison external tools
+          # (Node 24, Git, Python). The tools arrive via inputsFrom from the
+          # internal cleanEnvFixture. Added for CI regression gating.
+          clean-env-test = mkNrfShell {
+            backend = "nrfutil";
+            ncsVersion = "v3.3.0";
+            name = "nix-nrf-dev-clean-env-test";
+            withMultilib = false;
+            inputsFrom = [cleanEnvFixture];
+          };
+
+          # West backend prototype shell: exact Zephyr SDK + host tools from
+          # Nix, mutable west workspace + venv owned by the official tools
+          # via `nix-nrf-west-setup`. Explicitly not the public backend yet.
+          west-prototype = westPrototype;
         };
       }
     )
