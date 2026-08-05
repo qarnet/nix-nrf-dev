@@ -34,15 +34,25 @@ controlled `NRFUTIL_HOME` scheme.
   supported-version list exists. `nix-nrf probes` runs the internal probe
   command module (`$out/libexec/nix-nrf/probes`); there is no standalone
   `nrf-probes` binary or package.
+- `nix-nrf doctor` runs the internal read-only diagnostics command module
+  (`$out/libexec/nix-nrf/doctor`): it checks the configured SDK/toolchain via
+  the same bootstrap module's read-only `--check --quiet --print-sdk-path`
+  path (never a mutating invocation), discovers CMSIS-DAP/J-Link candidates
+  from sysfs descriptors, classifies hidraw/USB node access with `os.access`,
+  and prints exact NixOS/generic-Linux udev remediation without sudo. Fixture
+  tests are `checks.doctor-tests`; `packages.udev-rules` +
+  `nixosModules.default` provide the remediated OpenOCD udev rules
+  (`checks.udev-rules` proves the installed rule is byte-identical to the
+  pinned OpenOCD contrib file).
 - The packaged nrfutil derivation unconditionally depends on
   `segger-jlink-headless`; the flake config sets
   `segger-jlink.acceptLicense = true`. There is no sdk-manager-only
   composition that avoids J-Link.
-- CI builds `.#nrfutil` and `.#nix-nrf`, smoke-tests `nix-nrf --help`,
-  `nix-nrf versions --help`, `nix-nrf probes --help`, and
-  `nix-nrf bootstrap --help`, verifies unknown subcommands exit 2, and checks
-  the devshell provides `nrfutil`, `nix-nrf`, `openocd`, `west` while
-  `nrf-probes` is absent.
+- CI builds `.#nrfutil`, `.#nix-nrf`, and `.#udev-rules`, smoke-tests
+  `nix-nrf --help`, `nix-nrf versions --help`, `nix-nrf probes --help`,
+  `nix-nrf bootstrap --help`, and `nix-nrf doctor --help`, verifies unknown
+  subcommands exit 2, and checks the devshell provides `nrfutil`, `nix-nrf`,
+  `openocd`, `west` while `nrf-probes` is absent.
 - Clean-home bootstrap/build is proven: `tests/clean-room/run.sh` bootstraps
   NCS v3.3.0 and the selected toolchain under an isolated, script-created
   HOME, re-enters the shell, derives `ZEPHYR_BASE` from that installation,
@@ -60,3 +70,5 @@ controlled `NRFUTIL_HOME` scheme.
   implemented.
 - Scheduled version-discovery PR automation — needs separate workflow
   permission, update policy, and failure-semantics design.
+- Doctor extras from `goals.md` 3.3: `ZEPHYR_BASE`/multilib checks, a
+  shellHook "warn once" mode, and a standalone `packages.nrf-doctor` output.

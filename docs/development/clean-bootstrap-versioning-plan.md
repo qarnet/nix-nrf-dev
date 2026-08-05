@@ -366,7 +366,7 @@ Exit status **0** — all lifecycle assertions passed.
 - GitHub workflow: **not dispatched** — manual-only and ready for a later
   dispatch; this phase's evidence is the local real run.
 
-### Phase 4: hardware access guidance and diagnostics
+### Phase 4 (done): hardware access guidance and diagnostics
 
 Avoid building a permanent in-repo VID/PID catalog as first solution.
 
@@ -389,6 +389,22 @@ Verification uses fake sysfs/device fixtures for diagnostic classification plus
 manual hardware-runner confirmation. User-observable acceptance: failed probe
 access yields actionable host-specific guidance rather than generic
 "unable to open device" output.
+
+**Status (implemented 2026-08):** `nix-nrf doctor` is the internal read-only
+command module (`$out/libexec/nix-nrf/doctor`). It scans
+`/sys/bus/usb/devices` descriptors (product/manufacturer, no VID/PID
+catalog), maps busnum/devnum → `/dev/bus/usb/%03d/%03d` and descendant
+`hidraw*` nodes, classifies access with `os.access` (hidraw for CMSIS-DAP
+with USB-node fallback, USB node for J-Link), reports user/groups, and prints
+exact NixOS (`imports = [ nix-nrf-dev.nixosModules.default ]`) and generic
+Linux (`nix build .#udev-rules` + distribution udev procedure) remediation
+without sudo. `packages.udev-rules` relocates the pinned OpenOCD
+`60-openocd.rules` byte-for-byte; `nixosModules.default` adds it to
+`services.udev.packages`. Fixture gates: `checks.doctor-tests` (18 fake
+sysfs/dev-root cases) and `checks.udev-rules` (byte-for-byte comparison).
+Read-only current-host run (2026-08-05): PASS — J-Link accessible via USB
+node, Debugprobe on Pico accessible via USB fallback, XIAO CMSIS-DAP blocked
+(`/dev/hidraw0` root-owned `crw-------`), remediation printed, exit 0.
 
 ### Deferred Phase 5: Nix-native NCS build backend (`sdk-nrf`)
 

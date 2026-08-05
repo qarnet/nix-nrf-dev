@@ -1,0 +1,464 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+#
+# nix-nrf doctor — read-only environment and probe-access diagnostics.
+#
+# Internal command module for the `nix-nrf` facade: installed by
+# nix/nix-nrf-doctor.nix at $out/libexec/nix-nrf/doctor and wrapped with the
+# exact bootstrap module path, the configured NCS version (when set), and the
+# udev-rules package store path. Not a public package.
+#
+# Doctor distinguishes:
+#   - selected SDK/toolchain ready versus missing;
+#   - no visible debug probe;
+#   - visible CMSIS-DAP/J-Link candidate with inaccessible USB/hidraw nodes;
+#   - at least one accessible candidate;
+#   - mixed accessible/inaccessible candidates.
+#
+# Everything is read-only: doctor never opens probe nodes, never invokes
+# OpenOCD or J-Link tools, never runs a mutating bootstrap (only
+# `bootstrap --check --quiet --print-sdk-path`), never runs sudo, and never
+# installs or reloads host udev rules. It prints the exact NixOS / generic
+# Linux remediation instead.
+#
+# Candidate recognition is descriptor-based (product/manufacturer strings),
+# not a repository VID/PID catalog. Node access uses os.access on the mapped
+# /dev nodes; NIX_NRF_DOCTOR_ACCESS_JSON is a test-only override so fixture
+# tests do not depend on sandbox permission semantics — the packaged wrapper
+# never sets it, and production always uses os.access.
+#
+# Testing hooks (never forced by the packaged wrapper):
+#   NIX_NRF_DOCTOR_SYSFS_ROOT   sysfs USB device root (default /sys/bus/usb/devices)
+#   NIX_NRF_DOCTOR_DEV_ROOT     /dev root (default /dev)
+#   NIX_NRF_DOCTOR_SKIP_SDK=1   skip the SDK/toolchain check
+#   NIX_NRF_DOCTOR_ACCESS_JSON  per-node {"readable","writable"} override map
+#
+# Exit contract:
+#   0  SDK pass/skip AND at least one accessible hardware candidate
+#   1  SDK failure or hardware failure
+#   2  CLI usage error
+
+import argparse
+import grp
+import json
+import os
+import pwd
+import subprocess
+import sys
+from pathlib import Path
+
+PROG = "nix-nrf doctor"
+
+DEFAULT_SYSFS_ROOT = "/sys/bus/usb/devices"
+DEFAULT_DEV_ROOT = "/dev"
+
+# Test-only access override (NIX_NRF_DOCTOR_ACCESS_JSON), parsed once.
+_ACCESS_OVERRIDE = None
+
+
+def sysfs_root():
+    return Path(os.environ.get("NIX_NRF_DOCTOR_SYSFS_ROOT", DEFAULT_SYSFS_ROOT))
+
+
+def dev_root():
+    return Path(os.environ.get("NIX_NRF_DOCTOR_DEV_ROOT", DEFAULT_DEV_ROOT))
+
+
+def read_attr(dev, name):
+    """Read one optional sysfs text attribute; None when absent/unreadable."""
+    try:
+        return (dev / name).read_text().strip()
+    except OSError:
+        return None
+
+
+def classify(attrs):
+    """Descriptor-based candidate type; None when not a recognized probe."""
+    product = (attrs.get("product") or "").lower()
+    manufacturer = (attrs.get("manufacturer") or "").lower()
+    if "cmsis-dap" in product:
+        return "cmsis-dap"
+    if "j-link" in product or "jlink" in product or "segger" in manufacturer:
+        return "j-link"
+    return None
+
+
+def discover_candidates(sysfs):
+    """Immediate child dirs under the sysfs root, deduped and sorted by path."""
+    candidates = []
+    for dev in sorted(sysfs.glob("*")):
+        if not dev.is_dir():
+            continue
+        attrs = {}
+        for name in (
+            "product",
+            "manufacturer",
+            "serial",
+            "idVendor",
+            "idProduct",
+            "busnum",
+            "devnum",
+        ):
+            value = read_attr(dev, name)
+            if value is not None:
+                attrs[name] = value
+        ctype = classify(attrs)
+        if ctype is None:
+            continue
+        candidates.append({"type": ctype, "attrs": attrs, "sysfs_path": str(dev)})
+    seen = set()
+    unique = []
+    for cand in candidates:
+        if cand["sysfs_path"] in seen:
+            continue
+        seen.add(cand["sysfs_path"])
+        unique.append(cand)
+    unique.sort(key=lambda cand: cand["sysfs_path"])
+    return unique
+
+
+def usb_node_path(attrs, devroot):
+    """Map busnum/devnum to /dev/bus/usb/%03d/%03d; None when unavailable."""
+    try:
+        bus = int(attrs.get("busnum"))
+        num = int(attrs.get("devnum"))
+    except (TypeError, ValueError):
+        return None
+    return devroot / "bus" / "usb" / f"{bus:03d}" / f"{num:03d}"
+
+
+def hidraw_sysfs_nodes(dev):
+    """Descendant hidraw sysfs dirs under <dev>/*:*/ interface dirs."""
+    nodes = []
+    seen = set()
+    for iface in sorted(dev.glob("*:*")):
+        for match in sorted(iface.glob("**/hidraw/hidraw*")):
+            if str(match) in seen:
+                continue
+            seen.add(str(match))
+            nodes.append(match)
+    return nodes
+
+
+def load_access_override():
+    global _ACCESS_OVERRIDE
+    raw = os.environ.get("NIX_NRF_DOCTOR_ACCESS_JSON")
+    if not raw:
+        _ACCESS_OVERRIDE = None
+        return
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        data = None
+    _ACCESS_OVERRIDE = data if isinstance(data, dict) else None
+
+
+def node_rw(path):
+    """(readable, writable) for a node; test-only override, else os.access."""
+    if _ACCESS_OVERRIDE is not None:
+        entry = _ACCESS_OVERRIDE.get(str(path))
+        if isinstance(entry, dict):
+            return (
+                bool(entry.get("readable", False)),
+                bool(entry.get("writable", False)),
+            )
+    if not path.exists():
+        return False, False
+    return os.access(path, os.R_OK), os.access(path, os.W_OK)
+
+
+def probe_node(path, kind):
+    exists = path.exists()
+    readable, writable = node_rw(path)
+    return {
+        "path": str(path),
+        "kind": kind,
+        "exists": exists,
+        "readable": readable,
+        "writable": writable,
+    }
+
+
+def collect_nodes(cand, devroot):
+    """USB node plus all descendant hidraw nodes for one candidate."""
+    nodes = []
+    usb = usb_node_path(cand["attrs"], devroot)
+    if usb is not None:
+        nodes.append(probe_node(usb, "usb"))
+    seen = set()
+    for hid in hidraw_sysfs_nodes(Path(cand["sysfs_path"])):
+        devnode = devroot / hid.name
+        if str(devnode) in seen:
+            continue
+        seen.add(str(devnode))
+        nodes.append(probe_node(devnode, "hidraw"))
+    nodes.sort(key=lambda node: (node["kind"], node["path"]))
+    return nodes
+
+
+def build_candidates(sysfs, devroot):
+    """Full candidate list with access classification (pure decision)."""
+    result = []
+    for raw in discover_candidates(sysfs):
+        ctype = raw["type"]
+        nodes = collect_nodes(raw, devroot)
+        hidraws = [n for n in nodes if n["kind"] == "hidraw"]
+        usb = next((n for n in nodes if n["kind"] == "usb"), None)
+
+        def ok(node):
+            return node is not None and node["exists"] and node["readable"] and node["writable"]
+
+        if ctype == "j-link":
+            # J-Link talks over the USB node (no hidraw requirement).
+            if usb is not None:
+                accessible, method, fallback = ok(usb), "usb", False
+            else:
+                accessible, method, fallback = False, "none", False
+        elif hidraws:
+            # CMSIS-DAP via hidraw; any accessible hidraw node is enough.
+            accessible, method, fallback = any(ok(n) for n in hidraws), "hidraw", False
+        elif usb is not None:
+            # CMSIS-DAP without hidraw: USB-node fallback.
+            accessible, method, fallback = ok(usb), "usb", True
+        else:
+            accessible, method, fallback = False, "none", True
+
+        result.append(
+            {
+                "type": ctype,
+                "product": raw["attrs"].get("product"),
+                "manufacturer": raw["attrs"].get("manufacturer"),
+                "serial": raw["attrs"].get("serial"),
+                "vid": raw["attrs"].get("idVendor"),
+                "pid": raw["attrs"].get("idProduct"),
+                "sysfs_path": raw["sysfs_path"],
+                "accessible": accessible,
+                "access_method": method,
+                "fallback": fallback,
+                "nodes": nodes,
+            }
+        )
+    return result
+
+
+def hardware_status(candidates):
+    if not candidates:
+        return {"status": "fail", "message": "no supported debug probe visible"}
+    accessible = [c for c in candidates if c["accessible"]]
+    if not accessible:
+        return {"status": "fail", "message": "probe visible but inaccessible"}
+    blocked = len(candidates) - len(accessible)
+    if blocked:
+        message = f"{len(accessible)} accessible probe(s), {blocked} with limited access"
+    else:
+        message = f"{len(accessible)} accessible probe(s)"
+    return {"status": "pass", "message": message}
+
+
+def sdk_status():
+    version = os.environ.get("NIX_NRF_DOCTOR_NCS_VERSION")
+    if os.environ.get("NIX_NRF_DOCTOR_SKIP_SDK") == "1":
+        return {
+            "status": "skip",
+            "version": version,
+            "path": None,
+            "message": "SDK check skipped (NIX_NRF_DOCTOR_SKIP_SDK=1)",
+        }
+    if not version:
+        return {
+            "status": "skip",
+            "version": None,
+            "path": None,
+            "message": "no NCS version configured (base package)",
+        }
+    bootstrap = os.environ.get("NIX_NRF_DOCTOR_BOOTSTRAP")
+    if not bootstrap:
+        return {
+            "status": "skip",
+            "version": version,
+            "path": None,
+            "message": "NIX_NRF_DOCTOR_BOOTSTRAP is not set; SDK check skipped",
+        }
+    try:
+        proc = subprocess.run(
+            [bootstrap, "--check", "--quiet", "--print-sdk-path"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {
+            "status": "fail",
+            "version": version,
+            "path": None,
+            "message": f"cannot run bootstrap: {exc}",
+        }
+    if proc.returncode != 0:
+        return {
+            "status": "fail",
+            "version": version,
+            "path": None,
+            "message": f"NCS {version} not ready; run `nix-nrf bootstrap`",
+        }
+    lines = [line for line in proc.stdout.splitlines() if line.strip()]
+    if len(lines) != 1:
+        return {
+            "status": "fail",
+            "version": version,
+            "path": None,
+            "message": "bootstrap reported malformed SDK path output",
+        }
+    path = lines[0].strip()
+    if not path or not os.path.isdir(path):
+        return {
+            "status": "fail",
+            "version": version,
+            "path": None,
+            "message": "bootstrap reported a non-existing SDK path",
+        }
+    return {
+        "status": "pass",
+        "version": version,
+        "path": path,
+        "message": f"NCS {version} ready",
+    }
+
+
+def user_info():
+    try:
+        uid = os.getuid()
+        name = pwd.getpwuid(uid).pw_name
+    except (AttributeError, KeyError):
+        uid = None
+        name = None
+    groups = []
+    for gid in os.getgroups():
+        try:
+            groups.append(grp.getgrgid(gid).gr_name)
+        except KeyError:
+            groups.append(f"gid{gid}")
+    groups.sort()
+    return {"uid": uid, "name": name, "groups": groups}
+
+
+def remediation(candidates, sdk):
+    """Remediation text; udev guidance only when a candidate is blocked."""
+    items = []
+    if any(not c["accessible"] for c in candidates):
+        items.append("NixOS:\n  imports = [ nix-nrf-dev.nixosModules.default ];")
+        items.append(
+            "Other Linux:\n"
+            "  nix build .#udev-rules\n"
+            "  Install result/lib/udev/rules.d/60-openocd.rules using your distribution's\n"
+            "  documented udev procedure, reload rules, then replug probe."
+        )
+        rules_pkg = os.environ.get("NIX_NRF_DOCTOR_UDEV_RULES")
+        if rules_pkg:
+            items.append(f"Packaged udev rule: {rules_pkg}/lib/udev/rules.d/60-openocd.rules")
+        items.append("OpenOCD should not run as root.")
+    if sdk["status"] == "fail":
+        items.append("SDK/toolchain: run `nix-nrf bootstrap`")
+    return items
+
+
+def render_human(sdk, user, hardware, remediation_items):
+    out = []
+    out.append("SDK/toolchain")
+    out.append(f"  status: {sdk['status']}")
+    if sdk["status"] == "pass":
+        out.append(f"  NCS {sdk['version']} ready: {sdk['path']}")
+    elif sdk["message"]:
+        out.append(f"  {sdk['message']}")
+    out.append("")
+
+    out.append("User access")
+    name = user["name"] if user["name"] is not None else "unknown"
+    uid = user["uid"] if user["uid"] is not None else "?"
+    out.append(f"  user: {name} (uid {uid})")
+    groups = user["groups"] or ["(none)"]
+    out.append(f"  groups: {' '.join(groups)}")
+    out.append("")
+
+    out.append("Debug probes")
+    out.append(f"  {hardware['message']}")
+    for c in hardware["candidates"]:
+        marker = "OK" if c["accessible"] else "BLOCKED"
+        extra = []
+        if c["manufacturer"]:
+            extra.append(c["manufacturer"])
+        if c["serial"]:
+            extra.append(f"serial {c['serial']}")
+        if c["vid"] and c["pid"]:
+            extra.append(f"VID:PID {c['vid']}:{c['pid']}")
+        suffix = f" ({', '.join(extra)})" if extra else ""
+        fallback = " (USB fallback)" if c["fallback"] else ""
+        out.append(
+            f"  [{marker}] {c['type']}  {c['product'] or c['type']}{suffix}{fallback}  {c['sysfs_path']}"
+        )
+        for node in c["nodes"]:
+            state = ", ".join(
+                label
+                for label, flag in (
+                    ("exists", node["exists"]),
+                    ("readable", node["readable"]),
+                    ("writable", node["writable"]),
+                )
+                if flag
+            )
+            out.append(f"    {node['kind']} {node['path']}: {state or 'missing'}")
+    out.append("")
+
+    if remediation_items:
+        out.append("Remediation")
+        for item in remediation_items:
+            for line in item.splitlines():
+                out.append(f"  {line}")
+            out.append("")
+
+    ok = sdk["status"] in ("pass", "skip") and hardware["status"] == "pass"
+    out.append("PASS" if ok else "FAIL")
+    return "\n".join(out)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog=PROG,
+        description=(
+            "Read-only SDK/toolchain and debug-probe access diagnostics. "
+            "Never opens probes, never runs sudo, never mutates host state."
+        ),
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="emit exactly one JSON object on stdout",
+    )
+    args = parser.parse_args(argv)
+
+    load_access_override()
+
+    sdk = sdk_status()
+    user = user_info()
+    candidates = build_candidates(sysfs_root(), dev_root())
+    hardware = hardware_status(candidates)
+    hardware["candidates"] = candidates
+    items = remediation(candidates, sdk)
+    ok = sdk["status"] in ("pass", "skip") and hardware["status"] == "pass"
+
+    result = {
+        "ok": ok,
+        "sdk": sdk,
+        "user": user,
+        "hardware": hardware,
+        "remediation": items,
+    }
+
+    if args.json:
+        print(json.dumps(result))
+    else:
+        print(render_human(sdk, user, hardware, items))
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

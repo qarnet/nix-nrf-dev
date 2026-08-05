@@ -51,6 +51,17 @@
           exec ${openocd-master-unwrapped}/bin/openocd "$@"
         '';
 
+        # Thin relocation package exposing OpenOCD's canonical
+        # 60-openocd.rules under the udev layout NixOS imports
+        # ($out/lib/udev/rules.d). Copied byte-for-byte from the pinned
+        # openocd-master-unwrapped build — no repository VID/PID catalog.
+        # Consumed by the NixOS module (host configuration) and reported by
+        # `nix-nrf doctor` remediation.
+        nrfUdevRules = import ./nix/nrf-udev-rules.nix {
+          inherit pkgs;
+          openocd = openocd-master-unwrapped;
+        };
+
         # Packaged nRF Util with the sdk-manager extension. Extension archives,
         # versions, and hashes are maintained by Nixpkgs; this repository does
         # not duplicate them.
@@ -60,14 +71,16 @@
         # composed nrfutil (versions), the internal probe command module
         # (probes), and the internal bootstrap command module (bootstrap),
         # which nix-nrf owns via nix/nix-nrf-probes.nix and
-        # nix/nix-nrf-bootstrap.nix. ncsVersion/toolchainBundleId default to
-        # null here, so the standalone package requires an explicit
+        # nix/nix-nrf-bootstrap.nix, plus the internal doctor command module
+        # (doctor) via nix/nix-nrf-doctor.nix. ncsVersion/toolchainBundleId
+        # default to null here, so the standalone package requires an explicit
         # --ncs-version; mkNrfShell instantiates its own nix-nrf with the
         # shell's selector values as configured defaults.
         nix-nrf = import ./nix/nix-nrf.nix {
           inherit pkgs;
           nrfutilPackage = nrfutil;
           openocd = openocd-master;
+          udevRules = nrfUdevRules;
         };
 
         mkNrfShell = import ./nix/mk-nrf-shell.nix {
@@ -260,6 +273,53 @@
             mkdir -p "$out"
           '';
 
+        # Fake-boundary doctor test gate: runs
+        # tests/unit/test_nix_nrf_doctor.py against temporary fake
+        # sysfs/dev roots and a fake bootstrap command, with sandboxed
+        # Python stdlib. Proves candidate discovery, node mapping, access
+        # classification (hidraw/USB fallback), SDK check boundaries,
+        # remediation, JSON schema, and exit codes — no hardware, no real
+        # /sys or /dev, no network, no SDK.
+        doctorTests =
+          pkgs.runCommand "nix-nrf-doctor-tests"
+          {
+            nativeBuildInputs = [pkgs.python3];
+            doctorScript = ./bin/nix-nrf-doctor;
+            testFile = ./tests/unit/test_nix_nrf_doctor.py;
+          }
+          ''
+            cp "$doctorScript" nix-nrf-doctor
+            chmod +x nix-nrf-doctor
+            cp "$testFile" test_nix_nrf_doctor.py
+            NIX_NRF_DOCTOR_SCRIPT="$PWD/nix-nrf-doctor" python3 test_nix_nrf_doctor.py
+            echo "doctor tests passed" >&2
+            mkdir -p "$out"
+          '';
+
+        # Udev-rule gate: builds the relocation package, verifies the
+        # destination exists, and proves the installed rule is byte-for-byte
+        # identical to the pinned OpenOCD contrib file. Never builds a whole
+        # NixOS system.
+        udevRulesCheck =
+          pkgs.runCommand "nix-nrf-udev-rules-check"
+          {
+            inherit nrfUdevRules;
+            contribRule = "${openocd-master-unwrapped}/share/openocd/contrib/60-openocd.rules";
+          }
+          ''
+            installed="$nrfUdevRules/lib/udev/rules.d/60-openocd.rules"
+            [ -f "$installed" ] || {
+              echo "udev-rules check: missing installed rule $installed" >&2
+              exit 1
+            }
+            cmp "$installed" "$contribRule" || {
+              echo "udev-rules check: installed rule differs byte-for-byte from the pinned OpenOCD contrib rule" >&2
+              exit 1
+            }
+            echo "udev-rules check passed: installed rule is byte-identical to the pinned OpenOCD contrib rule" >&2
+            mkdir -p "$out"
+          '';
+
         treefmtEval = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
 
         pre-commit = git-hooks.lib.${system}.run {
@@ -302,6 +362,9 @@
             nix-nrf
             ;
           default = nix-nrf;
+          # Host configuration consumes udev-rules (via nixosModules.default);
+          # keep it separate from nix-nrf.
+          udev-rules = nrfUdevRules;
         };
 
         lib = {
@@ -315,6 +378,8 @@
           backend-selector = backendSelectorCheck;
           bootstrap-tests = bootstrapTests;
           bootstrap-quoting = bootstrapQuotingCheck;
+          doctor-tests = doctorTests;
+          udev-rules = udevRulesCheck;
           inherit pre-commit;
         };
 
@@ -347,6 +412,21 @@
       templates.default = {
         path = ./templates/default;
         description = "nRF firmware project with NCS toolchain shell and openocd-master flashing";
+      };
+
+      # Minimal NixOS module: activate the packaged upstream OpenOCD
+      # udev rules (60-openocd.rules) for the current system, so CMSIS-DAP
+      # and J-Link nodes get MODE="660", GROUP="plugdev", TAG+="uaccess"
+      # without hand-written rules. No options in this version.
+      #
+      # Consumer:
+      #   imports = [ nix-nrf-dev.nixosModules.default ];
+      nixosModules.default = {pkgs, ...}: let
+        system = pkgs.stdenv.hostPlatform.system;
+      in {
+        services.udev.packages = [
+          self.packages.${system}.udev-rules
+        ];
       };
     };
 }

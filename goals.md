@@ -181,7 +181,7 @@ lines, so doing them together may be cheaper.
 
 ## 2. Practical gaps
 
-### 2.1 `[ ]` NixOS module for udev rules (highest impact / lowest effort)
+### 2.1 `[x]` NixOS module for udev rules (highest impact / lowest effort)
 
 **What:** `nixosModules.default` that installs udev rules granting non-root
 access to CMSIS-DAP probes (and our specific probes: Debugprobe on Pico,
@@ -205,6 +205,14 @@ of the supported probes, exposed as both a NixOS module and a raw
 `packages.udev-rules` (for non-NixOS distros: `cp` to
 `/etc/udev/rules.d/`). Document in README and in
 `tests/hardware/README.md`.
+
+**Status (implemented 2026-08):** `nixosModules.default` adds
+`packages.udev-rules` — a thin relocation of the pinned OpenOCD
+`60-openocd.rules` (byte-for-byte, no repository VID/PID catalog) — to
+`services.udev.packages`; no options in the first version. Non-NixOS
+remediation is printed by `nix-nrf doctor` (`nix build .#udev-rules` +
+distribution udev procedure). Diagnostics/detection live in `nix-nrf doctor`
+(see 3.3).
 
 ### 2.2 `[ ]` Package the TCL recipes
 
@@ -362,6 +370,14 @@ thin, honest checklist rather than an auto-fixer.
 module (like the probes module); call it from
 `mkNrfShell`'s hook in a "warn once" mode and expose it as
 `packages.nrf-doctor`.
+
+**Status (partially landed 2026-08):** the SDK/toolchain and probe-access
+subsets are implemented as the internal `nix-nrf doctor` subcommand
+(`$out/libexec/nix-nrf/doctor`, read-only; descriptor-based CMSIS-DAP/J-Link
+discovery, node-access classification, exact NixOS/generic-Linux udev
+remediation, fake-boundary fixture tests in `checks.doctor-tests`). Still
+open: `ZEPHYR_BASE`/multilib checks, the shellHook "warn once" mode, and a
+standalone `packages.nrf-doctor` output.
 
 ### 3.4 `[ ]` Debug & console story (RTT, gdb, serial)
 

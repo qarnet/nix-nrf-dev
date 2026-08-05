@@ -45,8 +45,10 @@ jobs:
       # nrfutil pulls segger-jlink-headless (SEGGER license accepted in the flake config).
       # nrf-probes is not a package: probe identification is the internal
       # `nix-nrf probes` subcommand, built as part of .#nix-nrf.
+      # .#udev-rules is the OpenOCD udev-rule relocation package consumed by
+      # the NixOS module and reported by `nix-nrf doctor`.
       - name: Build packages
-        run: nix build -L .#openocd-master-unwrapped .#openocd-master .#nrfutil .#nix-nrf
+        run: nix build -L .#openocd-master-unwrapped .#openocd-master .#nrfutil .#nix-nrf .#udev-rules
 
       # A2 — smoke-run: verify the built binaries actually execute.
       - name: Smoke run openocd
@@ -67,6 +69,12 @@ jobs:
       # bootstrap-tests check.
       - name: Smoke run nix-nrf bootstrap help
         run: nix run .#nix-nrf -- bootstrap --help
+      # nix-nrf doctor delegates to the internal doctor module; --help only,
+      # so normal PR CI never depends on the hosted runner's USB state. All
+      # classification/remediation paths are proven by the fake-boundary
+      # doctor-tests check.
+      - name: Smoke run nix-nrf doctor help
+        run: nix run .#nix-nrf -- doctor --help
       # Unknown subcommands must fail with exit code 2.
       - name: nix-nrf unknown subcommand exits 2
         run: |
@@ -79,10 +87,11 @@ jobs:
       # A5 — devshell-enter: verify the dogfood shell provides the tools and
       # the removed nrf-probes/nrf-sdk-versions are absent. Fresh CI has no
       # stale environment, so `! command -v` is reliable here. Only
-      # `nix-nrf bootstrap --help` is invoked — never a bare bootstrap or
-      # install against missing state.
+      # `nix-nrf bootstrap --help` / `nix-nrf doctor --help` are invoked —
+      # never a bare bootstrap, install, or doctor run against missing state
+      # or hosted USB.
       - name: Devshell provides tools
-        run: nix develop --command sh -ceu 'command -v nrfutil; command -v nix-nrf; command -v openocd; command -v west; nix-nrf bootstrap --help >/dev/null; ! command -v nrf-probes; ! command -v nrf-sdk-versions'
+        run: nix develop --command sh -ceu 'command -v nrfutil; command -v nix-nrf; command -v openocd; command -v west; nix-nrf bootstrap --help >/dev/null; nix-nrf doctor --help >/dev/null; ! command -v nrf-probes; ! command -v nrf-sdk-versions'
 
       # A8 — clean-env regression gate: prove Nordic sdk-manager variables
       # do not poison non-toolchain tools (Node, Git, Python).

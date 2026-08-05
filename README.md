@@ -38,8 +38,8 @@ devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
 The shell provides `west` + Zephyr toolchain (via nrfutil sdk-manager, with
 lazy SDK/toolchain bootstrap on the first `west` invocation), `ZEPHYR_BASE`,
 `openocd` (master build), `nrfutil`, the `nix-nrf` CLI facade (`nix-nrf
-versions`, `nix-nrf probes`, `nix-nrf bootstrap`), and multilib GCC for
-`native_sim`.
+versions`, `nix-nrf probes`, `nix-nrf bootstrap`, `nix-nrf doctor`), and
+multilib GCC for `native_sim`.
 
 **Scoped toolchain environment:** Nordic's sdk-manager env script exports
 `PYTHONHOME`, `PYTHONPATH`, `LD_LIBRARY_PATH` and `GIT_EXEC_PATH` — toxic to
@@ -161,8 +161,9 @@ run (see `docs/development/clean-bootstrap-versioning-plan.md`, Phase 3).
 ## nix-nrf CLI
 
 `nix-nrf` is the project's command facade: `nix-nrf versions`, `nix-nrf probes`,
-and `nix-nrf bootstrap`. It dispatches to the packaged tools with `exec`, so
-delegated stdout, stderr, options, and exit status are preserved:
+`nix-nrf bootstrap`, and `nix-nrf doctor`. It dispatches to the packaged tools
+with `exec`, so delegated stdout, stderr, options, and exit status are
+preserved:
 
 ```
 $ nix-nrf versions
@@ -174,18 +175,109 @@ $ nix-nrf probes --help
 $ nix-nrf bootstrap
 $ nix-nrf bootstrap --check
 $ nix-nrf bootstrap --help
+$ nix-nrf doctor
+$ nix-nrf doctor --json
+$ nix-nrf doctor --help
 $ nix-nrf help versions
 $ nix-nrf help probes
 $ nix-nrf help bootstrap
+$ nix-nrf help doctor
 ```
 
 `nix-nrf versions` delegates to `nrfutil sdk-manager search` without parsing
 or maintaining a local version list, so sdk-manager remains the runtime
 authority. `nix-nrf probes` runs the internal probe command module
 (`$out/libexec/nix-nrf/probes`); `nix-nrf bootstrap` runs the internal
-bootstrap command module (`$out/libexec/nix-nrf/bootstrap`); there are no
-standalone `nrf-probes`/`nrf-bootstrap` binaries or packages. The old
-`nrf-sdk-versions` command is removed; use `nix-nrf versions`.
+bootstrap command module (`$out/libexec/nix-nrf/bootstrap`); `nix-nrf doctor`
+runs the internal doctor command module (`$out/libexec/nix-nrf/doctor`);
+there are no standalone `nrf-probes`/`nrf-bootstrap`/`nrf-doctor` binaries or
+packages. The old `nrf-sdk-versions` command is removed; use `nix-nrf
+versions`.
+
+## Hardware access diagnostics (`nix-nrf doctor`)
+
+`nix-nrf doctor` is read-only environment and probe-access diagnostics. It
+distinguishes a ready versus missing SDK/toolchain, no visible debug probe,
+visible-but-inaccessible CMSIS-DAP/J-Link candidates, at least one accessible
+candidate, and mixed access. It never opens probe nodes, never invokes
+OpenOCD/J-Link tools, never runs a mutating bootstrap (only the `--check`
+path), never runs `sudo`, and never installs or reloads host udev rules — it
+prints the exact remediation instead:
+
+```text
+$ nix-nrf doctor
+SDK/toolchain
+  status: pass
+  NCS v3.3.0 ready: /home/user/ncs/v3.3.0
+
+User access
+  user: user (uid 1000)
+  groups: dialout users wheel
+
+Debug probes
+  1 accessible probe(s), 1 with limited access
+  [OK] cmsis-dap  Debugprobe on Pico (CMSIS-DAP) (Raspberry Pi, ...)  /sys/bus/usb/devices/5-2.4
+    usb /dev/bus/usb/005/033: exists, readable, writable
+  [BLOCKED] cmsis-dap  Seeed Studio XIAO nrf54 CMSIS-DAP (Seeed Studio, ...)  /sys/bus/usb/devices/1-9
+    hidraw /dev/hidraw0: exists
+    usb /dev/bus/usb/001/017: exists, readable, writable
+
+Remediation
+  NixOS:
+    imports = [ nix-nrf-dev.nixosModules.default ];
+
+  Other Linux:
+    nix build .#udev-rules
+    Install result/lib/udev/rules.d/60-openocd.rules using your distribution's
+    documented udev procedure, reload rules, then replug probe.
+
+  OpenOCD should not run as root.
+
+PASS
+```
+
+Candidate recognition is descriptor-based (product/manufacturer strings), not
+a repository VID/PID catalog: CMSIS-DAP when the product contains
+`cmsis-dap`, J-Link when the product contains `j-link`/`jlink` or the
+manufacturer contains `segger`. Access is decided by `os.access` on the mapped
+nodes — hidraw for CMSIS-DAP (USB-node fallback when the probe exposes no
+HID interface, e.g. CMSIS-DAP v2 bulk), USB bus node for J-Link. The base
+`packages.nix-nrf` has no NCS default, so its doctor skips the SDK check but
+still diagnoses hardware; the shell's `nix-nrf` checks the configured
+selector.
+
+Exit: `0` when the SDK is pass/skip and at least one candidate is accessible,
+`1` for SDK or hardware failure, `2` for CLI usage errors. `--json` emits one
+JSON object with stable fields (`ok`, `sdk`, `user`, `hardware`,
+`remediation`).
+
+## NixOS udev rules
+
+OpenOCD's canonical `60-openocd.rules` (pinned revision
+`e6752ecbcf72efe4e213e8418e381ff2e0ffdf54`) grants non-root access to
+CMSIS-DAP and J-Link probes (`MODE="660"`, `GROUP="plugdev"`,
+`TAG+="uaccess"`, covering `usb`, `tty`, and `hidraw` subsystems). The flake
+exposes it as `packages.udev-rules`, copied byte-for-byte from the built
+OpenOCD source (no repository VID/PID catalog), plus a minimal NixOS module
+that activates it on the current system:
+
+```nix
+{
+  inputs.nix-nrf-dev.url = "github:qarnet/nix-nrf-dev";
+  # ...
+  nixosConfigurations.myHost = nixpkgs.lib.nixosSystem {
+    modules = [ { imports = [ nix-nrf-dev.nixosModules.default ]; } ];
+  };
+}
+```
+
+`services.udev.packages` imports every `etc/udev/rules.d` and
+`lib/udev/rules.d` file from the listed packages, so passing OpenOCD itself
+would not activate its contrib rule — the relocation package exists for that
+reason. On non-NixOS Linux, `nix build .#udev-rules` and install
+`result/lib/udev/rules.d/60-openocd.rules` via your distribution's documented
+udev procedure, then reload rules and replug the probe. OpenOCD should not run
+as root.
 
 ## Advanced: overriding nrfutil
 
@@ -229,11 +321,13 @@ the shell without polluting the scoped `west` wrapper.
 | `packages.openocd-master` | openocd from master (pinned), wrapped for libudev |
 | `packages.openocd-master-unwrapped` | the raw build |
 | `packages.nrfutil` | Nixpkgs nrfutil composed with the sdk-manager extension (includes SEGGER J-Link, see [SEGGER / J-Link](#segger--j-link)) |
-| `packages.nix-nrf` | project CLI facade: `versions` (sdk-manager-backed NCS version list), `probes` (internal probe command module), and `bootstrap` (internal SDK/toolchain bootstrap module, see [nix-nrf CLI](#nix-nrf-cli) and [Bootstrap](#bootstrap)) |
+| `packages.nix-nrf` | project CLI facade: `versions` (sdk-manager-backed NCS version list), `probes` (internal probe command module), `bootstrap` (internal SDK/toolchain bootstrap module), and `doctor` (internal read-only SDK/probe-access diagnostics module, see [Hardware access diagnostics](#hardware-access-diagnostics-nix-nrf-doctor) and [Bootstrap](#bootstrap)) |
+| `packages.udev-rules` | upstream OpenOCD `60-openocd.rules` relocated to `lib/udev/rules.d`, byte-for-byte (see [NixOS udev rules](#nixos-udev-rules)) |
 | `packages.default` | alias for `packages.nix-nrf` |
 | `devShells.default` | dogfood shell for hacking on this repo |
 | `formatter.<system>` | treefmt wrapper (`nix fmt`) |
-| `checks.<system>` | `formatting` (treefmt) + `backend-selector` (eval gate: `ncsVersion` required, omitted/`nrfutil` evaluate, `sdk-nrf` rejected, `toolchainBundleId` evaluates, `autoBootstrap` omitted/true/false evaluates, exact bundle in either bootstrap mode) + `bootstrap-tests` (fake-boundary unit tests, no network/real SDK) + `bootstrap-quoting` (wrapper shell-quoting regression for selector values with spaces/quotes) + `pre-commit` (git-hooks.nix) |
+| `nixosModules.default` | minimal NixOS module adding `packages.udev-rules` to `services.udev.packages` (no options; see [NixOS udev rules](#nixos-udev-rules)) |
+| `checks.<system>` | `formatting` (treefmt) + `backend-selector` (eval gate: `ncsVersion` required, omitted/`nrfutil` evaluate, `sdk-nrf` rejected, `toolchainBundleId` evaluates, `autoBootstrap` omitted/true/false evaluates, exact bundle in either bootstrap mode) + `bootstrap-tests` (fake-boundary unit tests, no network/real SDK) + `bootstrap-quoting` (wrapper shell-quoting regression for selector values with spaces/quotes) + `doctor-tests` (fake sysfs/dev-root doctor unit tests, no hardware) + `udev-rules` (installed rule byte-identical to the pinned OpenOCD contrib rule) + `pre-commit` (git-hooks.nix) |
 | `templates.default` | project skeleton (flake.nix + .envrc) |
 | `tcl/` | canonical flash recipes (see below) |
 

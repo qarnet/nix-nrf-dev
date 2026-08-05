@@ -8,10 +8,12 @@ direnv allow     # or: nix develop
 
 The shell provides `openocd` (master build), `nrfutil`, the
 `nix-nrf` CLI facade (`nix-nrf versions`, `nix-nrf probes`,
-`nix-nrf bootstrap`), the scoped `west`
+`nix-nrf bootstrap`, `nix-nrf doctor`), the scoped `west`
 wrapper, and the NCS toolchain (via nrfutil sdk-manager for the configured NCS
 version; lazily bootstrapped by `west` when missing). Probe identification is
-the `nix-nrf probes` subcommand; there is no standalone `nrf-probes` command.
+the `nix-nrf probes` subcommand; hardware-access diagnostics is the
+`nix-nrf doctor` subcommand (read-only, never runs `sudo`); there are no
+standalone `nrf-probes`/`nrf-doctor` commands.
 
 ## Before committing
 
@@ -20,7 +22,8 @@ Formatting and lint hooks run automatically via `pre-commit` (wired through
 
 ```bash
 nix fmt                       # format all files (alejandra for Nix, black for Python)
-nix flake check -L             # run all checks in a sandbox
+nix flake check -L             # run all checks in a sandbox (incl. doctor-tests
+                               # and the udev-rules byte-for-byte check)
 pre-commit run --all-files      # run hooks without committing
 nix develop .#clean-env-test --command sh -ceu '
   case "${LD_LIBRARY_PATH:-}" in *ncs/toolchains*) exit 1;; esac
