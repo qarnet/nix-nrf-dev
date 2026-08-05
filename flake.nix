@@ -57,8 +57,13 @@
         nrfutil = pkgs.nrfutil.withExtensions ["nrfutil-sdk-manager"];
 
         # Public project CLI facade: fixed dispatcher over the default
-        # composed nrfutil (versions) and the internal probe command module
-        # (probes), which nix-nrf owns via nix/nix-nrf-probes.nix.
+        # composed nrfutil (versions), the internal probe command module
+        # (probes), and the internal bootstrap command module (bootstrap),
+        # which nix-nrf owns via nix/nix-nrf-probes.nix and
+        # nix/nix-nrf-bootstrap.nix. ncsVersion/toolchainBundleId default to
+        # null here, so the standalone package requires an explicit
+        # --ncs-version; mkNrfShell instantiates its own nix-nrf with the
+        # shell's selector values as configured defaults.
         nix-nrf = import ./nix/nix-nrf.nix {
           inherit pkgs;
           nrfutilPackage = nrfutil;
@@ -91,7 +96,9 @@
         # - explicit "nrfutil" plus explicit ncsVersion evaluates,
         # - missing ncsVersion fails evaluation (ncsVersion is required),
         # - unsupported "sdk-nrf" does not evaluate,
-        # - an explicit non-null toolchainBundleId evaluates.
+        # - an explicit non-null toolchainBundleId evaluates,
+        # - omitted/explicit autoBootstrap (true/false) values evaluate,
+        # - exact toolchainBundleId evaluates in either bootstrap mode.
         # Pure Nix evaluation via builtins.tryEval — builds no SDK, runs no
         # network bootstrap. Note: builtins.tryEval cannot catch "called
         # without required argument" errors, so required-ness is proven with
@@ -120,7 +127,43 @@
             ncsVersion = "v3.3.0";
             toolchainBundleId = "bundle-id-check";
           });
-          pass = ncsVersionRequired && omittedOk && explicitOk && unsupportedRejected && bundleIdOk;
+          autoBootstrapOmittedOk = evaluates (mkNrfShell {
+            name = "bootstrap-check-omitted";
+            ncsVersion = "v3.3.0";
+          });
+          autoBootstrapTrueOk = evaluates (mkNrfShell {
+            name = "bootstrap-check-true";
+            ncsVersion = "v3.3.0";
+            autoBootstrap = true;
+          });
+          autoBootstrapFalseOk = evaluates (mkNrfShell {
+            name = "bootstrap-check-false";
+            ncsVersion = "v3.3.0";
+            autoBootstrap = false;
+          });
+          bundleIdAutoTrueOk = evaluates (mkNrfShell {
+            name = "bootstrap-check-bundle-true";
+            ncsVersion = "v3.3.0";
+            toolchainBundleId = "bundle-id-check";
+            autoBootstrap = true;
+          });
+          bundleIdAutoFalseOk = evaluates (mkNrfShell {
+            name = "bootstrap-check-bundle-false";
+            ncsVersion = "v3.3.0";
+            toolchainBundleId = "bundle-id-check";
+            autoBootstrap = false;
+          });
+          pass =
+            ncsVersionRequired
+            && omittedOk
+            && explicitOk
+            && unsupportedRejected
+            && bundleIdOk
+            && autoBootstrapOmittedOk
+            && autoBootstrapTrueOk
+            && autoBootstrapFalseOk
+            && bundleIdAutoTrueOk
+            && bundleIdAutoFalseOk;
         in
           pkgs.runCommand "backend-selector-check"
           {
@@ -130,20 +173,48 @@
               explicitOk
               unsupportedRejected
               bundleIdOk
+              autoBootstrapOmittedOk
+              autoBootstrapTrueOk
+              autoBootstrapFalseOk
+              bundleIdAutoTrueOk
+              bundleIdAutoFalseOk
               ;
           }
           (
             if pass
             then ''
-              echo "backend selector check: ncsVersion required, omitted+ncsVersion evaluates, nrfutil+ncsVersion evaluates, sdk-nrf rejected, toolchainBundleId evaluates"
+              echo "backend selector check: ncsVersion required, omitted+ncsVersion evaluates, nrfutil+ncsVersion evaluates, sdk-nrf rejected, toolchainBundleId evaluates, autoBootstrap omitted/true/false evaluates, exact bundle in either bootstrap mode evaluates"
               mkdir -p "$out"
             ''
             else ''
               echo "backend selector check FAILED" >&2
-              echo "ncsVersionRequired=$ncsVersionRequired omittedOk=$omittedOk explicitOk=$explicitOk unsupportedRejected=$unsupportedRejected bundleIdOk=$bundleIdOk" >&2
+              echo "ncsVersionRequired=$ncsVersionRequired omittedOk=$omittedOk explicitOk=$explicitOk unsupportedRejected=$unsupportedRejected bundleIdOk=$bundleIdOk autoBootstrapOmittedOk=$autoBootstrapOmittedOk autoBootstrapTrueOk=$autoBootstrapTrueOk autoBootstrapFalseOk=$autoBootstrapFalseOk bundleIdAutoTrueOk=$bundleIdAutoTrueOk bundleIdAutoFalseOk=$bundleIdAutoFalseOk" >&2
               exit 1
             ''
           );
+
+        # Fake-boundary bootstrap test gate: runs
+        # tests/unit/test_nix_nrf_bootstrap.py against a temporary fake
+        # nrfutil executable/state directory with sandboxed Python stdlib.
+        # Proves every lifecycle branch — ready selection, --check, approval,
+        # install matrix, exact-bundle behavior, malformed state, failed and
+        # incomplete installs, missing version — with no network, no real SDK,
+        # and no real nrfutil state.
+        bootstrapTests =
+          pkgs.runCommand "nix-nrf-bootstrap-tests"
+          {
+            nativeBuildInputs = [pkgs.python3];
+            bootstrapScript = ./bin/nix-nrf-bootstrap;
+            testFile = ./tests/unit/test_nix_nrf_bootstrap.py;
+          }
+          ''
+            cp "$bootstrapScript" nix-nrf-bootstrap
+            chmod +x nix-nrf-bootstrap
+            cp "$testFile" test_nix_nrf_bootstrap.py
+            NIX_NRF_BOOTSTRAP_SCRIPT="$PWD/nix-nrf-bootstrap" python3 test_nix_nrf_bootstrap.py
+            echo "bootstrap tests passed" >&2
+            mkdir -p "$out"
+          '';
 
         treefmtEval = treefmt-nix.lib.evalModule pkgs ./treefmt.nix;
 
@@ -198,11 +269,14 @@
         checks = {
           formatting = treefmtEval.config.build.check self;
           backend-selector = backendSelectorCheck;
+          bootstrap-tests = bootstrapTests;
           inherit pre-commit;
         };
 
         # Dogfood shell for hacking on this repo / ad-hoc probe work.
         # Composes mkNrfShell with pre-commit hooks (packages + shellHook).
+        # autoBootstrap defaults to true: lazy SDK/toolchain bootstrap on the
+        # first `west` invocation.
         devShells.default = mkNrfShell {
           backend = "nrfutil";
           ncsVersion = "v3.3.0";

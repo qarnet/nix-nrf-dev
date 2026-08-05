@@ -1,8 +1,7 @@
 # nix-nrf CLI Plan
 
-Status: Phase 2 implemented. This document records the two-phase migration of
-the project's standalone command helpers behind the single public `nix-nrf`
-CLI facade.
+Status: Phase 3 implemented. This document records the phased migration of
+the project's command helpers behind the single public `nix-nrf` CLI facade.
 
 ## Phase 1 — facade (done)
 
@@ -71,3 +70,45 @@ Constraints:
 - Do not rename upstream `west`, `openocd`, or `nrfutil` command surfaces.
 - The probe module (`bin/nix-nrf-probes`) must keep its observable behavior
   unchanged: table output, `--find` disambiguation, exit codes.
+
+## Phase 3 — bootstrap (done)
+
+Add the internal SDK/toolchain bootstrap command module behind the facade.
+Resolved architecture and verified sdk-manager interfaces are recorded in
+`docs/development/nix-nrf-bootstrap-handoff.md` (kept as a historical record).
+
+Behavior after this phase:
+
+- `nix-nrf bootstrap` — runs the internal bootstrap command module
+  (`bin/nix-nrf-bootstrap`, packaged by `nix/nix-nrf-bootstrap.nix` at
+  `$out/libexec/nix-nrf/bootstrap`); parser `prog="nix-nrf bootstrap"`, error
+  prefix `nix-nrf bootstrap:`. Options: `--ncs-version`, `--toolchain-bundle-id`,
+  `--yes`, `--check`, `--print-sdk-path`, `--quiet`. Exit contract: 0 ready
+  (incl. successful install), 1 missing under `--check`/unreadable
+  state/command failure/incomplete post-install, 2 usage error or approval
+  required without a terminal.
+- The module is wrapped with the exact selected nrfutil executable
+  (`NIX_NRF_NRFUTIL`) and, when configured, `NIX_NRF_NCS_VERSION` /
+  `NIX_NRF_TOOLCHAIN_BUNDLE_ID`; `PYTHONHOME`/`PYTHONPATH` are unset like the
+  probes module. `--yes`/`NIX_NRF_BOOTSTRAP_YES=1` are the repository's
+  confirmation bypass and are never forwarded to nrfutil (sdk-manager has no
+  `--yes`).
+- `nix/nix-nrf.nix` owns the module: it imports `./nix-nrf-bootstrap.nix`
+  internally with `pkgs`, `nrfutilPackage`, and the optional
+  `ncsVersion`/`toolchainBundleId` defaults (null in `packages.nix-nrf`, so
+  `nix run .# -- bootstrap --ncs-version v3.3.0 --check` works explicitly;
+  `mkNrfShell` passes its selected values so the shell's `nix-nrf bootstrap`
+  works with no arguments). `nix-nrf help bootstrap` delegates `--help`.
+- `mkNrfShell` gained `autoBootstrap ? true`: the west wrapper invokes
+  `nix-nrf bootstrap --print-sdk-path` on every call (check + install only
+  when missing and approved, `ZEPHYR_BASE` exported inside west's process);
+  `autoBootstrap = false` switches west to `--check --quiet` with exact
+  `nix-nrf bootstrap` remediation. The shell hook stays non-mutating
+  (`--check --quiet --print-sdk-path`, `ZEPHYR_BASE` only when the returned
+  path contains `zephyr/`). The old west-wrapper install-remediation strings
+  were removed.
+- Tests: `tests/unit/test_nix_nrf_bootstrap.py` proves all lifecycle branches
+  against a temporary fake nrfutil executable/state directory (no network, no
+  real SDK), wired as `checks.bootstrap-tests`. The `backend-selector`
+  evaluation check covers omitted/explicit `autoBootstrap` and exact
+  `toolchainBundleId` in either bootstrap mode.

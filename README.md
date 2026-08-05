@@ -35,9 +35,10 @@ devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
 };
 ```
 
-The shell provides `west` + Zephyr toolchain (via nrfutil sdk-manager),
-`ZEPHYR_BASE`, `openocd` (master build), `nrfutil`, the `nix-nrf`
-CLI facade (`nix-nrf versions`, `nix-nrf probes`), and multilib GCC for
+The shell provides `west` + Zephyr toolchain (via nrfutil sdk-manager, with
+lazy SDK/toolchain bootstrap on the first `west` invocation), `ZEPHYR_BASE`,
+`openocd` (master build), `nrfutil`, the `nix-nrf` CLI facade (`nix-nrf
+versions`, `nix-nrf probes`, `nix-nrf bootstrap`), and multilib GCC for
 `native_sim`.
 
 **Scoped toolchain environment:** Nordic's sdk-manager env script exports
@@ -88,17 +89,53 @@ Toolchain selection:
   selecting that exact bundle. If it fails, the error names the exact bundle
   rather than falling back to the newest compatible one.
 
-This phase only selects an already-installed toolchain. If it is missing, the
-west wrapper reports the install commands: with `toolchainBundleId` omitted,
-`nrfutil sdk-manager install <ncsVersion>` (SDK source plus its matching
-toolchain); with an exact bundle configured, `nrfutil sdk-manager sdk install
-<ncsVersion>` for the SDK source only and `nrfutil sdk-manager toolchain
-install --toolchain-bundle-id <bundle-id>` for that exact toolchain.
+## Bootstrap
+
+`nix-nrf bootstrap` provisions the configured NCS SDK source and selected
+toolchain before they are needed. It is **explicit** (`nix-nrf bootstrap`),
+**lazy** (the `west` wrapper checks on every invocation and installs only when
+something is missing), and **manual** when `autoBootstrap = false`:
+
+```text
+$ nix-nrf bootstrap                  # explicit; prompts before downloading
+$ nix-nrf bootstrap --yes            # approve the required downloads up front
+$ nix-nrf bootstrap --check          # inspect only; never installs (exit 1 when missing)
+$ nix-nrf bootstrap --print-sdk-path # print only the absolute SDK root on success
+```
+
+- `--yes` and `NIX_NRF_BOOTSTRAP_YES=1` bypass the interactive confirmation.
+  Nordic's sdk-manager itself has **no** `--yes` option — this flag is the
+  repository's confirmation bypass and is never forwarded to nrfutil. Without
+  a terminal, unapproved bootstrap fails with the exact re-run command and
+  exit 2 instead of mutating state.
+- With no exact `toolchainBundleId`, a missing SDK or toolchain runs
+  `nrfutil sdk-manager install <ncsVersion>` (SDK source plus the newest
+  compatible patched toolchain for the release).
+- With an exact `toolchainBundleId`, only the missing actions run:
+  `nrfutil sdk-manager sdk install <ncsVersion>` for the SDK source and
+  `nrfutil sdk-manager toolchain install --toolchain-bundle-id <bundle-id>`
+  for that exact toolchain — it never downloads the newest compatible
+  toolchain accidentally.
+- All status, prompts, and nrfutil progress go to stderr; stdout stays empty
+  unless `--print-sdk-path` succeeds, so command substitution stays
+  machine-readable.
+
+The `west` wrapper bootstraps lazily (`autoBootstrap = true`, the default):
+each invocation ensures the selected SDK source and toolchain exist (installing
+only when missing and approved), exports `ZEPHYR_BASE` inside west's process,
+then loads the scoped toolchain env. With `autoBootstrap = false`, west only
+checks and, if anything is missing, prints that automatic bootstrap is disabled
+plus the exact `nix-nrf bootstrap` remediation — it never mutates.
+
+Shell entry is always non-mutating: the shell hook runs the read-only
+`--check` path and exports `ZEPHYR_BASE` only when the installed SDK is found.
+A bootstrap that installs a missing SDK happens inside west's process; re-enter
+the shell (or `direnv reload`) to pick up `ZEPHYR_BASE` for non-west commands.
 
 ## nix-nrf CLI
 
-`nix-nrf` is the project's command facade: `nix-nrf versions` and
-`nix-nrf probes`. It dispatches to the packaged tools with `exec`, so
+`nix-nrf` is the project's command facade: `nix-nrf versions`, `nix-nrf probes`,
+and `nix-nrf bootstrap`. It dispatches to the packaged tools with `exec`, so
 delegated stdout, stderr, options, and exit status are preserved:
 
 ```
@@ -108,24 +145,29 @@ $ nix-nrf versions --help
 $ nix-nrf probes
 $ nix-nrf probes --find nrf53
 $ nix-nrf probes --help
+$ nix-nrf bootstrap
+$ nix-nrf bootstrap --check
+$ nix-nrf bootstrap --help
 $ nix-nrf help versions
 $ nix-nrf help probes
+$ nix-nrf help bootstrap
 ```
 
 `nix-nrf versions` delegates to `nrfutil sdk-manager search` without parsing
 or maintaining a local version list, so sdk-manager remains the runtime
 authority. `nix-nrf probes` runs the internal probe command module
-(`$out/libexec/nix-nrf/probes`); there is no standalone `nrf-probes` binary or
-package. The old `nrf-sdk-versions` command is removed; use
-`nix-nrf versions`.
+(`$out/libexec/nix-nrf/probes`); `nix-nrf bootstrap` runs the internal
+bootstrap command module (`$out/libexec/nix-nrf/bootstrap`); there are no
+standalone `nrf-probes`/`nrf-bootstrap` binaries or packages. The old
+`nrf-sdk-versions` command is removed; use `nix-nrf versions`.
 
 ## Advanced: overriding nrfutil
 
 `mkNrfShell` accepts a public `nrfutilPackage` override (defaulting to this
 repository's composed package: Nixpkgs nrfutil with the sdk-manager
 extension). Every nrfutil invocation — the `west` wrapper and the `nix-nrf
-versions` subcommand included — uses the selected package, so an advanced
-caller can substitute another compatible derivation:
+versions`/`bootstrap` subcommands included — uses the selected package, so an
+advanced caller can substitute another compatible derivation:
 
 ```nix
 devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
@@ -157,15 +199,15 @@ the shell without polluting the scoped `west` wrapper.
 
 | Output | What |
 |--------|------|
-| `lib.<system>.mkNrfShell { backend, ncsVersion, toolchainBundleId, nrfutilPackage, packages, extraShellHook, withMultilib, inputsFrom, name }` | devShell factory — `ncsVersion` required; `toolchainBundleId`/`nrfutilPackage` optional (see [Backends](#backends) and [Advanced: overriding nrfutil](#advanced-overriding-nrfutil)) |
+| `lib.<system>.mkNrfShell { backend, ncsVersion, toolchainBundleId, autoBootstrap, nrfutilPackage, packages, extraShellHook, withMultilib, inputsFrom, name }` | devShell factory — `ncsVersion` required; `toolchainBundleId`/`autoBootstrap`/`nrfutilPackage` optional (see [Backends](#backends), [Bootstrap](#bootstrap), and [Advanced: overriding nrfutil](#advanced-overriding-nrfutil)) |
 | `packages.openocd-master` | openocd from master (pinned), wrapped for libudev |
 | `packages.openocd-master-unwrapped` | the raw build |
 | `packages.nrfutil` | Nixpkgs nrfutil composed with the sdk-manager extension (includes SEGGER J-Link, see [SEGGER / J-Link](#segger--j-link)) |
-| `packages.nix-nrf` | project CLI facade: `versions` (sdk-manager-backed NCS version list) and `probes` (internal probe command module, see [nix-nrf CLI](#nix-nrf-cli)) |
+| `packages.nix-nrf` | project CLI facade: `versions` (sdk-manager-backed NCS version list), `probes` (internal probe command module), and `bootstrap` (internal SDK/toolchain bootstrap module, see [nix-nrf CLI](#nix-nrf-cli) and [Bootstrap](#bootstrap)) |
 | `packages.default` | alias for `packages.nix-nrf` |
 | `devShells.default` | dogfood shell for hacking on this repo |
 | `formatter.<system>` | treefmt wrapper (`nix fmt`) |
-| `checks.<system>` | `formatting` (treefmt) + `backend-selector` (eval gate: `ncsVersion` required, omitted/`nrfutil` evaluate, `sdk-nrf` rejected, `toolchainBundleId` evaluates) + `pre-commit` (git-hooks.nix) |
+| `checks.<system>` | `formatting` (treefmt) + `backend-selector` (eval gate: `ncsVersion` required, omitted/`nrfutil` evaluate, `sdk-nrf` rejected, `toolchainBundleId` evaluates, `autoBootstrap` omitted/true/false evaluates, exact bundle in either bootstrap mode) + `bootstrap-tests` (fake-boundary unit tests, no network/real SDK) + `pre-commit` (git-hooks.nix) |
 | `templates.default` | project skeleton (flake.nix + .envrc) |
 | `tcl/` | canonical flash recipes (see below) |
 

@@ -344,7 +344,7 @@ Add to `mkNrfShell` packages and to the hardware integration test.
 exact fix for anything missing:
 
 - NCS SDK and toolchain installed for the pinned `ncsVersion`? → print or
-  invoke the explicit `nrf-bootstrap` path, which uses
+  invoke the explicit `nix-nrf bootstrap` path, which uses
   `nrfutil sdk-manager install <version>` for the `nrfutil` backend.
 - udev rules present / probe device nodes accessible? → point at 2.1.
 - Probes enumerable? Run `nix-nrf probes`, report.

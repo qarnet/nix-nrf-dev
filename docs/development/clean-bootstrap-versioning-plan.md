@@ -1,7 +1,10 @@
 # Clean Bootstrap, Versioning, and Build Verification Plan
 
-Status: discussion draft. This document records the proposed direction; it is
-not an implementation handoff yet.
+Status: phases 1 and 2 implemented for the nrfutil backend. This document
+records the accepted direction and its phase history; the resolved
+implementation details and verified sdk-manager interfaces are recorded in
+`docs/development/nix-nrf-bootstrap-handoff.md` (the phase handoff, kept as a
+historical record).
 
 ## Goal
 
@@ -108,11 +111,12 @@ one confirmation before the first large download. Without a terminal, fail
 unless an explicit `--yes` flag or CI environment variable allows bootstrap, so
 automation cannot hang or mutate state unexpectedly.
 
-Expose an explicit `nrf-bootstrap` command for users who want to provision
-before running west. With `autoBootstrap = false`, west must fail with one exact
-remediation command rather than mutating state.
+Expose an explicit `nix-nrf bootstrap` command (internal command module of the
+`nix-nrf` facade; there is no standalone `nrf-bootstrap` binary or package) for
+users who want to provision before running west. With `autoBootstrap = false`,
+west must fail with one exact remediation command rather than mutating state.
 
-Proposed public shape, subject to implementation review:
+Final public shape (implemented):
 
 ```nix
 mkNrfShell {
@@ -126,6 +130,24 @@ mkNrfShell {
 Boolean `autoBootstrap` keeps common configuration simple. If future behavior
 needs more states, migrate to `bootstrapMode = "on-demand" | "manual"` before
 stabilizing a 1.0 API rather than adding several booleans.
+
+Verified sdk-manager interfaces (nrfutil 8.2.0, read-only live help and JSON):
+
+- `nrfutil sdk-manager list --json --skip-overhead` returns one JSON object or
+  JSON-lines; the object with `versions` carries per-release `version`,
+  `sdkStatus`, `dirNames[]`, `toolchainStatus`, and `toolchainPath`.
+- `nrfutil sdk-manager config show --json --skip-overhead` returns
+  `{"default": {"install_dir": ...}}`; `install_dir: null` means the Linux
+  default `$HOME/ncs`.
+- `nrfutil sdk-manager toolchain env --ncs-version <version> --as-script sh`
+  (or `--toolchain-bundle-id <id>`) exits 0 exactly when the selected
+  toolchain exists.
+- sdk-manager has **no `--yes` option**. `nix-nrf bootstrap --yes` and
+  `NIX_NRF_BOOTSTRAP_YES=1` are this repository's confirmation bypass and are
+  never forwarded to nrfutil.
+- Re-running install skips existing components, but the release selector may
+  install a newer compatible patched toolchain when Nordic publishes one;
+  exact `toolchainBundleId` remains deterministic.
 
 ### Mutable state
 
@@ -202,31 +224,40 @@ ID uses latest compatible patched toolchain, explicit bundle ID stays exact;
 `nrf-sdk-versions` delegates to sdk-manager; SEGGER/J-Link consequence is
 explicit.
 
-### Phase 2: bootstrap helper and lazy west integration
+### Phase 2 (done): bootstrap helper and lazy west integration
 
-Files expected:
+Files:
 
-- new `nix/nrf-bootstrap.nix`
-- new `bin/nrf-bootstrap` or generated shell wrapper
-- `nix/mk-nrf-shell.nix`
-- `flake.nix`
-- `README.md`
+- new `bin/nix-nrf-bootstrap` (Python command module)
+- new `nix/nix-nrf-bootstrap.nix` (internal derivation, installed at
+  `$out/libexec/nix-nrf/bootstrap`)
+- new `tests/unit/test_nix_nrf_bootstrap.py` (fake-boundary unittest suite)
+- `nix/mk-nrf-shell.nix` (`autoBootstrap`, lazy west lifecycle, non-mutating
+  shell-hook SDK path discovery via the helper)
+- `nix/nix-nrf.nix`, `flake.nix`, `.github/workflows/ci.yml`, `README.md`,
+  `templates/default/flake.nix`, `nrfutil-backend-status.md`, `goals.md`
 
-Implement explicit helper plus lazy west integration. sdk-manager is already
+Implemented explicit helper plus lazy west integration. sdk-manager is
 packaged in the Nix store (Phase 1), so bootstrap only provisions SDK source
 and toolchain through Nordic's supported interface:
 
 ```bash
-nrfutil sdk-manager install <ncsVersion>
+nix-nrf bootstrap --yes   # unified command; installs SDK + matching toolchain
 ```
 
-Verification:
+Behavior (proven by the fake-boundary unit tests, no network or real SDK):
 
-- No SDK/toolchain installed for the selected release.
-- `nrf-bootstrap --yes` installs the selected SDK and matching toolchain.
-- Re-running helper is idempotent and downloads nothing already installed.
-- `autoBootstrap = false` performs no network or mutation and reports exact
-  helper command.
+- `nix-nrf bootstrap --check` inspects only; missing selection exits 1 with no
+  mutation.
+- Noninteractive unapproved bootstrap exits 2 with the exact
+  `nix-nrf bootstrap --yes` / `NIX_NRF_BOOTSTRAP_YES=1 west ...` remediation.
+- `--yes` and `NIX_NRF_BOOTSTRAP_YES=1` approve the required downloads; the
+  repository flags are never forwarded to nrfutil (sdk-manager has no `--yes`).
+- Re-running the helper is idempotent and downloads nothing already installed.
+- Exact `toolchainBundleId` installs only missing actions (`sdk install` then
+  `toolchain install --toolchain-bundle-id <id>`), never the combined install.
+- `autoBootstrap = false` performs no network or mutation and reports the
+  exact `nix-nrf bootstrap` command.
 
 ### Phase 3: clean-home NCS build test
 
@@ -439,8 +470,10 @@ Out of scope for initial implementation:
 
 ## Open decisions before implementation handoff
 
-1. Keep simple `autoBootstrap` boolean or adopt explicit bootstrap-mode enum
-   before API stabilization.
+1. ~~Keep simple `autoBootstrap` boolean or adopt explicit bootstrap-mode enum
+   before API stabilization.~~ **Resolved:** keep the simple boolean
+   (implemented as `autoBootstrap ? true`); migrate to `bootstrapMode` only if
+   a future phase needs more states.
 2. Pin exact toolchain bundle by default for tested release, or preserve
    Nordic's latest-compatible-patch behavior for normal users and pin only CI.
 3. Whether Cachix redistribution terms permit direct caching of Nordic binary

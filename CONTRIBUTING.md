@@ -7,10 +7,11 @@ direnv allow     # or: nix develop
 ```
 
 The shell provides `openocd` (master build), `nrfutil`, the
-`nix-nrf` CLI facade (`nix-nrf versions`, `nix-nrf probes`), the scoped `west`
+`nix-nrf` CLI facade (`nix-nrf versions`, `nix-nrf probes`,
+`nix-nrf bootstrap`), the scoped `west`
 wrapper, and the NCS toolchain (via nrfutil sdk-manager for the configured NCS
-version). Probe identification is the `nix-nrf probes` subcommand; there is no
-standalone `nrf-probes` command.
+version; lazily bootstrapped by `west` when missing). Probe identification is
+the `nix-nrf probes` subcommand; there is no standalone `nrf-probes` command.
 
 ## Before committing
 

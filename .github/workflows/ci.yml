@@ -34,7 +34,9 @@ jobs:
           name: qarnet
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
-      # A3 — flake eval + checks (fast, sandboxed). Runs treefmt check + pre-commit check.
+      # A3 — flake eval + checks (fast, sandboxed). Runs treefmt check +
+      # pre-commit check + fake-boundary bootstrap unit tests (no network, no
+      # real SDK/toolchain install).
       - name: Flake check
         run: nix flake check -L
 
@@ -59,6 +61,12 @@ jobs:
         run: nix run .#nix-nrf -- versions --help
       - name: Smoke run nix-nrf probes help
         run: nix run .#nix-nrf -- probes --help
+      # nix-nrf bootstrap delegates to the internal bootstrap module; --help
+      # only, so normal PR CI never installs or downloads SDK/toolchain
+      # bundles. All missing/install paths are proven by the fake-boundary
+      # bootstrap-tests check.
+      - name: Smoke run nix-nrf bootstrap help
+        run: nix run .#nix-nrf -- bootstrap --help
       # Unknown subcommands must fail with exit code 2.
       - name: nix-nrf unknown subcommand exits 2
         run: |
@@ -70,9 +78,11 @@ jobs:
 
       # A5 — devshell-enter: verify the dogfood shell provides the tools and
       # the removed nrf-probes/nrf-sdk-versions are absent. Fresh CI has no
-      # stale environment, so `! command -v` is reliable here.
+      # stale environment, so `! command -v` is reliable here. Only
+      # `nix-nrf bootstrap --help` is invoked — never a bare bootstrap or
+      # install against missing state.
       - name: Devshell provides tools
-        run: nix develop --command sh -ceu 'command -v nrfutil; command -v nix-nrf; command -v openocd; command -v west; ! command -v nrf-probes; ! command -v nrf-sdk-versions'
+        run: nix develop --command sh -ceu 'command -v nrfutil; command -v nix-nrf; command -v openocd; command -v west; nix-nrf bootstrap --help >/dev/null; ! command -v nrf-probes; ! command -v nrf-sdk-versions'
 
       # A8 — clean-env regression gate: prove Nordic sdk-manager variables
       # do not poison non-toolchain tools (Node, Git, Python).
@@ -148,4 +158,4 @@ jobs:
           nix flake init -t "path:$repo"
           nix flake check -L --override-input nix-nrf-dev "path:$repo"
           nix develop --override-input nix-nrf-dev "path:$repo" --command sh -c "command -v openocd && command -v nix-nrf && ! command -v nrf-probes"
-          nix develop --override-input nix-nrf-dev "path:$repo" --command sh -c "nix-nrf probes --help" >/dev/null
+          nix develop --override-input nix-nrf-dev "path:$repo" --command sh -c "nix-nrf probes --help && nix-nrf bootstrap --help" >/dev/null

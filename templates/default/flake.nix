@@ -24,6 +24,7 @@
       devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
         backend = "nrfutil";
         ncsVersion = "v3.3.0";
+        # autoBootstrap = true; # lazy: first `west` installs a missing SDK/toolchain
         # packages = [ ];          # extra project tools
         # extraShellHook = "";     # project-specific env
       };

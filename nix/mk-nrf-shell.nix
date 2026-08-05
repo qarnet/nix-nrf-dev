@@ -1,9 +1,10 @@
 # mkNrfShell — devShell factory for nRF Connect SDK projects.
 #
 # Provides: openocd-master (wrapped), the nix-nrf CLI facade (which owns the
-# internal `nix-nrf probes` command module), the packaged nrfutil with the
-# sdk-manager extension, multilib GCC (for native_sim -m32 builds), a
-# scoped-env `west` wrapper, and ZEPHYR_BASE derivation.
+# internal `nix-nrf probes` and `nix-nrf bootstrap` command modules), the
+# packaged nrfutil with the sdk-manager extension, multilib GCC (for native_sim
+# -m32 builds), a scoped-env `west` wrapper with lazy SDK/toolchain bootstrap,
+# and ZEPHYR_BASE derivation.
 #
 # Scoped toolchain env: Nordic's `nrfutil sdk-manager toolchain env` script
 # exports PYTHONHOME, PYTHONPATH, LD_LIBRARY_PATH, GIT_EXEC_PATH, ... —
@@ -13,6 +14,16 @@
 # the whole shell, the `west` wrapper evals it only inside west's process
 # tree (~100 ms overhead per invocation). Builds still see the full
 # toolchain because cmake/ninja/gcc are spawned by west.
+#
+# Lazy bootstrap: the `west` wrapper invokes the shell-specific
+# `nix-nrf bootstrap --print-sdk-path` on every call. That checks the
+# configured NCS SDK source and selected toolchain, installs only when
+# something is missing (with interactive confirmation unless
+# NIX_NRF_BOOTSTRAP_YES=1 / `--yes`), and returns the absolute SDK root for
+# ZEPHYR_BASE. With `autoBootstrap = false` it only checks and, when anything
+# is missing, reports that automatic bootstrap is disabled plus the exact
+# `nix-nrf bootstrap` remediation — it never mutates. The shell hook itself
+# stays non-mutating (read-only `--check` path).
 #
 # The NCS release is a required argument: sdk-manager is the runtime
 # authority for available versions, and every caller selects a release
@@ -55,6 +66,11 @@
   # --ncs-version); a non-null value selects that exact bundle (via
   # --toolchain-bundle-id).
   toolchainBundleId ? null,
+  # Lazy SDK/toolchain bootstrap: `west` checks the selection on every
+  # invocation and installs only when something is missing (with
+  # confirmation). false switches west to check-only with exact manual
+  # remediation; shell entry stays non-mutating either way.
+  autoBootstrap ? true,
   name ? "nrf-dev",
   # Extra packages for the shell (project-specific tools).
   packages ? [],
@@ -67,9 +83,9 @@
   # or other non-Nordic tooling alongside the NCS toolchain.
   inputsFrom ? [],
   # Composed nrfutil derivation used for every nrfutil invocation and shell
-  # inclusion (west wrapper, nix-nrf versions subcommand). Defaults to the
-  # repository's packaged nrfutil with the sdk-manager extension; advanced
-  # callers may supply another compatible derivation.
+  # inclusion (west wrapper, nix-nrf versions/bootstrap subcommands). Defaults
+  # to the repository's packaged nrfutil with the sdk-manager extension;
+  # advanced callers may supply another compatible derivation.
   nrfutilPackage ? nrfutil,
 }: let
   # Backend selector: exact-match only, no aliases, no silent fallback.
@@ -104,48 +120,63 @@
     if toolchainBundleId != null
     then "exact toolchain bundle \"$_toolchain_bundle_id\""
     else "newest compatible toolchain for NCS \"$_ncs_version\"";
-  # Remediation distinguishes missing SDK source from toolchain selection:
-  # with an exact bundle, `sdk-manager install` would install the SDK plus the
-  # newest compatible toolchain for the release — a needless large download
-  # before installing the configured bundle — so the SDK source alone comes
-  # from `sdk-manager sdk install` and the exact toolchain is installed
-  # separately by bundle ID. Single-line strings keep generated-script
-  # indentation aligned at the call site.
-  installSdkRemediation = ''
-    echo "Install the SDK source only with: nrfutil sdk-manager sdk install \"$_ncs_version\"" >&2
-  '';
-  installToolchainRemediation = ''
-    echo "Install the exact toolchain with: nrfutil sdk-manager toolchain install --toolchain-bundle-id \"$_toolchain_bundle_id\"" >&2
-  '';
-  installBothRemediation = ''
-    echo "Install the SDK and its matching toolchain with: nrfutil sdk-manager install \"$_ncs_version\"" >&2
-  '';
 
-  # Public CLI facade, instantiated from the selected nrfutil package and the
-  # wrapped openocd-master so a caller package override also controls
-  # `versions`; the probes module is owned internally by nix-nrf.
+  # Public CLI facade, instantiated from the selected nrfutil package, the
+  # wrapped openocd-master, and this shell's selector values — so a caller
+  # package override also controls `versions`, and the shell-specific
+  # `nix-nrf bootstrap` runs with the configured defaults (no CLI args
+  # needed). The probes module is owned internally by nix-nrf.
   nixNrf = import ./nix-nrf.nix {
-    inherit pkgs nrfutilPackage;
+    inherit
+      pkgs
+      nrfutilPackage
+      ncsVersion
+      toolchainBundleId
+      ;
     openocd = openocd-master;
   };
 
   useMultilib = pkgs.stdenv.isLinux && withMultilib;
 
-  # `west` wrapper: load the NCS toolchain env, then exec the real west
-  # from the toolchain (its bin dirs are prepended to PATH by the env
-  # script, so the first non-wrapper `west` on PATH is the real one).
+  # `west` wrapper: lazy bootstrap, export ZEPHYR_BASE inside west's process,
+  # load the NCS toolchain env, then exec the real west from the toolchain
+  # (its bin dirs are prepended to PATH by the env script, so the first
+  # non-wrapper `west` on PATH is the real one).
   westWrapper = pkgs.writeShellScriptBin "west" ''
+    _nix_nrf=${nixNrf}/bin/nix-nrf
     _ncs_version=${ncsVersionEsc}
     ${pkgs.lib.optionalString (toolchainBundleId != null) ''
       _toolchain_bundle_id=${bundleIdEsc}
     ''}
+    # Lazy bootstrap: the shell-specific helper checks the configured NCS SDK
+    # source and selected toolchain, installs only when something is missing
+    # (with confirmation), and prints the absolute SDK root for ZEPHYR_BASE.
+    ${
+      if autoBootstrap
+      then ''
+        _sdk_path="$("$_nix_nrf" bootstrap --print-sdk-path)" || {
+          echo "west wrapper: SDK/toolchain bootstrap failed" >&2
+          echo "Run: nix-nrf bootstrap" >&2
+          exit 1
+        }
+      ''
+      else ''
+        _sdk_path="$("$_nix_nrf" bootstrap --check --quiet --print-sdk-path)" || {
+          echo "west wrapper: automatic bootstrap is disabled (autoBootstrap = false)" >&2
+          echo "Run: nix-nrf bootstrap" >&2
+          exit 1
+        }
+      ''
+    }
+    if [ -z "$_sdk_path" ] || [ ! -d "$_sdk_path" ]; then
+      echo "west wrapper: invalid SDK path from nix-nrf bootstrap: '$_sdk_path'" >&2
+      exit 1
+    fi
+    export ZEPHYR_BASE="$_sdk_path/zephyr"
     _env="$(${nrfutilExe} sdk-manager toolchain env ${toolchainSelectorArgs} --as-script sh)" || {
       echo "west wrapper: nrfutil sdk-manager toolchain env ${toolchainSelectorArgs} failed" >&2
       echo "Selected toolchain: ${toolchainSelectorDesc}" >&2
-      echo "Is the NCS SDK source and its matching toolchain installed?" >&2
-      ${pkgs.lib.optionalString (toolchainBundleId != null) installSdkRemediation}
-      ${pkgs.lib.optionalString (toolchainBundleId != null) installToolchainRemediation}
-      ${pkgs.lib.optionalString (toolchainBundleId == null) installBothRemediation}
+      echo "Run: nix-nrf bootstrap" >&2
       exit 1
     }
     eval "$_env"
@@ -191,33 +222,29 @@ in
         ${pkgs.lib.optionalString (toolchainBundleId != null) ''
           _toolchain_bundle_id=${bundleIdEsc}
         ''}
+        _nix_nrf_exe=${nixNrf}/bin/nix-nrf
         echo "${name} shell (backend ${backend}, NCS "$_ncs_version"${
           pkgs.lib.optionalString (toolchainBundleId != null) ", toolchain bundle \"$_toolchain_bundle_id\""
-        }, toolchain env scoped to west)"
+        }, toolchain env scoped to west, ${
+          if autoBootstrap
+          then "lazy bootstrap on first west"
+          else "manual bootstrap (autoBootstrap = false)"
+        })"
         ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
           # ── ZEPHYR_BASE derivation ─────────────────────────────────────
           # The toolchain env itself stays scoped inside the west wrapper;
           # only ZEPHYR_BASE is exported here (needed by helper scripts and
-          # for orientation). Derive it from the toolchain layout without
-          # polluting this shell, falling back to the well-known home path.
+          # for orientation). This shell must never mutate state: run the
+          # shell-specific helper's read-only --check path and keep its
+          # output even when overall readiness fails, because it may return
+          # an installed SDK path while the toolchain is missing.
           if [ -z "''${ZEPHYR_BASE:-}" ]; then
-            _zephyr_candidate=""
-            _sdk_dir="$(
-              eval "$(${nrfutilExe} sdk-manager toolchain env ${toolchainSelectorArgs} --as-script sh 2>/dev/null)" 2>/dev/null
-              printf '%s' "''${ZEPHYR_SDK_INSTALL_DIR:-}"
-            )"
-            if [ -n "$_sdk_dir" ]; then
-              _ncs_root="$(dirname "$(dirname "$(dirname "$(dirname "$_sdk_dir")")")")"
-              _zephyr_candidate="$_ncs_root/$_ncs_version/zephyr"
-            fi
-            if [ ! -d "''${_zephyr_candidate:-}" ] && [ -d "$HOME/ncs/$_ncs_version/zephyr" ]; then
-              _zephyr_candidate="$HOME/ncs/$_ncs_version/zephyr"
-            fi
-            if [ -n "''${_zephyr_candidate:-}" ] && [ -d "$_zephyr_candidate" ]; then
-              export ZEPHYR_BASE="$_zephyr_candidate"
+            _zephyr_base="$("$_nix_nrf_exe" bootstrap --check --quiet --print-sdk-path 2>/dev/null || true)"
+            if [ -n "$_zephyr_base" ] && [ -d "$_zephyr_base/zephyr" ]; then
+              export ZEPHYR_BASE="$_zephyr_base/zephyr"
             else
-              printf 'ZEPHYR_BASE could not be derived.\n' >&2
-              printf 'Set it manually: export ZEPHYR_BASE=/path/to/ncs/%s/zephyr\n' "$_ncs_version" >&2
+              printf 'ZEPHYR_BASE could not be derived (NCS SDK source for %s not found).\n' "$_ncs_version" >&2
+              printf 'Run `nix-nrf bootstrap` to install the selected SDK and toolchain.\n' >&2
             fi
           fi
 
