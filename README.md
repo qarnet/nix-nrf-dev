@@ -171,23 +171,27 @@ the shell without polluting the scoped `west` wrapper.
 | `templates.default` | project skeleton (flake.nix + .envrc) |
 | `tcl/` | canonical flash recipes (see below) |
 
-## nrf-probes
+## Probing devices
 
-Read-only CMSIS-DAP probe/target identification. Never assume the
-probe↔board mapping — probes get replugged.
+`nix-nrf probes` is the preferred way to identify CMSIS-DAP probes and their
+attached targets (read-only). Never assume the probe↔board mapping — probes
+get replugged.
 
 ```
-$ nrf-probes
+$ nix-nrf probes
 SERIAL            PROBE                              TARGET    DPIDR       PART        VARIANT
 8EE9B3FF          Seeed Studio XIAO nrf54 CMSIS-DAP  nRF54L15  0x6ba02477  0x00054b15  AAC0
 E6635C08CB1F502B  Debugprobe on Pico (CMSIS-DAP)     nRF5340   0x6ba02477  0x00005340  QKAA
 
-$ nrf-probes --find nrf53      # serial of the probe wired to an nRF53
+$ nix-nrf probes --find nrf53      # serial of the probe wired to an nRF53
 E6635C08CB1F502B
 ```
 
 Works on APPROTECT-locked chips via the DP/AP signature. Flash scripts should
 select probes with `--find <family>` instead of hardcoding serials.
+
+The standalone `nrf-probes` command remains available as a temporary
+compatibility alias; prefer `nix-nrf probes`.
 
 ## Flash recipes (`tcl/`)
 

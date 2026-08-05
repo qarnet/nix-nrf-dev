@@ -68,9 +68,11 @@ jobs:
           set -e
           test "$rc" -eq 2
 
-      # A5 — devshell-enter: verify the dogfood shell provides the tools.
+      # A5 — devshell-enter: verify the dogfood shell provides the tools and
+      # the removed nrf-sdk-versions is absent. Fresh CI has no stale
+      # environment, so `! command -v` is reliable here.
       - name: Devshell provides tools
-        run: nix develop --command sh -ceu 'command -v nrfutil; command -v nix-nrf; command -v openocd; command -v nrf-probes; command -v west'
+        run: nix develop --command sh -ceu 'command -v nrfutil; command -v nix-nrf; command -v openocd; command -v nrf-probes; command -v west; ! command -v nrf-sdk-versions'
 
       # A8 — clean-env regression gate: prove Nordic sdk-manager variables
       # do not poison non-toolchain tools (Node, Git, Python).
@@ -133,10 +135,16 @@ jobs:
           echo "OK: no TCL parse error (exit $rc was probe-open failure, expected)"
 
       # A4 — template-init: verify `nix flake init -t` produces a working flake.
+      # Both the template source and the generated flake's nix-nrf-dev input
+      # point at the current checkout (path:$repo), so PR CI validates this
+      # feature before it exists on remote main. The path override is
+      # read-only; nothing is written back to the repository.
       - name: Template init
         run: |
+          repo="$(pwd)"
+          rm -rf /tmp/tpltest
           mkdir -p /tmp/tpltest
           cd /tmp/tpltest
-          nix flake init -t github:qarnet/nix-nrf-dev
-          nix flake check -L
-          nix develop --command sh -c "command -v openocd && command -v nrf-probes && command -v nix-nrf"
+          nix flake init -t "path:$repo"
+          nix flake check -L --override-input nix-nrf-dev "path:$repo"
+          nix develop --override-input nix-nrf-dev "path:$repo" --command sh -c "command -v openocd && command -v nrf-probes && command -v nix-nrf"
