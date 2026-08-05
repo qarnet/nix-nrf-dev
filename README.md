@@ -67,19 +67,41 @@ build. There is no sdk-manager-only composition that avoids J-Link.
 `mkNrfShell` takes a `backend` argument (default `"nrfutil"`):
 
 - `"nrfutil"` — uses Nordic's sdk-manager for the NCS toolchain environment.
-  This is the only implemented backend. Omit the argument or pass
+  This is the default and recommended backend. Omit the argument or pass
   `backend = "nrfutil"` explicitly; both behave identically.
+- `"west"` — **experimental** hybrid backend: Nix owns the exact Zephyr SDK,
+  host tools, and Python interpreter, while the official mutable west
+  workspace and a version-local venv own the NCS source, west, and workspace
+  Python requirements — no nrfutil/sdk-manager. Currently supports only
+  `v3.3.0` on `x86_64-linux` (metadata-driven in
+  `nix/west-backend/versions.nix`).
 - `"sdk-nrf"` — reserved for a future Nix-native build environment (see
-  `goals.md`). It is **not** implemented: any value other than `"nrfutil"`
-  fails at Nix evaluation with an unsupported-backend error instead of
-  silently falling back.
+  `goals.md`). It is **not** implemented: any unsupported value fails at Nix
+  evaluation with an unsupported-backend error instead of silently falling
+  back.
+
+```nix
+# nrfutil (default, recommended):
+devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
+  backend = "nrfutil";
+  ncsVersion = "v3.3.0";
+};
+
+# west (experimental; v3.3.0 / x86_64-linux only):
+devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
+  backend = "west";
+  ncsVersion = "v3.3.0";
+};
+```
 
 `ncsVersion` is a **required** argument — every caller selects an NCS release
 explicitly (there is no `"latest"` alias or default). `"v3.3.0"` is the tested
 release used by this repository's own shells, examples, and template, but it
-is not an architecture lock.
+is not an architecture lock. For `backend = "west"`, the release must exist in
+the west backend metadata; an unknown release fails evaluation naming the
+supported west versions.
 
-Toolchain selection:
+Toolchain selection (nrfutil backend):
 
 - Omit `toolchainBundleId` (normal case) → the west wrapper runs
   `nrfutil sdk-manager toolchain env --ncs-version <ncsVersion>`, selecting
@@ -88,6 +110,11 @@ Toolchain selection:
   `nrfutil sdk-manager toolchain env --toolchain-bundle-id <bundle-id>`,
   selecting that exact bundle. If it fails, the error names the exact bundle
   rather than falling back to the newest compatible one.
+
+`backend = "west"` rejects `toolchainBundleId` and non-default
+`nrfutilPackage` overrides (no nrfutil participates); `autoBootstrap`,
+`packages`, `inputsFrom`, `name`, `withMultilib`, and `extraShellHook` behave
+like the nrfutil backend.
 
 ## Bootstrap
 
@@ -158,54 +185,57 @@ artifacts `blinky/zephyr/zephyr.elf` and `domains.yaml` were asserted
 non-empty. The GitHub workflow was not dispatched; evidence is the local real
 run (see `docs/development/clean-bootstrap-versioning-plan.md`, Phase 3).
 
-## Experimental: west backend prototype (not public)
+## Experimental: west backend (public, v3.3.0 / x86_64-linux only)
 
-The accepted hybrid direction for a future Nix-native backend: Nix supplies
-the exact Zephyr SDK, host tools, and Python interpreter, while the official
-mutable west workspace and a version-local Python venv own the NCS source and
-requirements — no nrfutil/sdk-manager and no Nordic toolchain bundle. See
+The west backend (`mkNrfShell { backend = "west"; ... }`) is the hybrid
+model: Nix supplies the exact Zephyr SDK, host tools, and Python interpreter,
+while the official mutable west workspace and a version-local Python venv own
+the NCS source, west, and workspace Python requirements — no nrfutil/
+sdk-manager and no Nordic toolchain bundle. See
 `docs/development/west-backend-environment-handoff.md` and
 `docs/development/west-backend-status.md`. This supersedes the earlier
 `sdk-nrf` prototype plan (`docs/development/sdk-nrf-prototype-handoff.md`).
+It is **experimental**: only `v3.3.0` on `x86_64-linux` is supported, and the
+nrfutil backend remains the default/recommended fallback.
 
-Current prototype surface (explicitly **not** the public backend — `mkNrfShell`
-still accepts only `backend = "nrfutil"`):
+Backend-aware surface:
 
 ```text
-devShells.west-prototype             shell: Nix Zephyr SDK + host tools + scoped west wrapper
 packages.west-zephyr-sdk-v3_3_0      exact Zephyr SDK 0.17.0 (minimal + ARM/RISC-V compilers)
-nix-nrf-west-setup                   setup helper (mutable west workspace + venv)
+nix-nrf versions                     lists west backend metadata releases (never nrfutil)
+nix-nrf bootstrap                    creates/updates the mutable west workspace + venv
 tests/west-backend/run.sh            clean-room proof (real setup + blinky sysbuild)
-checks.west-setup-tests              fake-boundary fixture tests
+checks.west-bootstrap-tests          fake-boundary fixture tests
+checks.west-versions-tests           fake-boundary versions command tests
 checks.west-backend-metadata         versions.nix schema check
+checks.west-backend-quoting          metadata quote-embedding regression
+checks.west-shell-boundary           public shell boundary gate (fake-ready workspace)
 ```
 
-Typical flow inside `nix develop .#west-prototype`:
+Typical flow inside a public west shell:
 
 ```bash
-nix-nrf-west-setup --yes     # creates $HOME/ncs/v3.3.0 workspace + .venv (multi-GiB; approved)
-nix-nrf-west-setup --check   # read-only readiness (exit 0 ready, 1 missing)
+nix-nrf bootstrap --yes     # creates $HOME/ncs/v3.3.0 workspace + .venv (multi-GiB; approved)
+nix-nrf bootstrap --check   # read-only readiness (exit 0 ready, 1 missing)
 west build -p always -b xiao_nrf54l15/nrf54l15/cpuapp --sysbuild zephyr/samples/basic/blinky
 ```
 
-The prototype supports only `x86_64-linux`. The real clean-home proof
+The west backend supports only `x86_64-linux`. The real clean-home proof
 (`tests/west-backend/run.sh`) downloads several GiB; each run requires its
 own fresh explicit approval — approval is never permanent. Normal CI never
 downloads a workspace.
 
-**Proven 2026-08-05 (Linux x86_64):** `bash tests/west-backend/run.sh`
-exited 0 from a script-created isolated `/tmp` HOME: `nix-nrf-west-setup
---yes` completed in 436 s (west init + west update + venv requirements with
-the then-current metadata constraint `cbor2<6`, which installed
-`cbor2==5.9.0`; since tightened to the exact `cbor2==5.9.0` pin), the scoped
-west wrapper then built `xiao_nrf54l15/nrf54l15/cpuapp` sysbuild blinky in
-18 s, artifacts `zephyr.elf`/`domains.yaml` were asserted non-empty, and the
-temp home was removed on exit. Workspace (incl. venv) 6.4 G, build 29 M;
-Zephyr SDK came from `/nix/store/...-zephyr-sdk-0.17.0`; `nrfutil` absent
-throughout. See `docs/development/west-backend-status.md`.
-
-Public `backend = "west"` integration follows only after this proof — the
-next phase.
+**Proven 2026-08-05 (Linux x86_64):** the prototype-phase
+`bash tests/west-backend/run.sh` exited 0 from a script-created isolated
+`/tmp` HOME: `nix-nrf bootstrap --yes` completed in 436 s (west init + west
+update + venv requirements with the then-current metadata constraint
+`cbor2<6`, which installed `cbor2==5.9.0`; since tightened to the exact
+`cbor2==5.9.0` pin), the scoped west wrapper then built
+`xiao_nrf54l15/nrf54l15/cpuapp` sysbuild blinky in 18 s, artifacts
+`zephyr.elf`/`domains.yaml` were asserted non-empty, and the temp home was
+removed on exit. Workspace (incl. venv) 6.4 G, build 29 M; Zephyr SDK came
+from `/nix/store/...-zephyr-sdk-0.17.0`; `nrfutil` absent throughout. See
+`docs/development/west-backend-status.md`.
 
 ## nix-nrf CLI
 
@@ -233,15 +263,18 @@ $ nix-nrf help bootstrap
 $ nix-nrf help doctor
 ```
 
-`nix-nrf versions` delegates to `nrfutil sdk-manager search` without parsing
-or maintaining a local version list, so sdk-manager remains the runtime
-authority. `nix-nrf probes` runs the internal probe command module
-(`$out/libexec/nix-nrf/probes`); `nix-nrf bootstrap` runs the internal
-bootstrap command module (`$out/libexec/nix-nrf/bootstrap`); `nix-nrf doctor`
-runs the internal doctor command module (`$out/libexec/nix-nrf/doctor`);
-there are no standalone `nrf-probes`/`nrf-bootstrap`/`nrf-doctor` binaries or
-packages. The old `nrf-sdk-versions` command is removed; use `nix-nrf
-versions`.
+`nix-nrf versions` is backend-aware: in a nrfutil shell it delegates to
+`nrfutil sdk-manager search` without parsing or maintaining a local version
+list (sdk-manager remains the runtime authority); in a west shell it lists the
+repository-supported west backend metadata releases (sorted text or `--json`
+string array) and never invokes nrfutil. `nix-nrf probes` runs the internal
+probe command module (`$out/libexec/nix-nrf/probes`); `nix-nrf bootstrap` runs
+the internal bootstrap command module (`$out/libexec/nix-nrf/bootstrap` — the
+nrfutil-backed or the west workspace/venv module, depending on the shell's
+backend); `nix-nrf doctor` runs the internal doctor command module
+(`$out/libexec/nix-nrf/doctor`); there are no standalone
+`nrf-probes`/`nrf-bootstrap`/`nrf-doctor` binaries or packages. The old
+`nrf-sdk-versions` command is removed; use `nix-nrf versions`.
 
 ## Hardware access diagnostics (`nix-nrf doctor`)
 
@@ -303,7 +336,10 @@ closure wiring in `mkNrfShell`, not a consumer option) and print it as
 Exit: `0` when the SDK is pass/skip and at least one candidate is accessible,
 `1` for SDK or hardware failure, `2` for CLI usage errors. `--json` emits one
 JSON object with stable fields (`ok`, `sdk`, `user`, `hardware`,
-`remediation`).
+`remediation`). In a west shell the human heading/status/remediation label
+becomes `west workspace/Zephyr SDK` (JSON fields and exit codes never change);
+the doctor still checks the west workspace/venv only through the read-only
+`--check --quiet --print-sdk-path` contract.
 
 ## NixOS udev rules
 
@@ -371,19 +407,18 @@ the shell without polluting the scoped `west` wrapper.
 
 | Output | What |
 |--------|------|
-| `lib.<system>.mkNrfShell { backend, ncsVersion, toolchainBundleId, autoBootstrap, nrfutilPackage, packages, extraShellHook, withMultilib, inputsFrom, name }` | devShell factory — `ncsVersion` required; `toolchainBundleId`/`autoBootstrap`/`nrfutilPackage` optional (see [Backends](#backends), [Bootstrap](#bootstrap), and [Advanced: overriding nrfutil](#advanced-overriding-nrfutil)) |
+| `lib.<system>.mkNrfShell { backend, ncsVersion, toolchainBundleId, autoBootstrap, nrfutilPackage, packages, extraShellHook, withMultilib, inputsFrom, name }` | devShell factory — `ncsVersion` required; `backend` default `"nrfutil"` (recommended), `"west"` experimental (v3.3.0 / x86_64-linux only); `toolchainBundleId`/`autoBootstrap`/`nrfutilPackage` optional (nrfutil backend; rejected for west, see [Backends](#backends), [Bootstrap](#bootstrap), and [Advanced: overriding nrfutil](#advanced-overriding-nrfutil)) |
 | `packages.openocd-master` | openocd from master (pinned), wrapped for libudev |
 | `packages.openocd-master-unwrapped` | the raw build |
 | `packages.nrfutil` | Nixpkgs nrfutil composed with the sdk-manager extension (includes SEGGER J-Link, see [SEGGER / J-Link](#segger--j-link)) |
 | `packages.nix-nrf` | project CLI facade: `versions` (sdk-manager-backed NCS version list), `probes` (internal probe command module), `bootstrap` (internal SDK/toolchain bootstrap module), and `doctor` (internal read-only SDK/probe-access diagnostics module, see [Hardware access diagnostics](#hardware-access-diagnostics-nix-nrf-doctor) and [Bootstrap](#bootstrap)) |
 | `packages.udev-rules` | upstream OpenOCD `60-openocd.rules` relocated to `lib/udev/rules.d`, byte-for-byte (see [NixOS udev rules](#nixos-udev-rules)) |
 | `packages.default` | alias for `packages.nix-nrf` |
-| `packages.west-zephyr-sdk-v3_3_0` | experimental exact Zephyr SDK 0.17.0 package (minimal bundle + ARM/RISC-V compilers, official layout, setup hook; see [Experimental: west backend prototype](#experimental-west-backend-prototype-not-public)) |
+| `packages.west-zephyr-sdk-v3_3_0` | west backend exact Zephyr SDK 0.17.0 package (minimal bundle + ARM/RISC-V compilers, official layout, setup hook; see [Experimental: west backend](#experimental-west-backend-public-v330--x86_64-linux-only)) |
 | `devShells.default` | dogfood shell for hacking on this repo |
-| `devShells.west-prototype` | experimental west backend prototype shell (Nix Zephyr SDK + host tools + scoped venv-west wrapper; not the public backend) |
 | `formatter.<system>` | treefmt wrapper (`nix fmt`) |
 | `nixosModules.default` | minimal NixOS module adding `packages.udev-rules` to `services.udev.packages` (no options; see [NixOS udev rules](#nixos-udev-rules)) |
-| `checks.<system>` | `formatting` (treefmt) + `backend-selector` (eval gate: `ncsVersion` required, omitted/`nrfutil` evaluate, `sdk-nrf` rejected, `toolchainBundleId` evaluates, `autoBootstrap` omitted/true/false evaluates, exact bundle in either bootstrap mode) + `bootstrap-tests` (fake-boundary unit tests, no network/real SDK) + `bootstrap-quoting` (wrapper shell-quoting regression for selector values with spaces/quotes) + `doctor-tests` (fake sysfs/dev-root doctor unit tests, no hardware) + `udev-rules` (installed rule byte-identical to the pinned OpenOCD contrib rule) + `west-setup-tests` (fake-boundary west-setup helper tests, no network/workspace) + `west-backend-metadata` (versions.nix schema) + `west-backend-quoting` (metadata quote-embedding regression for the prototype shell hook/west wrapper) + `pre-commit` (git-hooks.nix) |
+| `checks.<system>` | `formatting` (treefmt) + `backend-selector` (eval gate: `ncsVersion` required, omitted equals nrfutil, `nrfutil`/`west`+v3.3.0 evaluate, `sdk-nrf`/west-unknown-release/west-toolchainBundleId/west-nrfutilPackage rejected, `toolchainBundleId` evaluates, `autoBootstrap` omitted/true/false evaluates for both backends, exact bundle in either bootstrap mode) + `bootstrap-tests` (fake-boundary unit tests, no network/real SDK) + `bootstrap-quoting` (wrapper shell-quoting regression for selector values with spaces/quotes) + `doctor-tests` (fake sysfs/dev-root doctor unit tests, no hardware) + `udev-rules` (installed rule byte-identical to the pinned OpenOCD contrib rule) + `west-bootstrap-tests` (fake-boundary west bootstrap tests, no network/workspace) + `west-versions-tests` (fake-boundary west `versions` command tests) + `west-backend-metadata` (versions.nix schema) + `west-backend-quoting` (metadata quote-embedding regression for the public west shell hook/wrapper) + `west-shell-boundary` (public west shell boundary gate against a fake-ready workspace) + `pre-commit` (git-hooks.nix) |
 | `templates.default` | project skeleton (flake.nix + .envrc) |
 | `tcl/` | canonical flash recipes (see below) |
 

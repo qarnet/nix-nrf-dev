@@ -17,8 +17,12 @@
     # requirement installation the workspace's own west requirement wins; the
     # readiness check never demands this exact version again.
     testedWestVersion = "1.4.0";
-    # Nix Python interpreter used to create the version-local venv.
+    # Nix Python interpreter used to create the version-local venv: display
+    # version (`python`) and the pkgs attribute name (`pythonPackage`). The
+    # builders select `pkgs.${pythonPackage}`; the display string is for
+    # shell banners/messages.
     python = "3.12";
+    pythonPackage = "python312";
     zephyrSdk = {
       version = "0.17.0";
       # Compiler archives shipped inside the Nix Zephyr SDK package.

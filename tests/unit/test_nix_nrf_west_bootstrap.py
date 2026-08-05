@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# tests/unit/test_nix_nrf_west_setup.py — fake-boundary unit tests for the
-# west backend setup helper (bin/nix-nrf-west-setup).
+# tests/unit/test_nix_nrf_west_bootstrap.py — fake-boundary unit tests for the
+# west backend bootstrap command (bin/nix-nrf-west-bootstrap).
 #
-# Exercises the helper as a subprocess through public-style args and
+# Exercises the command as a subprocess through public-style args and
 # environment against temporary fake python/venv/west/pip boundaries. No
 # network, no real workspace, no real venv: the fake "Nix python" creates a
 # fake .venv whose python/pip/west record every invocation, the fake west
@@ -14,9 +14,9 @@
 #   probes.log     — venv import checks and west --version (read-only)
 #   mutations.log  — venv creation, pip installs, west init/update
 #
-# Run standalone from the repo:  python3 tests/unit/test_nix_nrf_west_setup.py
-# Wired as checks.west-setup-tests in flake.nix (sandboxed Python stdlib);
-# the derivation sets NIX_NRF_WEST_SETUP_SCRIPT to the copied script.
+# Run standalone from the repo:  python3 tests/unit/test_nix_nrf_west_bootstrap.py
+# Wired as checks.west-bootstrap-tests in flake.nix (sandboxed Python stdlib);
+# the derivation sets NIX_NRF_WEST_BOOTSTRAP_SCRIPT to the copied script.
 
 import os
 import pathlib
@@ -34,20 +34,20 @@ REQUIREMENTS = "\n".join(
 )
 
 
-def _resolve_setup_script() -> str:
-    configured = os.environ.get("NIX_NRF_WEST_SETUP_SCRIPT")
+def _resolve_bootstrap_script() -> str:
+    configured = os.environ.get("NIX_NRF_WEST_BOOTSTRAP_SCRIPT")
     if configured:
         return configured
     try:
         repo_root = pathlib.Path(__file__).resolve().parents[2]
     except IndexError:
         raise RuntimeError(
-            "NIX_NRF_WEST_SETUP_SCRIPT is not set and the repo root is unavailable"
+            "NIX_NRF_WEST_BOOTSTRAP_SCRIPT is not set and the repo root is unavailable"
         )
-    return str(repo_root / "bin" / "nix-nrf-west-setup")
+    return str(repo_root / "bin" / "nix-nrf-west-bootstrap")
 
 
-SETUP_SCRIPT = _resolve_setup_script()
+BOOTSTRAP_SCRIPT = _resolve_bootstrap_script()
 
 # Fake "Nix python" (NIX_NRF_WEST_PYTHON): when invoked `-m venv <dir>`,
 # materializes <dir>/bin/{python,pip,west} recorder scripts (direct
@@ -66,7 +66,7 @@ import pathlib
 import sys
 
 def log(name):
-    with open(os.environ["FAKE_WEST_SETUP_LOG_DIR"] + "/" + name, "a") as fh:
+    with open(os.environ["FAKE_WEST_BOOTSTRAP_LOG_DIR"] + "/" + name, "a") as fh:
         fh.write(pathlib.Path(sys.argv[0]).name + " " + " ".join(sys.argv[1:]) + "\n")
 
 args = sys.argv[1:]
@@ -76,7 +76,7 @@ args = sys.argv[1:]
 PY = RECORDER % {"body": r'''
 if args[:2] == ["-m", "pip"]:
     log("mutations.log")
-    if os.path.exists(os.environ["FAKE_WEST_SETUP_LOG_DIR"] + "/fail_pip"):
+    if os.path.exists(os.environ["FAKE_WEST_BOOTSTRAP_LOG_DIR"] + "/fail_pip"):
         print("fake pip: forced failure", file=sys.stderr)
         sys.exit(1)
     sys.exit(0)
@@ -88,7 +88,7 @@ sys.exit(0)
 '''}
 PIP = RECORDER % {"body": r'''
 log("mutations.log")
-if os.path.exists(os.environ["FAKE_WEST_SETUP_LOG_DIR"] + "/fail_pip"):
+if os.path.exists(os.environ["FAKE_WEST_BOOTSTRAP_LOG_DIR"] + "/fail_pip"):
     print("fake pip: forced failure", file=sys.stderr)
     sys.exit(1)
 sys.exit(0)
@@ -96,7 +96,7 @@ sys.exit(0)
 WEST = RECORDER % {"body": r'''
 if args == ["--version"]:
     log("probes.log")
-    version_file = os.environ["FAKE_WEST_SETUP_LOG_DIR"] + "/west_version"
+    version_file = os.environ["FAKE_WEST_BOOTSTRAP_LOG_DIR"] + "/west_version"
     if os.path.exists(version_file):
         sys.stdout.write(open(version_file).read())
     else:
@@ -104,7 +104,7 @@ if args == ["--version"]:
     sys.exit(0)
 if args[0] == "init":
     log("mutations.log")
-    if os.path.exists(os.environ["FAKE_WEST_SETUP_LOG_DIR"] + "/noop_init"):
+    if os.path.exists(os.environ["FAKE_WEST_BOOTSTRAP_LOG_DIR"] + "/noop_init"):
         sys.exit(0)
     ws = pathlib.Path(args[-1])
     (ws / ".west").mkdir(parents=True, exist_ok=True)
@@ -129,7 +129,7 @@ if args[0] == "init":
     sys.exit(0)
 if args[0] == "update":
     log("mutations.log")
-    if os.path.exists(os.environ["FAKE_WEST_SETUP_LOG_DIR"] + "/fail_update"):
+    if os.path.exists(os.environ["FAKE_WEST_BOOTSTRAP_LOG_DIR"] + "/fail_update"):
         print("fake west: forced update failure", file=sys.stderr)
         sys.exit(1)
     sys.exit(0)
@@ -145,14 +145,14 @@ with open(bin_dir / "west", "w") as fh:
     fh.write("#!" + sys.executable + "\n" + WEST)
 for name in ("python", "pip", "west"):
     (bin_dir / name).chmod(0o755)
-with open(os.environ["FAKE_WEST_SETUP_LOG_DIR"] + "/mutations.log", "a") as fh:
+with open(os.environ["FAKE_WEST_BOOTSTRAP_LOG_DIR"] + "/mutations.log", "a") as fh:
     fh.write(
         pathlib.Path(sys.argv[0]).name + " " + " ".join(sys.argv[1:]) + "\n"
     )
 """
 
 
-class WestSetupTestCase(unittest.TestCase):
+class WestBootstrapTestCase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = pathlib.Path(self.tmp.name)
@@ -170,7 +170,8 @@ class WestSetupTestCase(unittest.TestCase):
         self.env["NIX_NRF_WEST_TESTED_WEST_VERSION"] = "1.4.0"
         self.env["NIX_NRF_WEST_REQUIREMENTS"] = REQUIREMENTS
         self.env["NIX_NRF_WEST_PIP_CONSTRAINTS"] = "cbor2==5.9.0"
-        self.env["FAKE_WEST_SETUP_LOG_DIR"] = str(self.fake_dir)
+        self.env["FAKE_WEST_BOOTSTRAP_LOG_DIR"] = str(self.fake_dir)
+        self.env.pop("NIX_NRF_BOOTSTRAP_YES", None)
         self.env.pop("NIX_NRF_WEST_SETUP_YES", None)
         self.env.pop("NIX_NRF_WEST_WORKSPACE", None)
 
@@ -187,12 +188,12 @@ class WestSetupTestCase(unittest.TestCase):
     def rm_marker(self, name):
         (self.fake_dir / name).unlink(missing_ok=True)
 
-    def run_setup(self, *args, env_extra=None, cwd=None):
+    def run_bootstrap(self, *args, env_extra=None, cwd=None):
         env = dict(self.env)
         if env_extra:
             env.update(env_extra)
         return subprocess.run(
-            [sys.executable, SETUP_SCRIPT, *args],
+            [sys.executable, BOOTSTRAP_SCRIPT, *args],
             env=env,
             cwd=cwd,
             capture_output=True,
@@ -205,7 +206,7 @@ class WestSetupTestCase(unittest.TestCase):
 
     def set_west_constraint(self, constraint):
         """Overwrite both requirement base files so the only west constraint
-        is the given one (e.g. ">1.4.0"), matching the setup helper's
+        is the given one (e.g. ">1.4.0"), matching the bootstrap helper's
         `-r` include resolution."""
         (self.workspace / "zephyr" / "scripts" / "requirements-base.txt").write_text(
             f"west{constraint}\n"
@@ -227,7 +228,7 @@ class WestSetupTestCase(unittest.TestCase):
         return self.log("probes.log")
 
     def make_ready_workspace(self):
-        """Materialize a fully ready workspace without running setup:
+        """Materialize a fully ready workspace without running bootstrap:
         the fake venv via the fake creator, plus the workspace files."""
         proc = subprocess.run(
             [str(self.creator), "-m", "venv", str(self.workspace / ".venv")],
@@ -261,32 +262,32 @@ class WestSetupTestCase(unittest.TestCase):
         (
             self.workspace / "bootloader" / "mcuboot" / "scripts" / "requirements.txt"
         ).write_text("pyelftools>=0.29\n")
-        # The harness venv creation above is not a setup-helper mutation:
+        # The harness venv creation above is not a bootstrap mutation:
         # reset both logs so the run under test starts clean.
         for name in ("mutations.log", "probes.log"):
             (self.fake_dir / name).write_text("")
 
     # 1. Missing workspace --check: exit 1, no mutation, no probes.
     def test_check_missing_workspace_exits_1_no_mutation(self):
-        proc = self.run_setup("--check")
+        proc = self.run_bootstrap("--check")
         self.assertEqual(proc.returncode, 1)
         self.assertIn("not ready", proc.stderr)
         self.assertIn("no changes made", proc.stderr)
         self.assertEqual(self.mutations(), [])
         self.assertEqual(self.probes(), [])
 
-    # 2. Ready workspace --check: exit 0; --print-workspace prints exactly
+    # 2. Ready workspace --check: exit 0; --print-sdk-path prints exactly
     #    one path line; probes run (read-only), mutations stay empty.
     def test_check_ready_exits_0_no_stdout(self):
         self.make_ready_workspace()
-        proc = self.run_setup("--check")
+        proc = self.run_bootstrap("--check")
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(proc.stdout, "")
         self.assertEqual(self.mutations(), [])
 
-    def test_check_ready_print_workspace_one_line(self):
+    def test_check_ready_print_sdk_path_one_line(self):
         self.make_ready_workspace()
-        proc = self.run_setup("--check", "--print-workspace")
+        proc = self.run_bootstrap("--check", "--print-sdk-path")
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(proc.stdout, str(self.workspace) + "\n")
         self.assertEqual(self.mutations(), [])
@@ -294,20 +295,43 @@ class WestSetupTestCase(unittest.TestCase):
     # 3. Noninteractive approval requirement: no --yes, no TTY -> exit 2
     #    with the exact re-run guidance; nothing runs.
     def test_missing_non_tty_requires_approval(self):
-        proc = self.run_setup()
+        proc = self.run_bootstrap()
         self.assertEqual(proc.returncode, 2)
-        self.assertIn("nix-nrf-west-setup --yes", proc.stderr)
-        self.assertIn("NIX_NRF_WEST_SETUP_YES=1", proc.stderr)
+        self.assertIn("nix-nrf bootstrap --yes", proc.stderr)
+        self.assertIn("NIX_NRF_BOOTSTRAP_YES=1", proc.stderr)
         self.assertEqual(self.mutations(), [])
 
-    def test_env_yes_approves(self):
-        proc = self.run_setup(env_extra={"NIX_NRF_WEST_SETUP_YES": "1"})
+    def test_env_bootstrap_yes_approves(self):
+        proc = self.run_bootstrap(env_extra={"NIX_NRF_BOOTSTRAP_YES": "1"})
         self.assertEqual(proc.returncode, 0)
         self.assertTrue(any("west init" in line for line in self.mutations()))
 
+    # 3b. The removed temporary approval variable has no effect: setup still
+    #     requires --yes / NIX_NRF_BOOTSTRAP_YES.
+    def test_old_approval_variable_no_effect(self):
+        proc = self.run_bootstrap(env_extra={"NIX_NRF_WEST_SETUP_YES": "1"})
+        self.assertEqual(proc.returncode, 2)
+        self.assertEqual(self.mutations(), [])
+
+    # 3c. Errors carry the public `nix-nrf bootstrap` program prefix.
+    def test_error_prefix_is_public_program_name(self):
+        (self.workspace / ".venv").mkdir(parents=True)
+        proc = self.run_bootstrap("--yes")
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("nix-nrf bootstrap: error:", proc.stderr)
+
+    # 3d. The temporary standalone command name is gone from the repository.
+    def test_old_temporary_command_removed(self):
+        try:
+            repo_root = pathlib.Path(__file__).resolve().parents[2]
+        except IndexError:
+            self.skipTest("repo root unavailable; covered by the flake gate")
+        self.assertFalse((repo_root / "bin" / "nix-nrf-west-setup").exists())
+        self.assertFalse((repo_root / "nix" / "nix-nrf-west-setup.nix").exists())
+
     # 4. Initial command order and exact argument arrays.
     def test_initial_command_order_and_exact_argv(self):
-        proc = self.run_setup("--yes")
+        proc = self.run_bootstrap("--yes")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(
             self.mutations(),
@@ -326,7 +350,7 @@ class WestSetupTestCase(unittest.TestCase):
 
     # 5. Requirements installed in metadata order.
     def test_requirements_installed_in_metadata_order(self):
-        proc = self.run_setup("--yes")
+        proc = self.run_bootstrap("--yes")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         pip_requirements = [
             line
@@ -345,12 +369,12 @@ class WestSetupTestCase(unittest.TestCase):
     #    requirements for the current manifest (documented mutation) and
     #    does not re-create the venv or re-pin west.
     def test_rerun_does_not_call_west_init_again(self):
-        proc = self.run_setup("--yes")
+        proc = self.run_bootstrap("--yes")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertTrue(any("west init" in line for line in self.mutations()))
         first_mutations = list(self.mutations())
 
-        proc = self.run_setup("--yes")
+        proc = self.run_bootstrap("--yes")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         rerun = self.mutations()[len(first_mutations) :]
         self.assertFalse(any("west init" in line for line in rerun))
@@ -372,7 +396,7 @@ class WestSetupTestCase(unittest.TestCase):
     # 6b. Release-specific pip constraints are written into the venv and
     # applied via `-c` on every venv pip invocation.
     def test_pip_constraints_written_and_applied(self):
-        proc = self.run_setup("--yes")
+        proc = self.run_bootstrap("--yes")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         constraints = self.workspace / ".venv" / "nix-nrf-pip-constraints.txt"
         self.assertTrue(constraints.is_file())
@@ -385,7 +409,7 @@ class WestSetupTestCase(unittest.TestCase):
         env = dict(self.env)
         env.pop("NIX_NRF_WEST_PIP_CONSTRAINTS", None)
         proc = subprocess.run(
-            [sys.executable, SETUP_SCRIPT, "--yes"],
+            [sys.executable, BOOTSTRAP_SCRIPT, "--yes"],
             env=env,
             capture_output=True,
             text=True,
@@ -409,7 +433,7 @@ class WestSetupTestCase(unittest.TestCase):
         before = sorted(
             str(p.relative_to(self.workspace)) for p in self.workspace.rglob("*")
         )
-        proc = self.run_setup("--yes")
+        proc = self.run_bootstrap("--yes")
         self.assertEqual(proc.returncode, 1)
         self.assertIn("incompatible", proc.stderr)
         self.assertIn("refusing to modify", proc.stderr)
@@ -422,7 +446,7 @@ class WestSetupTestCase(unittest.TestCase):
 
     def test_incompatible_venv_rejected(self):
         (self.workspace / ".venv").mkdir(parents=True)
-        proc = self.run_setup("--yes")
+        proc = self.run_bootstrap("--yes")
         self.assertEqual(proc.returncode, 1)
         self.assertIn("incompatible", proc.stderr)
         self.assertEqual(self.mutations(), [])
@@ -430,24 +454,24 @@ class WestSetupTestCase(unittest.TestCase):
     # 8. Failed west update / pip / incomplete post-setup state propagate.
     def test_failed_west_update_propagates(self):
         self.write_marker("fail_update")
-        proc = self.run_setup("--yes")
+        proc = self.run_bootstrap("--yes")
         self.assertEqual(proc.returncode, 1)
-        self.assertIn("nix-nrf-west-setup: error", proc.stderr)
+        self.assertIn("nix-nrf bootstrap: error", proc.stderr)
         self.assertIn("west update failed", proc.stderr)
         self.assertTrue(any("west update" in line for line in self.mutations()))
 
     def test_failed_pip_propagates(self):
         self.write_marker("fail_pip")
-        proc = self.run_setup("--yes")
+        proc = self.run_bootstrap("--yes")
         self.assertEqual(proc.returncode, 1)
-        self.assertIn("nix-nrf-west-setup: error", proc.stderr)
+        self.assertIn("nix-nrf bootstrap: error", proc.stderr)
         self.assertIn("pip install west failed", proc.stderr)
 
     def test_incomplete_post_setup_state_exits_1(self):
         # west init succeeds without materializing the workspace: the
         # re-readiness check fails with "setup incomplete".
         self.write_marker("noop_init")
-        proc = self.run_setup("--yes")
+        proc = self.run_bootstrap("--yes")
         self.assertEqual(proc.returncode, 1)
         self.assertIn("setup incomplete", proc.stderr)
         self.assertTrue(any("west init" in line for line in self.mutations()))
@@ -455,13 +479,13 @@ class WestSetupTestCase(unittest.TestCase):
     # 9. --check performs no mutation/network commands.
     def test_check_no_mutation_commands_ready(self):
         self.make_ready_workspace()
-        proc = self.run_setup("--check")
+        proc = self.run_bootstrap("--check")
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(self.mutations(), [])
         self.assertNotEqual(self.probes(), [])  # read-only probes only
 
     def test_check_no_mutation_commands_missing(self):
-        proc = self.run_setup("--check")
+        proc = self.run_bootstrap("--check")
         self.assertEqual(proc.returncode, 1)
         self.assertEqual(self.mutations(), [])
         self.assertEqual(self.probes(), [])
@@ -469,14 +493,14 @@ class WestSetupTestCase(unittest.TestCase):
     # 10. Default workspace resolves from isolated HOME and the version.
     def test_default_workspace_uses_isolated_home_and_version(self):
         self.make_ready_workspace()
-        proc = self.run_setup("--check", "--print-workspace")
+        proc = self.run_bootstrap("--check", "--print-sdk-path")
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(proc.stdout, str(self.home / "ncs" / "v3.3.0") + "\n")
 
     def test_cli_workspace_overrides_default(self):
         alt = self.home / "elsewhere"
         (alt / "nrf").mkdir(parents=True)
-        proc = self.run_setup("--check", "--workspace", str(alt))
+        proc = self.run_bootstrap("--check", "--workspace", str(alt))
         self.assertEqual(proc.returncode, 1)
         self.assertIn(str(alt), proc.stderr)
 
@@ -486,12 +510,12 @@ class WestSetupTestCase(unittest.TestCase):
     # must receive the absolute intended path and nothing may be nested.
     def test_relative_workspace_normalized_to_absolute(self):
         rel = "rel/ws"
-        proc = self.run_setup("--yes", "--workspace", rel, cwd=str(self.root))
+        proc = self.run_bootstrap("--yes", "--workspace", rel, cwd=str(self.root))
         self.assertEqual(proc.returncode, 0, proc.stderr)
         expected = os.path.abspath(os.path.join(str(self.root), rel))
         self.assertEqual(
             proc.stdout,
-            "",  # no --print-workspace requested
+            "",  # no --print-sdk-path requested
         )
         self.assertIn(
             f"west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.3.0 {expected}",
@@ -501,9 +525,9 @@ class WestSetupTestCase(unittest.TestCase):
         self.assertTrue((pathlib.Path(expected) / ".venv" / "bin" / "west").is_file())
         self.assertFalse((pathlib.Path(expected) / rel).exists())
 
-    def test_relative_workspace_print_workspace_is_absolute(self):
-        proc = self.run_setup(
-            "--yes", "--workspace", "ws", "--print-workspace", cwd=str(self.root)
+    def test_relative_workspace_print_sdk_path_is_absolute(self):
+        proc = self.run_bootstrap(
+            "--yes", "--workspace", "ws", "--print-sdk-path", cwd=str(self.root)
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(
@@ -511,7 +535,9 @@ class WestSetupTestCase(unittest.TestCase):
         )
 
     def test_tilde_workspace_expanded(self):
-        proc = self.run_setup("--yes", "--workspace", "~/tilde-ws", cwd=str(self.root))
+        proc = self.run_bootstrap(
+            "--yes", "--workspace", "~/tilde-ws", cwd=str(self.root)
+        )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         expected = str(self.home / "tilde-ws")
         self.assertIn(
@@ -524,13 +550,13 @@ class WestSetupTestCase(unittest.TestCase):
     def test_ready_requires_west_version_satisfying_requirements(self):
         self.make_ready_workspace()
         self.write_marker("west_version", "West version: v1.4.0\n")
-        proc = self.run_setup("--check")
+        proc = self.run_bootstrap("--check")
         self.assertEqual(proc.returncode, 0)
 
     def test_too_old_west_version_not_ready(self):
         self.make_ready_workspace()
         self.write_marker("west_version", "West version: v1.3.0\n")
-        proc = self.run_setup("--check")
+        proc = self.run_bootstrap("--check")
         self.assertEqual(proc.returncode, 1)
         self.assertIn("west version", proc.stderr)
 
@@ -542,43 +568,43 @@ class WestSetupTestCase(unittest.TestCase):
         self.make_ready_workspace()
         self.set_west_constraint("==1.4.0")
         self.set_west_version("1.4.0")
-        self.assertEqual(self.run_setup("--check").returncode, 0)
+        self.assertEqual(self.run_bootstrap("--check").returncode, 0)
         self.set_west_version("1.4.1")
-        self.assertEqual(self.run_setup("--check").returncode, 1)
+        self.assertEqual(self.run_bootstrap("--check").returncode, 1)
 
     def test_constraint_ge(self):
         self.make_ready_workspace()
         self.set_west_constraint(">=1.4.0")
         self.set_west_version("1.4.0")
-        self.assertEqual(self.run_setup("--check").returncode, 0)
+        self.assertEqual(self.run_bootstrap("--check").returncode, 0)
         self.set_west_version("1.3.9")
-        self.assertEqual(self.run_setup("--check").returncode, 1)
+        self.assertEqual(self.run_bootstrap("--check").returncode, 1)
 
     def test_constraint_gt_strict_boundary(self):
         self.make_ready_workspace()
         self.set_west_constraint(">1.4.0")
         self.set_west_version("1.4.1")
-        self.assertEqual(self.run_setup("--check").returncode, 0)
+        self.assertEqual(self.run_bootstrap("--check").returncode, 0)
         # Strict: exactly the boundary version must NOT satisfy.
         self.set_west_version("1.4.0")
-        self.assertEqual(self.run_setup("--check").returncode, 1)
+        self.assertEqual(self.run_bootstrap("--check").returncode, 1)
 
     def test_constraint_le(self):
         self.make_ready_workspace()
         self.set_west_constraint("<=1.4.0")
         self.set_west_version("1.4.0")
-        self.assertEqual(self.run_setup("--check").returncode, 0)
+        self.assertEqual(self.run_bootstrap("--check").returncode, 0)
         self.set_west_version("1.4.1")
-        self.assertEqual(self.run_setup("--check").returncode, 1)
+        self.assertEqual(self.run_bootstrap("--check").returncode, 1)
 
     def test_constraint_lt_strict_boundary(self):
         self.make_ready_workspace()
         self.set_west_constraint("<1.4.0")
         self.set_west_version("1.3.9")
-        self.assertEqual(self.run_setup("--check").returncode, 0)
+        self.assertEqual(self.run_bootstrap("--check").returncode, 0)
         # Strict: exactly the boundary version must NOT satisfy.
         self.set_west_version("1.4.0")
-        self.assertEqual(self.run_setup("--check").returncode, 1)
+        self.assertEqual(self.run_bootstrap("--check").returncode, 1)
 
     def test_constraint_mixed_ranges_all_must_hold(self):
         self.make_ready_workspace()
@@ -589,24 +615,24 @@ class WestSetupTestCase(unittest.TestCase):
             "west<2.0.0\n"
         )
         self.set_west_version("1.9.0")
-        self.assertEqual(self.run_setup("--check").returncode, 0)
+        self.assertEqual(self.run_bootstrap("--check").returncode, 0)
         # Violates the upper bound; both constraints must hold.
         self.set_west_version("2.0.0")
-        self.assertEqual(self.run_setup("--check").returncode, 1)
+        self.assertEqual(self.run_bootstrap("--check").returncode, 1)
 
     def test_missing_requirement_file_not_ready(self):
         self.make_ready_workspace()
         (
             self.workspace / "bootloader" / "mcuboot" / "scripts" / "requirements.txt"
         ).unlink()
-        proc = self.run_setup("--check")
+        proc = self.run_bootstrap("--check")
         self.assertEqual(proc.returncode, 1)
         self.assertIn("requirements file", proc.stderr)
 
     def test_help_exits_0(self):
-        proc = self.run_setup("--help")
+        proc = self.run_bootstrap("--help")
         self.assertEqual(proc.returncode, 0)
-        self.assertIn("nix-nrf-west-setup", proc.stdout)
+        self.assertIn("nix-nrf bootstrap", proc.stdout)
 
 
 if __name__ == "__main__":

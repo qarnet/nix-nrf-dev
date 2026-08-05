@@ -52,8 +52,20 @@ PROG = "nix-nrf doctor"
 DEFAULT_SYSFS_ROOT = "/sys/bus/usb/devices"
 DEFAULT_DEV_ROOT = "/dev"
 
+# Human environment label for headings/status/remediation/help. The packaged
+# wrapper always sets NIX_NRF_DOCTOR_ENVIRONMENT_LABEL (default
+# "SDK/toolchain"); only human message strings use it — JSON field names and
+# exit semantics never change.
+DEFAULT_ENVIRONMENT_LABEL = "SDK/toolchain"
+
 # Test-only access override (NIX_NRF_DOCTOR_ACCESS_JSON), parsed once.
 _ACCESS_OVERRIDE = None
+
+
+def environment_label():
+    return os.environ.get(
+        "NIX_NRF_DOCTOR_ENVIRONMENT_LABEL", DEFAULT_ENVIRONMENT_LABEL
+    )
 
 
 def sysfs_root():
@@ -357,13 +369,13 @@ def remediation(candidates, sdk):
             items.append(f"Packaged udev rule: {rules_pkg}/lib/udev/rules.d/60-openocd.rules")
         items.append("OpenOCD should not run as root.")
     if sdk["status"] == "fail":
-        items.append("SDK/toolchain: run `nix-nrf bootstrap`")
+        items.append(f"{environment_label()}: run `nix-nrf bootstrap`")
     return items
 
 
 def render_human(sdk, user, hardware, remediation_items):
     out = []
-    out.append("SDK/toolchain")
+    out.append(environment_label())
     out.append(f"  status: {sdk['status']}")
     if sdk["status"] == "pass":
         out.append(f"  NCS {sdk['version']} ready: {sdk['path']}")
@@ -424,8 +436,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         prog=PROG,
         description=(
-            "Read-only SDK/toolchain and debug-probe access diagnostics. "
-            "Never opens probes, never runs sudo, never mutates host state."
+            f"Read-only {environment_label().lower()} and debug-probe access "
+            "diagnostics. Never opens probes, never runs sudo, never mutates "
+            "host state."
         ),
     )
     parser.add_argument(

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# nix-nrf-west-setup — create/update the mutable west workspace and
-# version-local Python virtual environment for the west backend prototype.
+# nix-nrf-west-bootstrap — create/update the mutable west workspace and
+# version-local Python virtual environment for the west backend.
 #
-# Internal prototype command: installed by nix/nix-nrf-west-setup.nix at
-# $out/libexec/nix-nrf/west-setup (plus $out/bin/nix-nrf-west-setup) and
-# wrapped with the exact Nix Python interpreter and metadata defaults:
+# Internal backend command: installed by nix/nix-nrf-west-bootstrap.nix at
+# $out/libexec/nix-nrf/bootstrap (no standalone $out/bin command) and wrapped
+# with the exact Nix Python interpreter and metadata defaults:
 #   NIX_NRF_WEST_PYTHON                 exact Nix Python executable
 #   NIX_NRF_WEST_NCS_VERSION            NCS release (workspace/venv version)
 #   NIX_NRF_WEST_TESTED_WEST_VERSION    west pinned before workspace creation
@@ -17,6 +17,11 @@
 #                                       venv pip invocation (release-specific
 #                                       pins grounding the loose requirement
 #                                       files)
+#
+# Public invocation is `nix-nrf bootstrap [--workspace PATH] [--yes]
+# [--check] [--quiet] [--print-sdk-path]`; the printed SDK path is the west
+# workspace root (`$HOME/ncs/<version>`), which contains zephyr/ and satisfies
+# the shared doctor/shell read-only contract.
 #
 # Division of ownership (see docs/development/west-backend-environment-handoff.md):
 #   Nix       — Python interpreter, host tools, exact Zephyr SDK package.
@@ -36,7 +41,7 @@
 #      failure, or incomplete post-setup state
 #   2  CLI usage error, approval required without a terminal, or user declined
 #
-# stdout stays empty unless --print-workspace succeeds, so command
+# stdout stays empty unless --print-sdk-path succeeds, so command
 # substitution stays machine-readable. All status and prompts go to stderr.
 #
 # Timeout policy: only read-only checks (venv imports, west --version) get a
@@ -49,7 +54,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-PROG = "nix-nrf-west-setup"
+PROG = "nix-nrf bootstrap"
 
 # Seconds for read-only version/import checks; never applied to installs.
 CHECK_TIMEOUT = 30
@@ -58,7 +63,7 @@ _QUIET = False
 
 
 class SetupError(Exception):
-    """Fatal setup failure; printed with the `nix-nrf-west-setup:` prefix."""
+    """Fatal setup failure; printed with the `nix-nrf bootstrap:` prefix."""
 
 
 def fail(message):
@@ -81,7 +86,7 @@ def resolve_workspace(args):
         return Path(os.path.abspath(os.path.expanduser(args.workspace)))
     ncs_version = os.environ.get("NIX_NRF_WEST_NCS_VERSION")
     if not ncs_version:
-        fail("NIX_NRF_WEST_NCS_VERSION is not set — run through the packaged nix-nrf-west-setup")
+        fail("NIX_NRF_WEST_NCS_VERSION is not set — run through the packaged nix-nrf-west-bootstrap")
     return Path.home() / "ncs" / ncs_version
 
 
@@ -340,8 +345,8 @@ def run(argv, cwd, *, check_message):
 # ── Mutation ─────────────────────────────────────────────────────────────────
 
 def approve(args):
-    """Interactive confirmation or --yes / NIX_NRF_WEST_SETUP_YES=1."""
-    if args.yes or os.environ.get("NIX_NRF_WEST_SETUP_YES") == "1":
+    """Interactive confirmation or --yes / NIX_NRF_BOOTSTRAP_YES=1."""
+    if args.yes or os.environ.get("NIX_NRF_BOOTSTRAP_YES") == "1":
         return True
     if sys.stdin.isatty() and sys.stderr.isatty():
         status("proceed with setup? [y/N]")
@@ -352,8 +357,8 @@ def approve(args):
         return False
     status("interactive approval required but no terminal is available")
     status("re-run with explicit approval:")
-    status("  nix-nrf-west-setup --yes")
-    status("  or: NIX_NRF_WEST_SETUP_YES=1 nix-nrf-west-setup")
+    status("  nix-nrf bootstrap --yes")
+    status("  or: NIX_NRF_BOOTSTRAP_YES=1 nix-nrf bootstrap")
     return False
 
 
@@ -365,13 +370,13 @@ def run_setup(args, workspace):
     deletes anything."""
     ncs_version = os.environ.get("NIX_NRF_WEST_NCS_VERSION")
     if not ncs_version:
-        fail("NIX_NRF_WEST_NCS_VERSION is not set — run through the packaged nix-nrf-west-setup")
+        fail("NIX_NRF_WEST_NCS_VERSION is not set — run through the packaged nix-nrf-west-bootstrap")
     nix_python = os.environ.get("NIX_NRF_WEST_PYTHON")
     if not nix_python:
-        fail("NIX_NRF_WEST_PYTHON is not set — run through the packaged nix-nrf-west-setup")
+        fail("NIX_NRF_WEST_PYTHON is not set — run through the packaged nix-nrf-west-bootstrap")
     tested_west = os.environ.get("NIX_NRF_WEST_TESTED_WEST_VERSION")
     if not tested_west:
-        fail("NIX_NRF_WEST_TESTED_WEST_VERSION is not set — run through the packaged nix-nrf-west-setup")
+        fail("NIX_NRF_WEST_TESTED_WEST_VERSION is not set — run through the packaged nix-nrf-west-bootstrap")
 
     check_existing_structure(workspace)
 
@@ -448,8 +453,8 @@ def parse_args(argv):
         prog=PROG,
         description=(
             "Create or update the mutable west workspace and version-local "
-            "Python venv for the west backend prototype (Nix provides the "
-            "Zephyr SDK, host tools, and Python interpreter)."
+            "Python venv for the west backend (Nix provides the Zephyr SDK, "
+            "host tools, and Python interpreter)."
         ),
     )
     parser.add_argument(
@@ -469,9 +474,9 @@ def parse_args(argv):
         help="inspect only; never initialize, update, install, or mutate",
     )
     parser.add_argument(
-        "--print-workspace",
+        "--print-sdk-path",
         action="store_true",
-        help="on readiness print only the absolute workspace path to stdout",
+        help="on readiness print only the absolute west workspace root (SDK path) to stdout",
     )
     parser.add_argument(
         "--quiet",
@@ -495,7 +500,7 @@ def main(argv=None):
             status(f"workspace {workspace} not ready; missing: {'; '.join(problems)}")
             status("no changes made (--check)")
             return 1
-        if args.print_workspace:
+        if args.print_sdk_path:
             print(workspace)
         return 0
 
@@ -506,7 +511,7 @@ def main(argv=None):
     status("this downloads several gigabytes from GitHub (west workspace)")
     status("re-running still runs `west update` and reinstalls requirements, which may fetch updates or downloads")
 
-    if not args.yes and os.environ.get("NIX_NRF_WEST_SETUP_YES") != "1":
+    if not args.yes and os.environ.get("NIX_NRF_BOOTSTRAP_YES") != "1":
         if not approve(args):
             return 2
 
@@ -516,7 +521,7 @@ def main(argv=None):
         status(f"setup incomplete: still missing: {'; '.join(problems)}")
         return 1
 
-    if args.print_workspace:
+    if args.print_sdk_path:
         print(workspace)
     return 0
 

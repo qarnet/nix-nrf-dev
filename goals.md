@@ -259,24 +259,25 @@ formats the file, so style is covered.
 
 Ordered by impact. 3.1 is the endgame; 3.2–3.4 pay off immediately.
 
-### 3.1 `[ ]` Nix-native NCS build environment (`sdk-nrf` backend)
+### 3.1 `[x]` Hybrid west backend (public `backend = "west"`; `sdk-nrf` reserved)
 
-**What:** Offer an experimental Nix-native build backend (reserved name
-`sdk-nrf`) that does not use `nrfutil sdk-manager` at runtime. Materialize the
-NCS west workspace, Zephyr SDK compiler targets, host tools, and Python
-environment from fixed Nix inputs. `nix develop` yields a shell where `west
-build` works immediately, with inputs pinned in `flake.lock`. `mkNrfShell`
-already accepts `backend` (default `"nrfutil"`); `sdk-nrf` is reserved but
-rejected at evaluation until this work lands.
+**What:** Offer an experimental backend that does not use `nrfutil
+sdk-manager` at runtime. The hybrid direction, now integrated as the public
+`backend = "west"` selector, splits ownership: Nix supplies the exact Zephyr
+SDK compiler targets, host tools, and Python interpreter; the official
+mutable west workspace and a version-local venv own the NCS source and Python
+requirements. `nix develop` yields a shell where `west build` works once the
+workspace is bootstrapped (`nix-nrf bootstrap`). The pure `sdk-nrf` name
+remains reserved but rejected at evaluation.
 
-**Version direction:** the `sdk-nrf` backend must use version metadata keyed
-by NCS release — each entry derives the west manifest, Nordic Zephyr
-revision, Zephyr SDK release and targets, Python requirements, and host-tool
-versions from that release. The metadata may mark tested releases, but caller
-selection stays an explicit, required `ncsVersion` with no default, matching
-the current nrfutil backend API.
-Supporting multiple releases is a core acceptance criterion; the backend must
-not encode v3.3.0 as the sole architecture. v3.3.0 remains the first proof
+**Version direction:** the west backend uses version metadata keyed by NCS
+release in `nix/west-backend/versions.nix` — each entry derives the NCS
+version, tested west, Python interpreter (`python`/`pythonPackage`), Zephyr
+SDK release and targets, asset URLs/hashes, requirement files, and pip
+constraints for that release. Caller selection stays an explicit, required
+`ncsVersion` with no default, matching the nrfutil backend API. Supporting
+multiple releases remains a core acceptance criterion; the backend must not
+encode v3.3.0 as the sole architecture. v3.3.0 remains the first proof
 target because installed source and hardware test evidence exist, not because
 the backend is permanently tied to it.
 
@@ -324,13 +325,16 @@ smaller **hybrid west backend** (see
 host tools, and Python interpreter, while the official mutable west workspace
 and a version-local venv own the NCS source and requirements. The pure
 `sdk-nrf` prototype plan was marked superseded before implementation. The
-`west` backend prototype phase adds `devShells.west-prototype`,
-`packages.west-zephyr-sdk-v3_3_0`, and `nix-nrf-west-setup`; `mkNrfShell`
-still rejects `backend = "west"` (like `"sdk-nrf"`) until public
-integration. The real clean-home proof (setup + blinky sysbuild from an
-isolated HOME) passed 2026-08-05 (`bash tests/west-backend/run.sh`, setup
-436 s, build 18 s; see `docs/development/west-backend-status.md`), so public
-backend integration is now the next phase.
+prototype phase (`devShells.west-prototype`, `nix-nrf-west-setup`,
+`checks.west-setup-tests`) passed its real clean-home proof on 2026-08-05
+(`bash tests/west-backend/run.sh`, setup 436 s, build 18 s) and is complete;
+public integration landed in the same month: `mkNrfShell` now accepts
+`backend = "west"` (v3.3.0 / x86_64-linux only, experimental) with
+backend-aware `nix-nrf versions`/`bootstrap`/`doctor`, while `"nrfutil"`
+remains the default/recommended backend with unchanged behavior. The
+`backend = "west"` shell is **not** a fully hermetic workspace (the NCS
+source and Python requirements live in the mutable workspace/venv) and has no
+hardware parity claim yet.
 
 ### 3.2 `[ ]` Unified `nrf-flash` CLI
 

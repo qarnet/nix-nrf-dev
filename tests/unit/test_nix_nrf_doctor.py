@@ -515,6 +515,50 @@ class DoctorTestCase(unittest.TestCase):
         self.assertEqual(data["sdk"]["status"], "fail")
         self.assertIn("non-existing", data["sdk"]["message"])
 
+    # West backend label: the wrapped west-shell doctor passes
+    # NIX_NRF_DOCTOR_ENVIRONMENT_LABEL="west workspace/Zephyr SDK". Human
+    # headings/status/remediation reflect the label; JSON field names and
+    # exit semantics never change, and the bootstrap is invoked only through
+    # its read-only `--check --quiet --print-sdk-path` contract.
+    def test_west_environment_label_human_output(self):
+        self.write_fake_state("boot_stdout", str(self.sdk_dir) + "\n")
+        override = self.add_xiao(accessible=True)
+        env = {
+            "NIX_NRF_DOCTOR_ENVIRONMENT_LABEL": "west workspace/Zephyr SDK",
+        } | self.access_env(override)
+        proc = self.run_doctor(sdk=True, env_extra=env)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("west workspace/Zephyr SDK", proc.stdout)
+        self.assertIn("NCS v3.3.0 ready", proc.stdout)
+        self.assertIn("Debug probes", proc.stdout)
+        self.assertEqual(
+            self.bootstrap_invocations(), ["--check --quiet --print-sdk-path"]
+        )
+
+    def test_west_environment_label_remediation_json_stable(self):
+        self.write_fake_state("boot_exit", "1")
+        override = self.add_xiao(accessible=True)
+        env = {
+            "NIX_NRF_DOCTOR_ENVIRONMENT_LABEL": "west workspace/Zephyr SDK",
+        } | self.access_env(override)
+        proc = self.run_doctor("--json", sdk=True, env_extra=env)
+        self.assertEqual(proc.returncode, 1)
+        data = self.doctor_json(proc)
+        self.assertEqual(
+            list(data.keys()), ["ok", "sdk", "user", "hardware", "remediation"]
+        )
+        self.assertEqual(
+            list(data["sdk"].keys()), ["status", "version", "path", "message"]
+        )
+        self.assertEqual(data["sdk"]["status"], "fail")
+        self.assertIn(
+            "west workspace/Zephyr SDK: run `nix-nrf bootstrap`",
+            data["remediation"],
+        )
+        self.assertEqual(
+            self.bootstrap_invocations(), ["--check --quiet --print-sdk-path"]
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

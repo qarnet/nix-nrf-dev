@@ -1,18 +1,21 @@
 # West backend clean-room proof test
 
-This directory contains the clean-room proof for the west backend prototype:
-it proves the hybrid installation model end-to-end from an empty, isolated
-Linux home directory, using real network downloads.
+This directory contains the clean-room proof for the public west backend
+(`mkNrfShell { backend = "west"; ... }`): it proves the hybrid installation
+model end-to-end from an empty, isolated Linux home directory, using real
+network downloads.
 
 The test:
 
-1. Enters the prototype shell (`nix develop .#west-prototype`) with
-   `--ignore-env` and an isolated `HOME`, so no developer state is inherited.
-2. Runs `nix-nrf-west-setup --yes`, which creates the mutable west workspace
+1. Enters the public west shell via the flake's public `lib.mkNrfShell`
+   (`nix develop --impure --expr '<backend = "west"; ncsVersion =
+   "v3.3.0">'`) with `--ignore-env` and an isolated `HOME`, so no developer
+   state is inherited.
+2. Runs `nix-nrf bootstrap --yes`, which creates the mutable west workspace
    (`west init` + `west update`) and the version-local venv (pip-installed
    west and the workspace requirement files) under the isolated home.
 3. Re-enters the shell with the same isolated home and proves the scoped
-   `west` wrapper resolves the workspace from `HOME`, requires setup
+   `west` wrapper resolves the workspace from `HOME`, requires bootstrap
    readiness, exports `ZEPHYR_BASE`, and execs the venv west.
 4. Builds Zephyr basic blinky for `xiao_nrf54l15/nrf54l15/cpuapp` with
    sysbuild, and verifies the resulting `zephyr.elf` and `domains.yaml`.
@@ -21,8 +24,8 @@ It never flashes hardware.
 
 ## Requirements
 
-- Linux x86_64 with a working Nix installation (the `west-prototype` shell
-  and the exact Zephyr SDK package must build or be cached).
+- Linux x86_64 with a working Nix installation (the public west shell and the
+  exact Zephyr SDK package must build or be cached).
 - Network access to GitHub (west workspace, several GiB).
 - At least 25 GiB free on the filesystem that hosts the isolated home
   (configurable, see below).
@@ -62,9 +65,11 @@ be explicitly approved by the user before running.
 ## CI policy
 
 This script is NOT part of normal CI and no scheduled workflow runs it: it is
-a real multi-gigabyte network setup plus build, kept as local evidence until
-public `backend = "west"` integration defines the manual workflow and caching
-policy (see `docs/development/west-backend-status.md`).
+a real multi-gigabyte network setup plus build, kept as local evidence. Normal
+CI runs the fake-boundary gates instead (`checks.west-bootstrap-tests`,
+`checks.west-versions-tests`, `checks.west-backend-metadata`,
+`checks.west-backend-quoting`, `checks.west-shell-boundary`) — see
+`docs/development/west-backend-status.md`.
 
 ## Output and cleanup
 

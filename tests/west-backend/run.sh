@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 #
-# tests/west-backend/run.sh — clean-room proof for the west backend
-# prototype (mutable west workspace + version-local venv, Nix Zephyr SDK).
+# tests/west-backend/run.sh — clean-room proof for the public west backend
+# (mutable west workspace + version-local venv, Nix Zephyr SDK), entered
+# through the public API: `mkNrfShell { backend = "west"; ncsVersion =
+# "v3.3.0"; }`.
 #
 # Proves end-to-end behavior from an empty, isolated Linux home directory:
-#   1. Enter the west-prototype shell without inheriting developer state.
-#   2. Run `nix-nrf-west-setup --yes` to create the mutable west workspace
+#   1. Enter the public west shell (via the flake's public `lib.mkNrfShell`
+#      with `backend = "west"`) without inheriting developer state.
+#   2. Run `nix-nrf bootstrap --yes` to create the mutable west workspace
 #      and version-local venv under the isolated home.
 #   3. Re-enter the shell with the same isolated home and prove the scoped
 #      `west` wrapper resolves ZEPHYR_BASE/ZEPHYR_SDK_INSTALL_DIR and runs
@@ -57,7 +60,12 @@ step() {
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-# NCS release wired as devShells.west-prototype in flake.nix.
+# Public west backend instance: the flake's own public `lib.mkNrfShell` with
+# `backend = "west"`. The harness enters it with `nix develop --expr` so no
+# dedicated devShell output is needed.
+WEST_SHELL_EXPR='let flake = builtins.getFlake (toString ./.); in flake.lib.x86_64-linux.mkNrfShell { backend = "west"; ncsVersion = "v3.3.0"; }'
+
+# NCS release wired into the public west shell instance above.
 NCS_VERSION="v3.3.0"
 MIN_FREE_GIB="${NIX_NRF_WEST_MIN_FREE_GIB:-25}"
 CLEAN_HOME="${NIX_NRF_WEST_CLEAN_HOME:-}"
@@ -160,8 +168,8 @@ fi
 if [ "${NIX_NRF_WEST_DRY_RUN:-}" = "1" ]; then
   step "Dry run"
   echo "all preconditions satisfied; would run:"
-  echo "  1. nix develop .#west-prototype --ignore-env --set-env-var HOME $CLEAN_HOME (nix-nrf-west-setup --yes: west init + west update + pip requirements)"
-  echo "  2. nix develop .#west-prototype --ignore-env --set-env-var HOME $CLEAN_HOME (fresh shell, scoped west wrapper)"
+  echo "  1. nix develop --impure --expr '<public mkNrfShell backend = west>' --ignore-env --set-env-var HOME $CLEAN_HOME (nix-nrf bootstrap --yes: west init + west update + pip requirements)"
+  echo "  2. nix develop --impure --expr '<public mkNrfShell backend = west>' --ignore-env --set-env-var HOME $CLEAN_HOME (fresh shell, scoped west wrapper)"
   echo "  3. west build -p always -b xiao_nrf54l15/nrf54l15/cpuapp --sysbuild blinky"
   echo "dry run OK"
   exit 0
@@ -169,17 +177,17 @@ fi
 
 # ── Lifecycle 1: cold explicit setup ─────────────────────────────────────────
 step "Lifecycle 1: cold explicit setup (NCS ${NCS_VERSION})"
-echo "selected release: ${NCS_VERSION} (wired as devShells.west-prototype)"
+echo "selected release: ${NCS_VERSION} (public mkNrfShell backend = west)"
 
 [ -z "$(ls -A "$CLEAN_HOME")" ] || fail "precondition" "clean home not empty before setup"
 [ ! -e "$CLEAN_HOME/ncs" ] || fail "precondition" "clean home already contains an ncs directory"
 echo "OK: isolated home is empty"
 
 # First entry: isolated HOME with no inherited developer state. Asserts the
-# environment, runs the real setup, re-checks read-only, and verifies the
+# environment, runs the real bootstrap, re-checks read-only, and verifies the
 # workspace/venv landed under the isolated home with the Nix Zephyr SDK.
 # shellcheck disable=SC2016  # inner script vars expand inside nix develop, not here
-nix develop .#west-prototype \
+nix develop --impure --expr "$WEST_SHELL_EXPR" \
   --ignore-env \
   --set-env-var HOME "$CLEAN_HOME" \
   --set-env-var NIX_NRF_WEST_EXPECTED_HOME "$CLEAN_HOME" \
@@ -187,8 +195,9 @@ nix develop .#west-prototype \
   --command bash -ceu '
     set -euo pipefail
     test "$HOME" = "$NIX_NRF_WEST_EXPECTED_HOME" || { echo "HOME mismatch: $HOME" >&2; exit 1; }
-    command -v nix-nrf-west-setup >/dev/null || { echo "nix-nrf-west-setup not on PATH" >&2; exit 1; }
-    ! command -v nrfutil || { echo "nrfutil must not be on PATH in the west prototype" >&2; exit 1; }
+    command -v nix-nrf >/dev/null || { echo "nix-nrf not on PATH" >&2; exit 1; }
+    ! command -v nrfutil || { echo "nrfutil must not be on PATH in the west backend" >&2; exit 1; }
+    ! command -v nix-nrf-west-setup || { echo "the temporary nix-nrf-west-setup command must not exist" >&2; exit 1; }
     test "$ZEPHYR_TOOLCHAIN_VARIANT" = zephyr || { echo "ZEPHYR_TOOLCHAIN_VARIANT mismatch" >&2; exit 1; }
     case "$ZEPHYR_SDK_INSTALL_DIR" in
       /nix/store/*) ;;
@@ -198,11 +207,11 @@ nix develop .#west-prototype \
       "$HOME"/*) echo "ZEPHYR_SDK_INSTALL_DIR must not point into the clean home" >&2; exit 1 ;;
     esac
     echo "SDK store path: $ZEPHYR_SDK_INSTALL_DIR"
-    echo "OK: HOME isolated; nix-nrf-west-setup present; no nrfutil; Nix Zephyr SDK exported"
+    echo "OK: HOME isolated; backend-aware nix-nrf present; no nrfutil; Nix Zephyr SDK exported"
     t0=$SECONDS
-    nix-nrf-west-setup --yes
+    nix-nrf bootstrap --yes
     echo "setup elapsed: $((SECONDS - t0))s"
-    workspace="$(nix-nrf-west-setup --check --print-workspace)"
+    workspace="$(nix-nrf bootstrap --check --print-sdk-path)"
     echo "workspace: $workspace"
     test "$workspace" = "$HOME/ncs/$NIX_NRF_WEST_EXPECTED_NCS_VERSION" || { echo "unexpected workspace: $workspace" >&2; exit 1; }
     test -f "$workspace/.west/config" || { echo "missing .west/config" >&2; exit 1; }
@@ -219,11 +228,11 @@ nix develop .#west-prototype \
 step "Lifecycle 2: fresh shell and real west sysbuild"
 
 # Second independent entry with the same isolated HOME. Proves the scoped
-# `west` wrapper resolves the workspace from HOME, requires setup readiness,
-# exports ZEPHYR_BASE, and execs the venv west; the real build produces the
-# exact artifacts. Never flashes hardware.
+# `west` wrapper resolves the workspace from HOME, requires bootstrap
+# readiness, exports ZEPHYR_BASE, and execs the venv west; the real build
+# produces the exact artifacts. Never flashes hardware.
 # shellcheck disable=SC2016  # inner script vars expand inside nix develop, not here
-nix develop .#west-prototype \
+nix develop --impure --expr "$WEST_SHELL_EXPR" \
   --ignore-env \
   --set-env-var HOME "$CLEAN_HOME" \
   --set-env-var NIX_NRF_WEST_EXPECTED_HOME "$CLEAN_HOME" \
@@ -232,7 +241,7 @@ nix develop .#west-prototype \
     set -euo pipefail
     test "$HOME" = "$NIX_NRF_WEST_EXPECTED_HOME" || { echo "HOME mismatch: $HOME" >&2; exit 1; }
     echo "HOME: $HOME"
-    ! command -v nrfutil || { echo "nrfutil must not be on PATH in the west prototype" >&2; exit 1; }
+    ! command -v nrfutil || { echo "nrfutil must not be on PATH in the west backend" >&2; exit 1; }
     echo "OK: second entry, no nrfutil"
     t0=$SECONDS
     west build -p always \

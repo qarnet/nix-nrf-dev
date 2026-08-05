@@ -6,6 +6,11 @@ removed: there is no custom `nrfutil-core` package, no launcher/core tarball
 pinning, no runtime `nrfutil install sdk-manager=<version>` step, and no
 controlled `NRFUTIL_HOME` scheme.
 
+The nrfutil backend remains the default and its behavior is unchanged. It is
+no longer the *only* implemented backend: the experimental west backend
+(`backend = "west"`, v3.3.0 / x86_64-linux only) is also public — see
+`docs/development/west-backend-status.md`.
+
 ## Current state
 
 - nrfutil and the sdk-manager extension come from Nixpkgs:

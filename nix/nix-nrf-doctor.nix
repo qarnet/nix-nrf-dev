@@ -7,6 +7,10 @@
 #   - the exact bootstrap module executable in NIX_NRF_DOCTOR_BOOTSTRAP
 #     (never ambient PATH lookup);
 #   - the configured NCS version in NIX_NRF_DOCTOR_NCS_VERSION when non-null;
+#   - the human environment label in NIX_NRF_DOCTOR_ENVIRONMENT_LABEL
+#     (default "SDK/toolchain"; the west backend passes "west
+#     workspace/Zephyr SDK"). Only human message strings use the label — JSON
+#     field names/schema and exit semantics never change.
 #   - the exact udev-rules package store path in NIX_NRF_DOCTOR_UDEV_RULES
 #     when provided (doctor then names the exact packaged rule file in its
 #     remediation);
@@ -21,6 +25,9 @@
   bootstrapCommand,
   ncsVersion ? null,
   udevRules ? null,
+  # Human environment label for headings/status/remediation/help; default
+  # "SDK/toolchain" keeps existing human output byte-identical.
+  environmentLabel ? "SDK/toolchain",
 }:
 pkgs.runCommand "nix-nrf-doctor"
 {
@@ -36,6 +43,7 @@ pkgs.runCommand "nix-nrf-doctor"
   # so wrapProgram arguments never break the generated build script.
   wrapProgram $out/libexec/nix-nrf/doctor \
     --set NIX_NRF_DOCTOR_BOOTSTRAP ${bootstrapCommand} \
+    --set NIX_NRF_DOCTOR_ENVIRONMENT_LABEL ${pkgs.lib.escapeShellArg environmentLabel} \
     --unset PYTHONPATH \
     --unset PYTHONHOME \
     ${pkgs.lib.optionalString (udevRules != null) "--set NIX_NRF_DOCTOR_UDEV_RULES ${udevRules}"} \
