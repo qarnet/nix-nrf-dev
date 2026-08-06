@@ -28,7 +28,32 @@
       grep -F "versions   List NCS releases advertised by Nordic sdk-manager" help.txt >/dev/null || { echo "FAIL: standalone versions wording changed" >&2; cat help.txt >&2; exit 1; }
       grep -F "bootstrap  Ensure the selected NCS SDK source and toolchain exist" help.txt >/dev/null || { echo "FAIL: standalone bootstrap wording changed" >&2; cat help.txt >&2; exit 1; }
       grep -F "doctor     Diagnose SDK/toolchain and probe access (read-only)" help.txt >/dev/null || { echo "FAIL: standalone doctor wording changed" >&2; cat help.txt >&2; exit 1; }
+      "$nixNrf/bin/nix-nrf" help probes > probes-help.txt
+      grep -F "Identify chips attached to CMSIS-DAP probes (read-only)" probes-help.txt >/dev/null || { echo "FAIL: `nix-nrf help probes` did not reach the packaged probe command help" >&2; cat probes-help.txt >&2; exit 1; }
       echo "nix-nrf help wording check passed" >&2
+      mkdir -p "$out"
+    '';
+
+  # Fake-boundary probes test gate: runs
+  # tests/unit/test_nix_nrf_probes.py against a temporary fake
+  # sysfs tree and a fake `openocd` executable first on PATH, with
+  # sandboxed Python stdlib. Proves enumeration filtering, table
+  # parsing, serial filtering, --find exit semantics, missing-OpenOCD
+  # and timeout handling, and the exact read-only OpenOCD argument
+  # vector — no hardware, no real /sys or USB, no network.
+  probesTests =
+    pkgs.runCommand "nix-nrf-probes-tests"
+    {
+      nativeBuildInputs = [pkgs.python3];
+      probesScript = ../../../bin/commands/nix-nrf-probes;
+      testFile = ../../../tests/unit/test_nix_nrf_probes.py;
+    }
+    ''
+      cp "$probesScript" nix-nrf-probes
+      chmod +x nix-nrf-probes
+      cp "$testFile" test_nix_nrf_probes.py
+      NIX_NRF_PROBES_SCRIPT="$PWD/nix-nrf-probes" python3 test_nix_nrf_probes.py
+      echo "probes tests passed" >&2
       mkdir -p "$out"
     '';
 
@@ -125,6 +150,7 @@
 in {
   nix-nrf-help = nixNrfHelpCheck;
   doctor-tests = doctorTests;
+  probes-tests = probesTests;
   udev-rules = udevRulesCheck;
   doctor-udev-wiring = doctorUdevWiringCheck;
 }

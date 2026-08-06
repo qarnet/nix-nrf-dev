@@ -16,6 +16,7 @@
     doctor-tests
     doctor-udev-wiring
     nix-nrf-help
+    probes-tests
     udev-rules
     ;
   inherit (nrfutil) bootstrap-tests bootstrap-quoting;
