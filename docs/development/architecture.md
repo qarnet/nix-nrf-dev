@@ -115,10 +115,15 @@ ownership and construction only.
   "nrfutil"` produce identical derivations.
 - `ncsVersion` is required for both backends.
 - Shell entry stays non-mutating (read-only `--check` bootstrap path);
-  mutation happens only inside the scoped `west` wrapper with approval.
+  mutation happens only through an explicit `nix-nrf bootstrap` invocation or
+  the scoped `west` wrapper, and is approval-gated (interactive confirmation
+  unless `NIX_NRF_BOOTSTRAP_YES=1` / `--yes`) when state is missing.
 - No backend silently falls back: unsupported values fail Nix evaluation
   naming the supported list.
-- Normal checks never perform real workspace/SDK downloads (fake boundaries
-  or dry runs only).
+- Normal checks never perform mutable NCS workspace `west update`, pip
+  workspace setup, sdk-manager bundle installs, or hardware access (fake
+  boundaries or dry runs only); fixed Nix fetch/build inputs — such as the
+  west backend's exact Zephyr SDK package assets — may still be realized by
+  normal builds and checks.
 - Hardware and real clean-room runs require explicit user approval and are
   never part of the default gate.
