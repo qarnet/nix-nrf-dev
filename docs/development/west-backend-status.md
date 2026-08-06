@@ -39,7 +39,7 @@ removed; the proof history below is preserved.
   `ZEPHYR_TOOLCHAIN_VARIANT=zephyr` / `ZEPHYR_SDK_INSTALL_DIR=$out`, and
   in-build validation (sdk_version, CMake package files, compiler `--version`
   after patching, no installer scripts left).
-- `bin/nix-nrf-west-bootstrap` + `nix/backends/west/bootstrap.nix` — west
+- `bin/backends/west/nix-nrf-west-bootstrap` + `nix/backends/west/bootstrap.nix` — west
   bootstrap module packaged at `$out/libexec/nix-nrf/bootstrap` (no standalone
   `$out/bin` command), wrapped with the exact Nix Python (metadata-selected
   `pythonPackage`) and metadata defaults. Public invocation is `nix-nrf
@@ -57,7 +57,7 @@ removed; the proof history below is preserved.
   absolute path (tilde + CWD resolution) before any subprocess runs. Never
   re-inits, never deletes/resets an existing workspace, never runs `west
   zephyr-export`, nrfutil, sudo, or sourced scripts.
-- `nix/backends/west/versions-command.nix` + `bin/nix-nrf-west-versions` —
+- `nix/backends/west/versions-command.nix` + `bin/backends/west/nix-nrf-west-versions` —
   exact `nix-nrf versions` command module for the west backend, packaged at
   `$out/libexec/nix-nrf/versions`. Lists the sorted attr names of
   versions.nix (text, one per line) or a `--json` string array; `--help` exit
@@ -98,7 +98,14 @@ removed; the proof history below is preserved.
   stdout, isolated-HOME default workspace, relative/tilde `--workspace`
   normalization, and every parsed west-constraint operator including strict
   boundaries). The gate also builds the packaged module and asserts it
-  installs only `$out/libexec/nix-nrf/bootstrap` (no standalone command).
+  installs only `$out/libexec/nix-nrf/bootstrap` (no standalone command), and
+  runs the shared fake-west-workspace fixture unit suite
+  (`tests/unit/test_west_workspace_fixture.py`) covering the
+  `tests/fixtures/west-workspace.py` safety contract: stdout/log mode
+  structure and executable behavior, plus filesystem-root, current-HOME,
+  existing-non-empty-directory (sentinel preserved), symlink-escape (target
+  preserved), and non-directory refusals via the public subprocess CLI in
+  temp roots.
 - `checks.west-versions-tests` — fake-boundary tests for the west `nix-nrf
   versions` command module (text, JSON string array, help, unknown-option exit
   2, and the packaged module reporting exactly the metadata release).

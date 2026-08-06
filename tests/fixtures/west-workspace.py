@@ -77,8 +77,11 @@ def _validate(workspace):
         _refuse(f"refusing to create the filesystem root: {ws}")
     if ws == os.path.abspath(os.path.expanduser("~")):
         _refuse(f"refusing to create the current HOME: {ws}")
-    if os.path.exists(ws) and os.listdir(ws):
-        _refuse(f"refusing existing non-empty directory: {ws}")
+    if os.path.exists(ws):
+        if not os.path.isdir(ws):
+            _refuse(f"refusing existing non-directory path: {ws}")
+        if os.listdir(ws):
+            _refuse(f"refusing existing non-empty directory: {ws}")
     # Symlink escape guard: the symlink-resolved location must stay inside
     # the requested workspace.
     effective = os.path.realpath(ws)

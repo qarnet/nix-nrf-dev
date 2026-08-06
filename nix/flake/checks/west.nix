@@ -23,7 +23,14 @@
   # the public `nix-nrf bootstrap` program prefix — no network, no real
   # venv, no real west workspace. Also builds the packaged bootstrap
   # module and asserts it installs only $out/libexec/nix-nrf/bootstrap
-  # (no standalone $out/bin/nix-nrf-west-* command).
+  # (no standalone $out/bin/nix-nrf-west-* command), and runs the
+  # shared fake-west-workspace fixture unit suite
+  # (tests/unit/test_west_workspace_fixture.py) covering the
+  # tests/fixtures/west-workspace.py safety contract: stdout/log mode
+  # structure and executable behavior, plus filesystem-root, current-HOME,
+  # existing-non-empty-directory (sentinel preserved), symlink-escape
+  # (target preserved), and non-directory refusals via the public
+  # subprocess CLI in temp roots.
   westBootstrapTests = let
     module = import ../../backends/west/bootstrap.nix {
       inherit pkgs;
@@ -37,12 +44,16 @@
       inherit module;
       setupScript = ../../../bin/backends/west/nix-nrf-west-bootstrap;
       testFile = ../../../tests/unit/test_nix_nrf_west_bootstrap.py;
+      fixture = ../../../tests/fixtures/west-workspace.py;
+      fixtureTest = ../../../tests/unit/test_west_workspace_fixture.py;
     }
     ''
       cp "$setupScript" nix-nrf-west-bootstrap
       chmod +x nix-nrf-west-bootstrap
       cp "$testFile" test_nix_nrf_west_bootstrap.py
       NIX_NRF_WEST_BOOTSTRAP_SCRIPT="$PWD/nix-nrf-west-bootstrap" python3 test_nix_nrf_west_bootstrap.py
+      cp "$fixtureTest" test_west_workspace_fixture.py
+      NIX_NRF_WEST_FIXTURE="$fixture" python3 test_west_workspace_fixture.py
       [ -x "$module/libexec/nix-nrf/bootstrap" ] || {
         echo "west bootstrap module: missing $module/libexec/nix-nrf/bootstrap" >&2
         exit 1
