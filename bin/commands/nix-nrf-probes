@@ -17,6 +17,7 @@
 # get replugged. This script is the source of truth.
 
 import argparse
+import math
 import os
 import subprocess
 import sys
@@ -115,7 +116,7 @@ def openocd_timeout():
             f"nix-nrf probes: invalid NIX_NRF_PROBES_OPENOCD_TIMEOUT {raw!r} "
             "(positive decimal number expected)"
         )
-    if timeout <= 0:
+    if timeout <= 0 or not math.isfinite(timeout):
         sys.exit(
             f"nix-nrf probes: invalid NIX_NRF_PROBES_OPENOCD_TIMEOUT {raw!r} "
             "(positive decimal number expected)"

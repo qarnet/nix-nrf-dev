@@ -351,11 +351,13 @@ class ProbesTestCase(unittest.TestCase):
         self.assertIn("timeout talking to probe", self.table_row(proc.stdout, "AAA"))
         self.assertEqual(len(self.invocations()), 1)
 
-    # 11. Invalid timeouts: clean failure, OpenOCD never invoked.
+    # 11. Invalid timeouts: clean failure, OpenOCD never invoked. Covers
+    #     non-numeric, zero, negative, and non-finite (nan/inf/-inf) values
+    #     that must never reach the subprocess timeout argument.
     def test_invalid_timeout(self):
         self.make_device("1-1", product="Probe A (CMSIS-DAP)", serial="AAA")
         self.write_fwp("AAA", family="nrf52", part="0x00052840")
-        for bad in ("abc", "0", "-5"):
+        for bad in ("abc", "0", "-5", "nan", "inf", "-inf"):
             with self.subTest(bad=bad):
                 proc = self.run_probes(
                     env_extra={"NIX_NRF_PROBES_OPENOCD_TIMEOUT": bad}
