@@ -7,10 +7,10 @@
 #     store path instead, which lists repository-supported west backend
 #     metadata versions and never invokes nrfutil.
 #   nix-nrf probes     — delegate to the internal probe command module
-#     (`./nix-nrf-probes.nix`, installed at $out/libexec/nix-nrf/probes; read-only
+#     (`./probes.nix`, installed at $out/libexec/nix-nrf/probes; read-only
 #     CMSIS-DAP probe/target identification).
 #   nix-nrf bootstrap  — by default delegates to the internal nrfutil-backed
-#     bootstrap command module (`./backends/nrfutil/bootstrap.nix`, installed at
+#     bootstrap command module (`../backends/nrfutil/bootstrap.nix`, installed at
 #     $out/libexec/nix-nrf/bootstrap; ensures the configured NCS SDK source
 #     and selected toolchain exist). The west backend supplies an exact
 #     `bootstrapCommand` store path instead (its west-workspace/venv bootstrap
@@ -20,7 +20,7 @@
 #     selected values so the shell's `nix-nrf bootstrap` works with no
 #     arguments.
 #   nix-nrf doctor     — delegate to the internal doctor command module
-#     (`./nix-nrf-doctor.nix`, installed at $out/libexec/nix-nrf/doctor;
+#     (`./doctor.nix`, installed at $out/libexec/nix-nrf/doctor;
 #     read-only SDK/toolchain and probe-access diagnostics). The base
 #     `packages.nix-nrf` has no NCS default, so its doctor skips the SDK
 #     selection but still diagnoses hardware; the shell-specific nix-nrf
@@ -40,7 +40,7 @@
   openocd,
   ncsVersion ? null,
   toolchainBundleId ? null,
-  # The udev-rules package (see ./nrf-udev-rules.nix) whose exact store path
+  # The udev-rules package (see ../hardware/udev-rules.nix) whose exact store path
   # the doctor wrapper reports in its remediation (NIX_NRF_DOCTOR_UDEV_RULES).
   # flake.nix and mkNrfShell (internal `udevRules` closure wiring) always pass
   # the real package, so both the standalone and the shell-specific doctor
@@ -71,7 +71,7 @@ assert bootstrapCommand
 != null
 || nrfutilPackage != null
 || throw "nix-nrf: bootstrapCommand or nrfutilPackage is required (west backend must pass its exact bootstrap command; the default needs the packaged nrfutil)"; let
-  nrfProbes = import ./nix-nrf-probes.nix {
+  nrfProbes = import ./probes.nix {
     inherit pkgs openocd;
   };
   # One shared bootstrap module value: the dispatcher and the doctor use the
@@ -82,7 +82,7 @@ assert bootstrapCommand
     if bootstrapCommand != null
     then bootstrapCommand
     else "${
-      import ./backends/nrfutil/bootstrap.nix {
+      import ../backends/nrfutil/bootstrap.nix {
         inherit
           pkgs
           nrfutilPackage
@@ -91,7 +91,7 @@ assert bootstrapCommand
           ;
       }
     }/libexec/nix-nrf/bootstrap";
-  nrfDoctor = import ./nix-nrf-doctor.nix {
+  nrfDoctor = import ./doctor.nix {
     inherit
       pkgs
       ncsVersion

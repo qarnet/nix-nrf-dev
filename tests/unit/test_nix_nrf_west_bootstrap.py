@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 #
 # tests/unit/test_nix_nrf_west_bootstrap.py — fake-boundary unit tests for the
-# west backend bootstrap command (bin/nix-nrf-west-bootstrap).
+# west backend bootstrap command (bin/backends/west/nix-nrf-west-bootstrap).
 #
 # Exercises the command as a subprocess through public-style args and
 # environment against temporary fake python/venv/west/pip boundaries. No
@@ -44,7 +44,7 @@ def _resolve_bootstrap_script() -> str:
         raise RuntimeError(
             "NIX_NRF_WEST_BOOTSTRAP_SCRIPT is not set and the repo root is unavailable"
         )
-    return str(repo_root / "bin" / "nix-nrf-west-bootstrap")
+    return str(repo_root / "bin" / "backends" / "west" / "nix-nrf-west-bootstrap")
 
 
 BOOTSTRAP_SCRIPT = _resolve_bootstrap_script()

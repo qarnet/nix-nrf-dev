@@ -136,7 +136,7 @@ init) against the new pins, so updates are validated before merge. This is
 standard hygiene for any published flake.
 
 **How:** New workflow, weekly cron, PRs labeled `dependencies`. The
-openocd *source* pin in `nix/openocd-master.nix` is separate and stays
+openocd *source* pin in `nix/hardware/openocd.nix` is separate and stays
 manual (bumping it requires hardware verification per CONTRIBUTING.md) —
 state that in the workflow's PR body template.
 
@@ -154,7 +154,7 @@ state that in the workflow's PR body template.
 `aarch64-linux`) and its derivation unconditionally pulls
 `segger-jlink-headless`; on Darwin the package throws, so a Darwin user
 discovers the limit by evaluating the shell. Library flakes state support
-up front. Note: `bin/nix-nrf-probes` enumerates probes via `/sys/bus/usb/devices`,
+up front. Note: `bin/commands/nix-nrf-probes` enumerates probes via `/sys/bus/usb/devices`,
 so it is Linux-only at runtime regardless of what builds; either document
 that or gate the package to Linux.
 
@@ -233,7 +233,7 @@ hook; update README examples to use it. Superseded in spirit by 3.2 (the
 flash CLI embeds the recipes), but this is a 20-minute step worth doing
 now.
 
-### 2.3 `[ ]` Unit tests for `bin/nix-nrf-probes`
+### 2.3 `[ ]` Unit tests for `bin/commands/nix-nrf-probes`
 
 **What:** A pytest suite run as `checks.nix-nrf-probes-tests`, testing the pure
 logic against fixtures: sysfs-enumeration parsing, `FWP|`-line parsing of
@@ -248,7 +248,7 @@ signatures) is exactly the kind of thing a future contributor breaks while
 adding nRF52 support. Testing it requires no hardware: inject fake sysfs
 trees (tmpdir) and canned openocd stdout.
 
-**How:** Light refactor of `bin/nix-nrf-probes` to make enumeration and openocd
+**How:** Light refactor of `bin/commands/nix-nrf-probes` to make enumeration and openocd
 invocation injectable (module-level functions already mostly allow this);
 add `tests/unit/test_nrf_probes.py`; wire a `checks` derivation:
 `pkgs.runCommand` + `python3.withPackages (ps: [ps.pytest])`. black already
@@ -359,7 +359,7 @@ policy ("never assume the mapping, always `--find`") the *default* instead
 of a documented convention, and gives flash behavior a stable CLI surface
 that scripts and CI can rely on while the TCL underneath evolves.
 
-**How:** Python (same conventions as `bin/nix-nrf-probes` — black, wrapped with
+**How:** Python (same conventions as `bin/commands/nix-nrf-probes` — black, wrapped with
 openocd on PATH, unset PYTHONHOME/PYTHONPATH). Embed the TCL via the
 derivation (subsumes 2.2's `NRF_TCL_DIR` for this use). Chip→(cfg, recipe,
 proc) table mirrors `PART_NAMES`. Clear error taxonomy: no probe /

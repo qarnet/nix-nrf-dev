@@ -263,7 +263,7 @@ Likely files:
 ```text
 nix/backends/default.nix
 nix/sdk-nrf/environment.nix
-nix/nix-nrf.nix
+nix/commands/default.nix
 flake.nix
 ```
 

@@ -10,7 +10,7 @@
   openocd-master,
   nrfutil,
   udevRules,
-  # Shared nix-nrf constructor (nix/nix-nrf.nix), supplied by the nrfutil
+  # Shared nix-nrf constructor (nix/commands/default.nix), supplied by the nrfutil
   # backend entry point; applied here with this shell's selector values.
   nixNrfConstructor,
 }: {

@@ -63,12 +63,12 @@ removed; the proof history below is preserved.
   versions.nix (text, one per line) or a `--json` string array; `--help` exit
   0, unknown options exit 2. Never invokes nrfutil; the script source
   contains no release literals.
-- `nix/nix-nrf.nix` — accepts optional exact `versionsCommand` /
+- `nix/commands/default.nix` — accepts optional exact `versionsCommand` /
   `bootstrapCommand` store paths. The standalone `packages.nix-nrf` and the
   nrfutil shells keep today's nrfutil-backed versions/bootstrap; the west
   shell dispatches to its exact west command modules (no nrfutil constructed
   or referenced).
-- `nix/nix-nrf-doctor.nix` + `bin/nix-nrf-doctor` — accept an
+- `nix/commands/doctor.nix` + `bin/commands/nix-nrf-doctor` — accept an
   `environmentLabel` (default `"SDK/toolchain"`; west shell passes `"west
   workspace/Zephyr SDK"`). Only human message strings use the label; JSON
   field names/schema and exit semantics never change. The doctor still

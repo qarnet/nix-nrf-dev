@@ -1,5 +1,5 @@
 # nix/backends/west/bootstrap.nix — west backend west-workspace/venv bootstrap
-# module. Installs bin/nix-nrf-west-bootstrap at
+# module. Installs bin/backends/west/nix-nrf-west-bootstrap at
 # $out/libexec/nix-nrf/bootstrap and exposes no standalone $out/bin command:
 # public invocation is only `nix-nrf bootstrap` (via the shell-specific
 # backend-aware nix-nrf facade).
@@ -33,27 +33,45 @@
   python =
     pkgs.${pythonPackage}
       or (throw "nix-nrf-west-bootstrap: unknown Python package '${pythonPackage}' for NCS ${metadata.ncsVersion}");
+  mkPythonCommand = import ../../lib/mk-python-command.nix {inherit pkgs;};
 in
-  pkgs.runCommand "nix-nrf-west-bootstrap"
-  {
-    nativeBuildInputs = [
-      pkgs.makeWrapper
-      pkgs.python3
+  mkPythonCommand {
+    pname = "nix-nrf-west-bootstrap";
+    script = ../../../bin/backends/west/nix-nrf-west-bootstrap;
+    destination = "bootstrap";
+    wrapperArgs = [
+      [
+        "--set"
+        "NIX_NRF_WEST_PYTHON"
+        "${python}/bin/python3"
+      ]
+      [
+        "--set"
+        "NIX_NRF_WEST_NCS_VERSION"
+        metadata.ncsVersion
+      ]
+      [
+        "--set"
+        "NIX_NRF_WEST_TESTED_WEST_VERSION"
+        metadata.testedWestVersion
+      ]
+      [
+        "--set"
+        "NIX_NRF_WEST_REQUIREMENTS"
+        (builtins.concatStringsSep "\n" metadata.requirements)
+      ]
+      [
+        "--set"
+        "NIX_NRF_WEST_PIP_CONSTRAINTS"
+        (builtins.concatStringsSep "\n" (metadata.pipConstraints or []))
+      ]
+      [
+        "--unset"
+        "PYTHONPATH"
+      ]
+      [
+        "--unset"
+        "PYTHONHOME"
+      ]
     ];
   }
-  ''
-    install -Dm755 ${../../../bin/nix-nrf-west-bootstrap} $out/libexec/nix-nrf/bootstrap
-    patchShebangs $out/libexec/nix-nrf/bootstrap
-    # Metadata values are shell-escaped before interpolation so wrapProgram
-    # arguments never break the generated build script.
-    wrapProgram $out/libexec/nix-nrf/bootstrap \
-      --set NIX_NRF_WEST_PYTHON ${python}/bin/python3 \
-      --set NIX_NRF_WEST_NCS_VERSION ${pkgs.lib.escapeShellArg metadata.ncsVersion} \
-      --set NIX_NRF_WEST_TESTED_WEST_VERSION ${pkgs.lib.escapeShellArg metadata.testedWestVersion} \
-      --set NIX_NRF_WEST_REQUIREMENTS ${pkgs.lib.escapeShellArg (pkgs.lib.concatStringsSep "\n" metadata.requirements)} \
-      --set NIX_NRF_WEST_PIP_CONSTRAINTS ${
-      pkgs.lib.escapeShellArg (pkgs.lib.concatStringsSep "\n" (metadata.pipConstraints or []))
-    } \
-      --unset PYTHONPATH \
-      --unset PYTHONHOME
-  ''

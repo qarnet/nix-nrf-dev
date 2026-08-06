@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 #
 # tests/unit/test_nix_nrf_doctor.py — fake-boundary unit tests for the
-# `nix-nrf doctor` command module (bin/nix-nrf-doctor).
+# `nix-nrf doctor` command module (bin/commands/nix-nrf-doctor).
 #
 # Exercises the command as a subprocess through public-style args and
 # environment against temporary fake sysfs/dev roots and a fake bootstrap
@@ -38,7 +38,7 @@ def _resolve_doctor_script() -> str:
         raise RuntimeError(
             "NIX_NRF_DOCTOR_SCRIPT is not set and the repo root is unavailable"
         )
-    return str(repo_root / "bin" / "nix-nrf-doctor")
+    return str(repo_root / "bin" / "commands" / "nix-nrf-doctor")
 
 
 DOCTOR_SCRIPT = _resolve_doctor_script()

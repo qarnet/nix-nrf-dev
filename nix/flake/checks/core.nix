@@ -43,7 +43,7 @@
     pkgs.runCommand "nix-nrf-doctor-tests"
     {
       nativeBuildInputs = [pkgs.python3];
-      doctorScript = ../../../bin/nix-nrf-doctor;
+      doctorScript = ../../../bin/commands/nix-nrf-doctor;
       testFile = ../../../tests/unit/test_nix_nrf_doctor.py;
     }
     ''

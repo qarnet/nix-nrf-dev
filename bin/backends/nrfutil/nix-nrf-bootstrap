@@ -5,7 +5,7 @@
 # toolchain exist before Nordic's scoped toolchain environment is loaded.
 #
 # Internal command module for the `nix-nrf` facade: installed by
-# nix/nix-nrf-bootstrap.nix at $out/libexec/nix-nrf/bootstrap and wrapped with
+# nix/backends/nrfutil/bootstrap.nix at $out/libexec/nix-nrf/bootstrap and wrapped with
 # the exact nrfutil store executable in NIX_NRF_NRFUTIL. Not a public package.
 #
 # sdk-manager interfaces (verified against nrfutil 8.2.0):

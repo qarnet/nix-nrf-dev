@@ -35,7 +35,7 @@
     {
       nativeBuildInputs = [pkgs.python3];
       inherit module;
-      setupScript = ../../../bin/nix-nrf-west-bootstrap;
+      setupScript = ../../../bin/backends/west/nix-nrf-west-bootstrap;
       testFile = ../../../tests/unit/test_nix_nrf_west_bootstrap.py;
     }
     ''
@@ -220,6 +220,8 @@
   in
     pkgs.runCommand "west-backend-quoting-check"
     {
+      nativeBuildInputs = [pkgs.python3];
+      fixture = ../../../tests/fixtures/west-workspace.py;
       inherit (nastyShell) shellHook;
       nastyWest = nastyShell.passthru.westWrapper;
       cleanShellHook = cleanShell.shellHook;
@@ -240,54 +242,36 @@
       printf '%s\n' "$shellHook" > hook.sh
       mkdir -p home
       HOME="$PWD/home" bash -c '
-        set -eu
-        source "$1"
-        [ "$_workspace" = "$HOME/ncs/$2" ] || { echo "FAIL: workspace mismatch (quote artifact?): $_workspace" >&2; exit 1; }
-        [ "$_sdk_version" = "$3" ] || { echo "FAIL: sdk version mismatch: $_sdk_version" >&2; exit 1; }
-        [ "$_python_version" = "$4" ] || { echo "FAIL: python version mismatch: $_python_version" >&2; exit 1; }
-        [ -n "$_workspace" ] || { echo "FAIL: workspace variable empty" >&2; exit 1; }
-        echo "shell hook quoting check OK: $_workspace" >&2
+      set -eu
+      source "$1"
+      [ "$_workspace" = "$HOME/ncs/$2" ] || { echo "FAIL: workspace mismatch (quote artifact?): $_workspace" >&2; exit 1; }
+      [ "$_sdk_version" = "$3" ] || { echo "FAIL: sdk version mismatch: $_sdk_version" >&2; exit 1; }
+      [ "$_python_version" = "$4" ] || { echo "FAIL: python version mismatch: $_python_version" >&2; exit 1; }
+      [ -n "$_workspace" ] || { echo "FAIL: workspace variable empty" >&2; exit 1; }
+      echo "shell hook quoting check OK: $_workspace" >&2
       ' bash hook.sh "$nastyNcsVersion" "$nastySdkVersion" "$nastyPython"
 
       # ── Shell hook with clean (default) metadata ────────────────────
       printf '%s\n' "$cleanShellHook" > clean-hook.sh
       HOME="$PWD/home" bash -c '
-        set -eu
-        source "$1"
-        [ "$_workspace" = "$HOME/ncs/v3.3.0" ] || { echo "FAIL: default workspace mismatch: $_workspace" >&2; exit 1; }
-        echo "clean shell hook check OK: $_workspace" >&2
+      set -eu
+      source "$1"
+      [ "$_workspace" = "$HOME/ncs/v3.3.0" ] || { echo "FAIL: default workspace mismatch: $_workspace" >&2; exit 1; }
+      echo "clean shell hook check OK: $_workspace" >&2
       ' bash clean-hook.sh
 
       # ── Scoped west wrapper against a fake-ready workspace ──────────
-      ws="home/ncs/$nastyNcsVersion"
-      mkdir -p "$ws/.west" "$ws/nrf/scripts" "$ws/zephyr/scripts" "$ws/bootloader/mcuboot/scripts" "$ws/.venv/bin"
-      printf '[manifest]\npath = nrf\nfile = west.yml\n' > "$ws/.west/config"
-      printf 'manifest:\n' > "$ws/nrf/west.yml"
-      printf '#!/bin/sh\n' > "$ws/zephyr/zephyr-env.sh"
-      printf -- '-r requirements-base.txt\n' > "$ws/zephyr/scripts/requirements.txt"
-      printf 'west>=0.14.0\n' > "$ws/zephyr/scripts/requirements-base.txt"
-      printf -- '-r requirements-base.txt\n' > "$ws/nrf/scripts/requirements.txt"
-      printf 'west>=1.4.0\n' > "$ws/nrf/scripts/requirements-base.txt"
-      printf 'pyelftools>=0.29\n' > "$ws/bootloader/mcuboot/scripts/requirements.txt"
-      for n in python pip; do
-        printf '#!/bin/sh\nexit 0\n' > "$ws/.venv/bin/$n"
-        chmod +x "$ws/.venv/bin/$n"
-      done
-      cat > "$ws/.venv/bin/west" <<'FAKEWEST'
-      #!/bin/sh
-      if [ "$1" = "--version" ]; then
-        echo "West version: v1.4.0"
-        exit 0
-      fi
-      echo "FAKE_WEST argv=$* ZEPHYR_BASE=$ZEPHYR_BASE"
-      FAKEWEST
-      chmod +x "$ws/.venv/bin/west"
+      # The shared stdlib-only fixture (tests/fixtures/west-workspace.py)
+      # creates the ready workspace structure (manifest, requirement roots,
+      # fake venv python/pip/west); stdout mode matches the quoting gate's
+      # fake boundaries.
+      python3 "$fixture" --workspace "$PWD/home/ncs/$nastyNcsVersion" --mode stdout
 
       HOME="$PWD/home" "$nastyWest/bin/west" list --format=json > wrapper.out
       grep -F "FAKE_WEST argv=list --format=json ZEPHYR_BASE=$PWD/home/ncs/$nastyNcsVersion/zephyr" wrapper.out >/dev/null || {
-        echo "FAIL: wrapper did not reach the venv west with the correct ZEPHYR_BASE" >&2
-        cat wrapper.out >&2
-        exit 1
+      echo "FAIL: wrapper did not reach the venv west with the correct ZEPHYR_BASE" >&2
+      cat wrapper.out >&2
+      exit 1
       }
       echo "west wrapper quoting check OK" >&2
       mkdir -p "$out"
@@ -355,7 +339,7 @@
       inherit pkgs;
       versions = westBackendVersions;
     };
-    westDoctorModule = import ../../nix-nrf-doctor.nix {
+    westDoctorModule = import ../../commands/doctor.nix {
       inherit pkgs;
       udevRules = nrfUdevRules;
       ncsVersion = "v3.3.0";
@@ -366,6 +350,7 @@
     pkgs.runCommand "west-shell-boundary-check"
     {
       nativeBuildInputs = [pkgs.python3];
+      fixture = ../../../tests/fixtures/west-workspace.py;
       inherit (westShell) shellHook;
       inherit
         nixNrfPkg
@@ -388,36 +373,12 @@
 
       export HOME="$PWD/home"
       mkdir -p "$HOME"
+      # The shared stdlib-only fixture (tests/fixtures/west-workspace.py)
+      # creates the ready workspace structure (manifest, requirement roots,
+      # fake venv python/pip/west); log mode matches the boundary gate's
+      # venv.log boundaries.
       ws="$HOME/ncs/v3.3.0"
-      mkdir -p "$ws/.west" "$ws/nrf/scripts" "$ws/zephyr/scripts" "$ws/bootloader/mcuboot/scripts" "$ws/.venv/bin"
-      printf '[manifest]\npath = nrf\nfile = west.yml\n' > "$ws/.west/config"
-      printf 'manifest:\n' > "$ws/nrf/west.yml"
-      printf '#!/bin/sh\n' > "$ws/zephyr/zephyr-env.sh"
-      printf -- '-r requirements-base.txt\n' > "$ws/zephyr/scripts/requirements.txt"
-      printf 'west>=0.14.0\n' > "$ws/zephyr/scripts/requirements-base.txt"
-      printf -- '-r requirements-base.txt\n' > "$ws/nrf/scripts/requirements.txt"
-      printf 'west>=1.4.0\n' > "$ws/nrf/scripts/requirements-base.txt"
-      printf 'pyelftools>=0.29\n' > "$ws/bootloader/mcuboot/scripts/requirements.txt"
-      cat > "$ws/.venv/bin/python" <<'FAKEPY'
-      #!/bin/sh
-      echo "python argv=$*" >> "$HOME/venv.log"
-      exit 0
-      FAKEPY
-      cat > "$ws/.venv/bin/pip" <<'FAKEPIP'
-      #!/bin/sh
-      echo "pip argv=$*" >> "$HOME/venv.log"
-      exit 0
-      FAKEPIP
-      cat > "$ws/.venv/bin/west" <<'FAKEWEST'
-      #!/bin/sh
-      echo "west argv=$* ZEPHYR_BASE=''${ZEPHYR_BASE:-} ZEPHYR_TOOLCHAIN_VARIANT=''${ZEPHYR_TOOLCHAIN_VARIANT:-} ZEPHYR_SDK_INSTALL_DIR=''${ZEPHYR_SDK_INSTALL_DIR:-} PATH=$PATH" >> "$HOME/venv.log"
-      if [ "$1" = "--version" ]; then
-      echo "West version: v1.4.0"
-      exit 0
-      fi
-      exit 0
-      FAKEWEST
-      chmod +x "$ws/.venv/bin/python" "$ws/.venv/bin/pip" "$ws/.venv/bin/west"
+      python3 "$fixture" --workspace "$ws" --mode log
 
       # ── Shell hook: read-only, exact workspace, caller options ──────
       printf '%s\n' "$shellHook" > hook.sh

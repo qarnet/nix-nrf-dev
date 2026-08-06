@@ -160,7 +160,7 @@
       nrfutil
       udevRules
       ;
-    nixNrf = import ../nix-nrf.nix;
+    nixNrf = import ../commands/default.nix;
   };
   westBackend = import ./west/default.nix {
     inherit

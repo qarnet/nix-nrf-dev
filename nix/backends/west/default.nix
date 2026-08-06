@@ -46,7 +46,7 @@
     # Shell-specific backend-aware nix-nrf: versions/bootstrap dispatch to
     # the exact west command modules and no nrfutil participates; doctor gets
     # the west bootstrap command plus the west environment label.
-    westNixNrf = import ../../nix-nrf.nix {
+    westNixNrf = import ../../commands/default.nix {
       inherit
         pkgs
         udevRules

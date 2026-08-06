@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 #
 # tests/unit/test_nix_nrf_bootstrap.py — fake-boundary unit tests for the
-# `nix-nrf bootstrap` command module (bin/nix-nrf-bootstrap).
+# `nix-nrf bootstrap` command module (bin/backends/nrfutil/nix-nrf-bootstrap).
 #
 # Exercises the command as a subprocess through public-style args and
 # environment against a temporary fake `nrfutil` executable and state
@@ -36,7 +36,7 @@ def _resolve_bootstrap_script() -> str:
         raise RuntimeError(
             "NIX_NRF_BOOTSTRAP_SCRIPT is not set and the repo root is unavailable"
         )
-    return str(repo_root / "bin" / "nix-nrf-bootstrap")
+    return str(repo_root / "bin" / "backends" / "nrfutil" / "nix-nrf-bootstrap")
 
 
 BOOTSTRAP_SCRIPT = _resolve_bootstrap_script()

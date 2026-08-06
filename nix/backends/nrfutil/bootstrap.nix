@@ -1,7 +1,7 @@
 # nix/backends/nrfutil/bootstrap.nix — nrfutil backend SDK/toolchain bootstrap
 # module for the `nix-nrf bootstrap` subcommand. Not a public package: no
-# `$out/bin` binary is installed. `nix/nix-nrf.nix` resolves the exact store
-# path of the wrapped command below and execs it.
+# `$out/bin` binary is installed. `nix/commands/default.nix` resolves the
+# exact store path of the wrapped command below and execs it.
 #
 # The wrapper pins the exact selected nrfutil executable in NIX_NRF_NRFUTIL
 # (never ambient PATH lookup) and, when non-null, the configured defaults in
@@ -13,32 +13,41 @@
   nrfutilPackage,
   ncsVersion ? null,
   toolchainBundleId ? null,
-}:
-pkgs.runCommand "nix-nrf-bootstrap"
-{
-  nativeBuildInputs = [
-    pkgs.makeWrapper
-    pkgs.python3
-  ];
-}
-''
-  install -Dm755 ${../../../bin/nix-nrf-bootstrap} $out/libexec/nix-nrf/bootstrap
-  patchShebangs $out/libexec/nix-nrf/bootstrap
-  # NCS toolchain shells export PYTHONPATH/PYTHONHOME for their own
-  # python; unset them so the wrapped store python uses its stdlib.
-  # Caller-controlled selector values are shell-escaped before
-  # interpolation so wrapProgram arguments never break the generated
-  # build script (spaces/quotes in ncsVersion or toolchainBundleId).
-  wrapProgram $out/libexec/nix-nrf/bootstrap \
-    --set NIX_NRF_NRFUTIL ${nrfutilPackage}/bin/nrfutil \
-    --unset PYTHONPATH \
-    --unset PYTHONHOME \
-    ${
-    pkgs.lib.optionalString (
-      ncsVersion != null
-    ) "--set NIX_NRF_NCS_VERSION ${pkgs.lib.escapeShellArg ncsVersion}"
-  } \
-    ${pkgs.lib.optionalString (
-    toolchainBundleId != null
-  ) "--set NIX_NRF_TOOLCHAIN_BUNDLE_ID ${pkgs.lib.escapeShellArg toolchainBundleId}"}
-''
+}: let
+  mkPythonCommand = import ../../lib/mk-python-command.nix {inherit pkgs;};
+in
+  mkPythonCommand {
+    pname = "nix-nrf-bootstrap";
+    script = ../../../bin/backends/nrfutil/nix-nrf-bootstrap;
+    destination = "bootstrap";
+    wrapperArgs =
+      [
+        [
+          "--set"
+          "NIX_NRF_NRFUTIL"
+          "${nrfutilPackage}/bin/nrfutil"
+        ]
+        [
+          "--unset"
+          "PYTHONPATH"
+        ]
+        [
+          "--unset"
+          "PYTHONHOME"
+        ]
+      ]
+      ++ pkgs.lib.optionals (ncsVersion != null) [
+        [
+          "--set"
+          "NIX_NRF_NCS_VERSION"
+          ncsVersion
+        ]
+      ]
+      ++ pkgs.lib.optionals (toolchainBundleId != null) [
+        [
+          "--set"
+          "NIX_NRF_TOOLCHAIN_BUNDLE_ID"
+          toolchainBundleId
+        ]
+      ];
+  }

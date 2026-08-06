@@ -83,11 +83,11 @@ Examples:
 
 ## Bumping the openocd pin
 
-`nix/openocd-master.nix` pins a specific upstream `openocd` revision. To bump:
+`nix/hardware/openocd.nix` pins a specific upstream `openocd` revision. To bump:
 
 1. Find a newer revision at <https://github.com/openocd-org/openocd> that has
    the nRF53/nRF54L support you need.
-2. Update `rev` in `nix/openocd-master.nix`.
+2. Update `rev` in `nix/hardware/openocd.nix`.
 3. Update `hash` (run `nix build .#openocd-master-unwrapped` — Nix will print
    the correct `sha256-...` hash for the failed fetch; paste it in).
 4. Run `nix build .#openocd-master-unwrapped -L` and `nix build .#openocd-master -L`.
@@ -101,7 +101,7 @@ openocd. To add one:
 
 1. Add `tcl/<chip>_flash.tcl` with the flashing procs.
 2. Document it in `README.md` under "Flash recipes (`tcl/`)".
-3. If the chip needs probe identification, ensure `bin/nix-nrf-probes` knows its
+3. If the chip needs probe identification, ensure `bin/commands/nix-nrf-probes` knows its
    family signature (DPIDR → AP IDR map → FICR PART/VARIANT).
 
 ## CI and the openocd-master build
@@ -118,5 +118,5 @@ test procedure.
 ## What this repo is not
 
 This is a Nix flake library, not a firmware project. The `tcl/` recipes and
-`bin/nix-nrf-probes` are reusable tools consumed by other repos; they are not
+`bin/commands/nix-nrf-probes` are reusable tools consumed by other repos; they are not
 flashed here. Do not add board-specific firmware or build artifacts.

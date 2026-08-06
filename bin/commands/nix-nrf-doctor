@@ -4,7 +4,7 @@
 # nix-nrf doctor — read-only environment and probe-access diagnostics.
 #
 # Internal command module for the `nix-nrf` facade: installed by
-# nix/nix-nrf-doctor.nix at $out/libexec/nix-nrf/doctor and wrapped with the
+# nix/commands/doctor.nix at $out/libexec/nix-nrf/doctor and wrapped with the
 # exact bootstrap module path, the configured NCS version (when set), and the
 # udev-rules package store path. Not a public package.
 #

@@ -4,7 +4,7 @@
 # nix-nrf-west-bootstrap — create/update the mutable west workspace and
 # version-local Python virtual environment for the west backend.
 #
-# Internal backend command: installed by nix/nix-nrf-west-bootstrap.nix at
+# Internal backend command: installed by nix/backends/west/bootstrap.nix at
 # $out/libexec/nix-nrf/bootstrap (no standalone $out/bin command) and wrapped
 # with the exact Nix Python interpreter and metadata defaults:
 #   NIX_NRF_WEST_PYTHON                 exact Nix Python executable

@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: MIT
 #
 # tests/unit/test_nix_nrf_west_versions.py — fake-boundary unit tests for the
-# west backend `nix-nrf versions` command module (bin/nix-nrf-west-versions,
+# west backend `nix-nrf versions` command module
+# (bin/backends/west/nix-nrf-west-versions,
 # packaged by nix/backends/west/versions-command.nix).
 #
 # The wrapped module is exercised as a subprocess; the supported-release list
@@ -38,7 +39,7 @@ def _resolve_command() -> str:
         raise RuntimeError(
             "NIX_NRF_WEST_VERSIONS_COMMAND is not set and the repo root is unavailable"
         )
-    return str(repo_root / "bin" / "nix-nrf-west-versions")
+    return str(repo_root / "bin" / "backends" / "west" / "nix-nrf-west-versions")
 
 
 VERSIONS_COMMAND = _resolve_command()

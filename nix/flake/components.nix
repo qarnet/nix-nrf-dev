@@ -4,7 +4,7 @@
 # public `mkNrfShell` factory. Receives the configured Nixpkgs instance
 # (per-system.nix) and returns every construction the flake delegates to.
 {pkgs}: let
-  openocd-master-unwrapped = import ../openocd-master.nix {inherit pkgs;};
+  openocd-master-unwrapped = import ../hardware/openocd.nix {inherit pkgs;};
 
   # The from-source openocd build dlopens libudev at runtime; wrap it so
   # the binary works outside a NixOS system profile.
@@ -19,7 +19,7 @@
   # openocd-master-unwrapped build — no repository VID/PID catalog.
   # Consumed by the NixOS module (host configuration) and reported by
   # `nix-nrf doctor` remediation.
-  nrfUdevRules = import ../nrf-udev-rules.nix {
+  nrfUdevRules = import ../hardware/udev-rules.nix {
     inherit pkgs;
     openocd = openocd-master-unwrapped;
   };
@@ -32,14 +32,14 @@
   # Public project CLI facade: fixed dispatcher over the default
   # composed nrfutil (versions), the internal probe command module
   # (probes), and the internal bootstrap command module (bootstrap),
-  # which nix-nrf owns via nix/nix-nrf-probes.nix and
+  # which nix-nrf owns via nix/commands/probes.nix and
   # nix/backends/nrfutil/bootstrap.nix, plus the internal doctor command module
-  # (doctor) via nix/nix-nrf-doctor.nix. ncsVersion/toolchainBundleId
+  # (doctor) via nix/commands/doctor.nix. ncsVersion/toolchainBundleId
   # default to null here, so the standalone package requires an explicit
   # --ncs-version; mkNrfShell instantiates its own nix-nrf with the
   # shell's selector values as configured defaults (and the west backend
   # supplies its exact versions/bootstrap command modules instead).
-  nix-nrf = import ../nix-nrf.nix {
+  nix-nrf = import ../commands/default.nix {
     inherit pkgs;
     nrfutilPackage = nrfutil;
     openocd = openocd-master;

@@ -3,9 +3,9 @@
 #
 # nix-nrf-west-versions — `nix-nrf versions` command module for the west
 # backend: lists the NCS releases supported by the west backend metadata
-# (nix/west-backend/versions.nix).
+# (nix/backends/west/versions.nix).
 #
-# Internal backend command: installed by nix/west-backend/versions-command.nix
+# Internal backend command: installed by nix/backends/west/versions-command.nix
 # at $out/libexec/nix-nrf/versions and wrapped with the metadata version list
 # baked from the sorted attr names of versions.nix (the script source itself
 # contains no release literals):

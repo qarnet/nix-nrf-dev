@@ -1,6 +1,6 @@
 # nix/backends/west/versions-command.nix — packaged `nix-nrf versions` command
-# module for the west backend. Installs bin/nix-nrf-west-versions at
-# $out/libexec/nix-nrf/versions and exposes no standalone $out/bin command.
+# module for the west backend. Installs bin/backends/west/nix-nrf-west-versions
+# at $out/libexec/nix-nrf/versions and exposes no standalone $out/bin command.
 #
 # The supported-release list comes ONLY from the sorted attr names of
 # versions.nix (baked into the wrapper as NIX_NRF_WEST_VERSIONS /
@@ -19,23 +19,30 @@
   versions,
 }: let
   sortedNames = builtins.sort builtins.lessThan (builtins.attrNames versions);
+  mkPythonCommand = import ../../lib/mk-python-command.nix {inherit pkgs;};
 in
-  pkgs.runCommand "nix-nrf-versions-west"
-  {
-    nativeBuildInputs = [
-      pkgs.makeWrapper
-      pkgs.python3
+  mkPythonCommand {
+    pname = "nix-nrf-versions-west";
+    script = ../../../bin/backends/west/nix-nrf-west-versions;
+    destination = "versions";
+    wrapperArgs = [
+      [
+        "--set"
+        "NIX_NRF_WEST_VERSIONS"
+        (builtins.concatStringsSep "\n" sortedNames)
+      ]
+      [
+        "--set"
+        "NIX_NRF_WEST_VERSIONS_JSON"
+        (builtins.toJSON sortedNames)
+      ]
+      [
+        "--unset"
+        "PYTHONPATH"
+      ]
+      [
+        "--unset"
+        "PYTHONHOME"
+      ]
     ];
   }
-  ''
-    install -Dm755 ${../../../bin/nix-nrf-west-versions} $out/libexec/nix-nrf/versions
-    patchShebangs $out/libexec/nix-nrf/versions
-    # Values are shell-escaped before interpolation so wrapProgram arguments
-    # never break the generated build script (version strings with spaces or
-    # quotes would otherwise terminate the wrapper's argument list).
-    wrapProgram $out/libexec/nix-nrf/versions \
-      --set NIX_NRF_WEST_VERSIONS ${pkgs.lib.escapeShellArg (pkgs.lib.concatStringsSep "\n" sortedNames)} \
-      --set NIX_NRF_WEST_VERSIONS_JSON ${pkgs.lib.escapeShellArg (builtins.toJSON sortedNames)} \
-      --unset PYTHONPATH \
-      --unset PYTHONHOME
-  ''

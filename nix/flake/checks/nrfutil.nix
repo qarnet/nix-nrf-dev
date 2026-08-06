@@ -16,7 +16,7 @@
     pkgs.runCommand "nix-nrf-bootstrap-tests"
     {
       nativeBuildInputs = [pkgs.python3];
-      bootstrapScript = ../../../bin/nix-nrf-bootstrap;
+      bootstrapScript = ../../../bin/backends/nrfutil/nix-nrf-bootstrap;
       testFile = ../../../tests/unit/test_nix_nrf_bootstrap.py;
     }
     ''

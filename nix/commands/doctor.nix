@@ -1,7 +1,7 @@
-# nix-nrf-doctor — internal read-only environment/probe-access diagnostics
-# module for the `nix-nrf doctor` subcommand. Not a public package: no
-# `$out/bin` binary is installed. `nix/nix-nrf.nix` resolves the exact store
-# path of the wrapped command below and execs it.
+# nix/commands/doctor.nix — internal read-only environment/probe-access
+# diagnostics module for the `nix-nrf doctor` subcommand. Not a public
+# package: no `$out/bin` binary is installed. `nix/commands/default.nix`
+# resolves the exact store path of the wrapped command below and execs it.
 #
 # The wrapper pins:
 #   - the exact bootstrap module executable in NIX_NRF_DOCTOR_BOOTSTRAP
@@ -28,26 +28,46 @@
   # Human environment label for headings/status/remediation/help; default
   # "SDK/toolchain" keeps existing human output byte-identical.
   environmentLabel ? "SDK/toolchain",
-}:
-pkgs.runCommand "nix-nrf-doctor"
-{
-  nativeBuildInputs = [
-    pkgs.makeWrapper
-    pkgs.python3
-  ];
-}
-''
-  install -Dm755 ${../bin/nix-nrf-doctor} $out/libexec/nix-nrf/doctor
-  patchShebangs $out/libexec/nix-nrf/doctor
-  # Caller-controlled selector values are shell-escaped before interpolation
-  # so wrapProgram arguments never break the generated build script.
-  wrapProgram $out/libexec/nix-nrf/doctor \
-    --set NIX_NRF_DOCTOR_BOOTSTRAP ${bootstrapCommand} \
-    --set NIX_NRF_DOCTOR_ENVIRONMENT_LABEL ${pkgs.lib.escapeShellArg environmentLabel} \
-    --unset PYTHONPATH \
-    --unset PYTHONHOME \
-    ${pkgs.lib.optionalString (udevRules != null) "--set NIX_NRF_DOCTOR_UDEV_RULES ${udevRules}"} \
-    ${pkgs.lib.optionalString (
-    ncsVersion != null
-  ) "--set NIX_NRF_DOCTOR_NCS_VERSION ${pkgs.lib.escapeShellArg ncsVersion}"}
-''
+}: let
+  mkPythonCommand = import ../lib/mk-python-command.nix {inherit pkgs;};
+in
+  mkPythonCommand {
+    pname = "nix-nrf-doctor";
+    script = ../../bin/commands/nix-nrf-doctor;
+    destination = "doctor";
+    wrapperArgs =
+      [
+        [
+          "--set"
+          "NIX_NRF_DOCTOR_BOOTSTRAP"
+          bootstrapCommand
+        ]
+        [
+          "--set"
+          "NIX_NRF_DOCTOR_ENVIRONMENT_LABEL"
+          environmentLabel
+        ]
+        [
+          "--unset"
+          "PYTHONPATH"
+        ]
+        [
+          "--unset"
+          "PYTHONHOME"
+        ]
+      ]
+      ++ pkgs.lib.optionals (udevRules != null) [
+        [
+          "--set"
+          "NIX_NRF_DOCTOR_UDEV_RULES"
+          udevRules
+        ]
+      ]
+      ++ pkgs.lib.optionals (ncsVersion != null) [
+        [
+          "--set"
+          "NIX_NRF_DOCTOR_NCS_VERSION"
+          ncsVersion
+        ]
+      ];
+  }
