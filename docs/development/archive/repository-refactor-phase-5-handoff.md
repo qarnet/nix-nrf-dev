@@ -1,3 +1,7 @@
+> **Archived**: this handoff described the completed final verification phase
+> of the repository refactor. See `docs/development/architecture.md` for the
+> current architecture; the archive README holds the full index.
+
 # Repository Refactor Phase 5 — Final Architecture Verification Handoff
 
 ## Goal
@@ -130,8 +134,8 @@ tracked code/test deletion.
 After implementation passes:
 
 ```text
-docs/development/repository-refactor-plan.md
-docs/development/repository-refactor-phase-5-handoff.md
+docs/development/archive/repository-refactor-plan.md
+docs/development/archive/repository-refactor-phase-5-handoff.md
 ```
 
 move with `git mv` into `docs/development/archive/`. Update archive README with

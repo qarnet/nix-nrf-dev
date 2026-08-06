@@ -1,6 +1,6 @@
 > **Archived**: this handoff described a completed phase of the repository
 > refactor. It is kept as historical evidence; see
-> `docs/development/repository-refactor-plan.md` for the current plan and the
+> `docs/development/archive/repository-refactor-plan.md` for the archived plan and the
 > archive README for the full index.
 
 # Repository Refactor Phase 2 — Backend Separation Handoff

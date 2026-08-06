@@ -46,8 +46,10 @@ jobs:
       # `nix-nrf probes` subcommand, built as part of .#nix-nrf.
       # .#udev-rules is the OpenOCD udev-rule relocation package consumed by
       # the NixOS module and reported by `nix-nrf doctor`.
+      # .#west-zephyr-sdk-v3_3_0 is the west backend exact Zephyr SDK package
+      # (packages.default aliases nix-nrf, so it is not built separately).
       - name: Build packages
-        run: nix build -L .#openocd-master-unwrapped .#openocd-master .#nrfutil .#nix-nrf .#udev-rules
+        run: nix build -L .#openocd-master-unwrapped .#openocd-master .#nrfutil .#nix-nrf .#udev-rules .#west-zephyr-sdk-v3_3_0
 
       # A2 — smoke-run: verify the built binaries actually execute.
       - name: Smoke run openocd

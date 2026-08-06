@@ -10,11 +10,12 @@ architecture.
 For current information use:
 
 - `README.md` — public usage, backends, and workspace layout;
+- `docs/development/architecture.md` — current repository architecture and
+  ownership;
 - `docs/development/west-backend-status.md` and
   `docs/development/nrfutil-backend-status.md` — backend status;
 - `docs/development/sdk-nrf-feasibility-draft.md` — non-binding future
   direction;
-- `docs/development/repository-refactor-plan.md` — active refactor plan;
 - `docs/development/clean-bootstrap-versioning-plan.md` — accepted bootstrap
   design and phase history.
 
@@ -58,9 +59,13 @@ Superseded pure sdk-nrf prototype:
 
 Repository refactor phases:
 
+- `repository-refactor-plan.md` — master refactor plan (phases 1-5, all
+  implemented; replaced by `docs/development/architecture.md`).
 - `repository-refactor-phase-2-handoff.md` — backend separation phase
   (implemented).
 - `repository-refactor-phase-3-handoff.md` — shared components and
   deduplication phase (implemented).
 - `repository-refactor-phase-4-handoff.md` — documentation and artifact
-  cleanup phase (implemented; this archive was created by it).
+  cleanup phase (implemented; the archive was created by it).
+- `repository-refactor-phase-5-handoff.md` — final architecture verification
+  phase (implemented; created `docs/development/architecture.md`).

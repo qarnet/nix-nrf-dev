@@ -1,6 +1,6 @@
 > **Archived**: this handoff described a completed phase of the repository
 > refactor. It is kept as historical evidence; see
-> `docs/development/repository-refactor-plan.md` for the current plan and the
+> `docs/development/archive/repository-refactor-plan.md` for the archived plan and the
 > archive README for the full index.
 
 # Repository Refactor Phase 4 — Documentation and Artifact Cleanup Handoff
@@ -76,7 +76,7 @@ docs/development/clean-bootstrap-versioning-plan.md
 docs/development/nrfutil-backend-status.md
 docs/development/west-backend-status.md
 docs/development/sdk-nrf-feasibility-draft.md
-docs/development/repository-refactor-plan.md
+docs/development/archive/repository-refactor-plan.md
 ```
 
 `clean-bootstrap-versioning-plan.md` mixes accepted design and proof history but

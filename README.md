@@ -431,7 +431,7 @@ the shell without polluting the scoped `west` wrapper.
 | `devShells.default` | dogfood shell for hacking on this repo |
 | `formatter.<system>` | treefmt wrapper (`nix fmt`) |
 | `nixosModules.default` | minimal NixOS module adding `packages.udev-rules` to `services.udev.packages` (no options; see [NixOS udev rules](#nixos-udev-rules)) |
-| `checks.<system>` | `formatting` (treefmt) + `backend-selector` (eval gate: `ncsVersion` required, omitted equals nrfutil, `nrfutil`/`west`+v3.3.0 evaluate, `sdk-nrf`/west-unknown-release/west-toolchainBundleId/west-nrfutilPackage rejected, `toolchainBundleId` evaluates, `autoBootstrap` omitted/true/false evaluates for both backends, exact bundle in either bootstrap mode) + `bootstrap-tests` (fake-boundary unit tests, no network/real SDK) + `bootstrap-quoting` (wrapper shell-quoting regression for selector values with spaces/quotes) + `doctor-tests` (fake sysfs/dev-root doctor unit tests, no hardware) + `udev-rules` (installed rule byte-identical to the pinned OpenOCD contrib rule) + `west-bootstrap-tests` (fake-boundary west bootstrap tests, no network/workspace) + `west-versions-tests` (fake-boundary west `versions` command tests) + `west-backend-metadata` (versions.nix schema) + `west-backend-quoting` (metadata quote-embedding regression for the public west shell hook/wrapper) + `west-shell-boundary` (public west shell boundary gate against a fake-ready workspace) + `pre-commit` (git-hooks.nix) |
+| `checks.<system>` | `formatting` (treefmt) + `backend-selector` (eval gate: `ncsVersion` required, omitted equals nrfutil, `nrfutil`/`west`+v3.3.0 evaluate, `sdk-nrf`/west-unknown-release/west-toolchainBundleId/west-nrfutilPackage rejected, `toolchainBundleId` evaluates, `autoBootstrap` omitted/true/false evaluates for both backends, exact bundle in either bootstrap mode) + `bootstrap-tests` (fake-boundary unit tests, no network/real SDK) + `bootstrap-quoting` (wrapper shell-quoting regression for selector values with spaces/quotes) + `doctor-tests` (fake sysfs/dev-root doctor unit tests, no hardware) + `doctor-udev-wiring` (shell doctor reports the exact packaged udev-rule path) + `nix-nrf-help` (byte-for-byte standalone `nix-nrf --help` wording) + `udev-rules` (installed rule byte-identical to the pinned OpenOCD contrib rule) + `west-bootstrap-tests` (fake-boundary west bootstrap tests, no network/workspace; also runs the shared fake-west-workspace fixture safety suite) + `west-versions-tests` (fake-boundary west `versions` command tests) + `west-backend-metadata` (versions.nix schema) + `west-backend-quoting` (metadata quote-embedding regression for the public west shell hook/wrapper) + `west-shell-boundary` (public west shell boundary gate against a fake-ready workspace) + `pre-commit` (git-hooks.nix) |
 | `templates.default` | project skeleton (flake.nix + .envrc) |
 | `tcl/` | canonical flash recipes (see below) |
 
@@ -484,6 +484,23 @@ builds all packages (cached via [Cachix](https://app.cachix.org) under
 `qarnet`), runs smoke tests, flake checks, and TCL-parse tests on every PR.
 Hardware integration tests run on a self-hosted runner — see
 `tests/hardware/README.md`.
+
+## Repository architecture
+
+Maintainer reference: [docs/development/architecture.md](docs/development/architecture.md).
+
+- `nix/flake/` — per-system construction (configured Nixpkgs, components,
+  dev shells, checks).
+- `nix/backends/` — public `mkNrfShell` dispatcher plus the `nrfutil` and
+  `west` backend modules.
+- `nix/commands/` — shared `nix-nrf` dispatcher, doctor, and probes command
+  modules.
+- `nix/hardware/` — OpenOCD build and udev-rules package.
+- `nix/lib/mk-python-command.nix` — shared command packaging helper.
+- `bin/` — command scripts, owned by their backend (`bin/backends/`) or
+  shared (`bin/commands/`); installed only under `$out/libexec/nix-nrf/`.
+- `tests/` — unit suites, fixtures, and the manual clean-room / west /
+  hardware harnesses.
 
 ## License
 

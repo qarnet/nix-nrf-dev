@@ -15,6 +15,16 @@ the `nix-nrf probes` subcommand; hardware-access diagnostics is the
 `nix-nrf doctor` subcommand (read-only, never runs `sudo`); there are no
 standalone `nrf-probes`/`nrf-doctor` commands.
 
+## Repository architecture
+
+Source ownership and construction flow are documented in
+[docs/development/architecture.md](docs/development/architecture.md):
+`nix/flake/` (per-system construction), `nix/backends/` (nrfutil/west
+dispatchers and modules), `nix/commands/`, `nix/hardware/`,
+`nix/lib/mk-python-command.nix`, `bin/`, and the test layout. Historical
+phase handoffs live in `docs/development/archive/` and are not current
+architecture.
+
 ## Before committing
 
 Formatting and lint hooks run automatically via `pre-commit` (wired through
@@ -92,7 +102,8 @@ Examples:
    the correct `sha256-...` hash for the failed fetch; paste it in).
 4. Run `nix build .#openocd-master-unwrapped -L` and `nix build .#openocd-master -L`.
 5. Verify on hardware that the flash recipes still work (see
-   `tests/hardware/` once it exists).
+   `tests/hardware/` — explicit, manual hardware work on a self-hosted
+   runner; never part of the default gate).
 
 ## Adding a flash recipe
 
@@ -101,8 +112,9 @@ openocd. To add one:
 
 1. Add `tcl/<chip>_flash.tcl` with the flashing procs.
 2. Document it in `README.md` under "Flash recipes (`tcl/`)".
-3. If the chip needs probe identification, ensure `bin/commands/nix-nrf-probes` knows its
-   family signature (DPIDR → AP IDR map → FICR PART/VARIANT).
+3. If the chip needs probe identification, ensure
+   `bin/commands/nix-nrf-probes` knows its family signature (DPIDR → AP IDR
+   map → FICR PART/VARIANT).
 
 ## CI and the openocd-master build
 
@@ -112,8 +124,7 @@ takes ~10 minutes; subsequent builds pull from the cache in under a minute.
 
 Hardware integration tests run on a self-hosted GitHub Actions runner with
 CMSIS-DAP probes and target boards attached. See
-`tests/hardware/README.md` (added in a later phase) for runner setup and the
-test procedure.
+`tests/hardware/README.md` for runner setup and the test procedure.
 
 ## What this repo is not
 
