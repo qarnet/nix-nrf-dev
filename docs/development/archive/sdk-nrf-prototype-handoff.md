@@ -5,7 +5,7 @@ implemented. The accepted next direction is the smaller hybrid `west` backend:
 Nix packages the exact Zephyr SDK, host tools, and Python interpreter while the
 official mutable west workspace and version-local Python virtual environment
 remain responsible for NCS source and Python requirements. See
-`docs/development/west-backend-environment-handoff.md`.
+`docs/development/archive/west-backend-environment-handoff.md`.
 
 ## Goal
 

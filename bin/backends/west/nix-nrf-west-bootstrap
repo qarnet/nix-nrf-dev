@@ -23,7 +23,7 @@
 # workspace root (`$HOME/ncs/<version>`), which contains zephyr/ and satisfies
 # the shared doctor/shell read-only contract.
 #
-# Division of ownership (see docs/development/west-backend-environment-handoff.md):
+# Division of ownership (see docs/development/archive/west-backend-environment-handoff.md):
 #   Nix       — Python interpreter, host tools, exact Zephyr SDK package.
 #   west      — mutable NCS Git repositories (official `west init`/`west update`).
 #   venv      — west executable and NCS Python requirements (official

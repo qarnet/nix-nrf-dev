@@ -1,8 +1,8 @@
 # West Backend Status
 
 Status of the west backend (see
-`docs/development/west-backend-environment-handoff.md` and
-`docs/development/west-backend-public-integration-handoff.md`). The hybrid
+`docs/development/archive/west-backend-environment-handoff.md` and
+`docs/development/archive/west-backend-public-integration-handoff.md`). The hybrid
 model is now integrated as the public, experimental `backend = "west"`
 selector in `mkNrfShell` (v3.3.0 / x86_64-linux only):
 

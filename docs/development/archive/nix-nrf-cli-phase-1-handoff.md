@@ -106,7 +106,7 @@ Examples should lead with `nix-nrf versions` and `nix-nrf probes`. Clearly mark
 `nrf-probes` as a compatibility command, not preferred new API. Remove claims
 that `nrf-sdk-versions` remains available.
 
-Add `docs/development/nix-nrf-cli-plan.md` with two phases:
+Add `docs/development/archive/nix-nrf-cli-plan.md` with two phases:
 
 1. **Phase 1 — facade (this phase):** add dispatcher, move version listing to
    `nix-nrf versions`, expose probes through dispatcher, retain `nrf-probes`.

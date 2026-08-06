@@ -75,7 +75,7 @@ Constraints:
 
 Add the internal SDK/toolchain bootstrap command module behind the facade.
 Resolved architecture and verified sdk-manager interfaces are recorded in
-`docs/development/nix-nrf-bootstrap-handoff.md` (kept as a historical record).
+`docs/development/archive/nix-nrf-bootstrap-handoff.md` (kept as a historical record).
 
 Behavior after this phase:
 

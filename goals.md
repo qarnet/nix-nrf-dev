@@ -321,7 +321,7 @@ largest work item in this file — expect iteration.
 
 **Status (superseded in direction, 2026-08):** the accepted path is now the
 smaller **hybrid west backend** (see
-`docs/development/west-backend-environment-handoff.md` and
+`docs/development/archive/west-backend-environment-handoff.md` and
 `docs/development/west-backend-status.md`): Nix packages the exact Zephyr SDK,
 host tools, and Python interpreter, while the official mutable west workspace
 and a version-local venv own the NCS source and requirements. The pure

@@ -3,7 +3,7 @@
 Status: phases 1 and 2 implemented for the nrfutil backend. This document
 records the accepted direction and its phase history; the resolved
 implementation details and verified sdk-manager interfaces are recorded in
-`docs/development/nix-nrf-bootstrap-handoff.md` (the phase handoff, kept as a
+`docs/development/archive/nix-nrf-bootstrap-handoff.md` (the phase handoff, kept as a
 historical record).
 
 ## Goal

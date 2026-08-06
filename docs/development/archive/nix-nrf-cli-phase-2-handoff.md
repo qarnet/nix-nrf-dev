@@ -118,7 +118,7 @@ Update active callers atomically:
 - `README.md`: remove compatibility language and `packages.nrf-probes` output;
   document only `nix-nrf probes`.
 - `CONTRIBUTING.md`, `treefmt.nix`, `goals.md`,
-  `docs/development/nix-nrf-cli-plan.md`, and
+  `docs/development/archive/nix-nrf-cli-plan.md`, and
   `docs/development/nrfutil-backend-status.md`: update live paths, commands,
   package inventories, planned composition, and status.
 - Update live/future references in
@@ -129,7 +129,7 @@ Update active callers atomically:
 Do not rewrite completed historical handoff documents solely to erase old
 names.
 
-Mark Phase 2 done in `docs/development/nix-nrf-cli-plan.md` only after all old
+Mark Phase 2 done in `docs/development/archive/nix-nrf-cli-plan.md` only after all old
 public aliases and active callers are removed.
 
 ## Scope

@@ -192,9 +192,9 @@ model: Nix supplies the exact Zephyr SDK, host tools, and Python interpreter,
 while the official mutable west workspace and a version-local Python venv own
 the NCS source, west, and workspace Python requirements — no nrfutil/
 sdk-manager and no Nordic toolchain bundle. See
-`docs/development/west-backend-environment-handoff.md` and
+`docs/development/archive/west-backend-environment-handoff.md` and
 `docs/development/west-backend-status.md`. This supersedes the earlier
-`sdk-nrf` prototype plan (`docs/development/sdk-nrf-prototype-handoff.md`).
+`sdk-nrf` prototype plan (`docs/development/archive/sdk-nrf-prototype-handoff.md`).
 It is **experimental**: only `v3.3.0` on `x86_64-linux` is supported, and the
 nrfutil backend remains the default/recommended fallback.
 
