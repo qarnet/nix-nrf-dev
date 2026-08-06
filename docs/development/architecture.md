@@ -85,9 +85,10 @@ ownership and construction only.
 ## 6. Tests
 
 - Flake checks split by domain: `nix/flake/checks/` — `backend-selector.nix`
-  (evaluation gate), `nrfutil.nix` (bootstrap tests + quoting), `west.nix`
+  (evaluation gate), `nrfutil.nix` (bootstrap tests + quoting + shell
+  boundary), `west.nix`
   (bootstrap/versions/metadata/quoting/shell-boundary), `core.nix`
-  (doctor/help/probes/udev wiring). See README for the full 15-check list.
+  (doctor/help/probes/udev wiring). See README for the full 16-check list.
 - Unit tests in `tests/unit/` run fake-boundary subprocess suites (sandboxed
   stdlib) wired into the corresponding checks; `tests/fixtures/`
   `west-workspace.py` is the shared fake workspace creator covered by

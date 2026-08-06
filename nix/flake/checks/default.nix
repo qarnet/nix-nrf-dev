@@ -19,7 +19,7 @@
     probes-tests
     udev-rules
     ;
-  inherit (nrfutil) bootstrap-tests bootstrap-quoting;
+  inherit (nrfutil) bootstrap-tests bootstrap-quoting nrfutil-shell-boundary;
   inherit
     (west)
     west-bootstrap-tests

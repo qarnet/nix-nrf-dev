@@ -85,7 +85,7 @@
         ;
       defaultDevShell = devShells.default;
     };
-    nrfutil = import ./checks/nrfutil.nix {inherit pkgs nrfutil;};
+    nrfutil = import ./checks/nrfutil.nix {inherit pkgs nrfutil mkNrfShell;};
     west = import ./checks/west.nix {
       inherit
         pkgs
