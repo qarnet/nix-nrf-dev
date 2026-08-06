@@ -58,11 +58,11 @@
   westBackendEntry = westBackendVersions.${westBackendNcsVersion};
   # Exact Zephyr SDK package output (also exposed as
   # packages.west-zephyr-sdk-v3_3_0).
-  westZephyrSdk = import ../west-backend/zephyr-sdk.nix {
+  westZephyrSdkBuilder = import ../west-backend/zephyr-sdk.nix;
+  westZephyrSdk = westZephyrSdkBuilder {
     inherit pkgs;
     sdk = westBackendEntry.zephyrSdk;
   };
-  westZephyrSdkBuilder = import ../west-backend/zephyr-sdk.nix;
   westEnvironmentBuilder = import ../west-backend/environment.nix;
   westBootstrapBuilder = import ../nix-nrf-west-bootstrap.nix;
   westVersionsCommandBuilder = import ../west-backend/versions-command.nix;
@@ -92,7 +92,6 @@ in {
     nrfutil
     nix-nrf
     westBackendVersions
-    westBackendNcsVersion
     westBackendEntry
     westZephyrSdk
     westZephyrSdkBuilder
