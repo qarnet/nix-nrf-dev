@@ -261,7 +261,7 @@ Work:
 Likely files:
 
 ```text
-nix/mk-nrf-shell.nix
+nix/backends/default.nix
 nix/sdk-nrf/environment.nix
 nix/nix-nrf.nix
 flake.nix

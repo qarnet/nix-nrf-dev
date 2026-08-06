@@ -1,7 +1,7 @@
-# nix/west-backend/versions.nix — version metadata for the west backend
+# nix/backends/west/versions.nix — version metadata for the west backend
 # prototype. Plain attrset keyed by NCS release. This file owns every
 # release-specific version, requirement path, asset URL, and hash; builder
-# files (zephyr-sdk.nix, environment.nix) and the setup-helper wrapper select
+# files (zephyr-sdk.nix, shell.nix) and the setup-helper wrapper select
 # metadata by key and contain no release-specific literals.
 #
 # Zephyr SDK asset hashes are verified against the official v0.17.0 release

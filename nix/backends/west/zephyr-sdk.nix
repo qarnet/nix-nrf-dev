@@ -1,4 +1,4 @@
-# nix/west-backend/zephyr-sdk.nix — exact Zephyr SDK package assembled from
+# nix/backends/west/zephyr-sdk.nix — exact Zephyr SDK package assembled from
 # official release assets, selected by version metadata (see versions.nix).
 #
 # The minimal distribution bundle plus the selected compiler archives are

@@ -33,7 +33,7 @@
   # composed nrfutil (versions), the internal probe command module
   # (probes), and the internal bootstrap command module (bootstrap),
   # which nix-nrf owns via nix/nix-nrf-probes.nix and
-  # nix/nix-nrf-bootstrap.nix, plus the internal doctor command module
+  # nix/backends/nrfutil/bootstrap.nix, plus the internal doctor command module
   # (doctor) via nix/nix-nrf-doctor.nix. ncsVersion/toolchainBundleId
   # default to null here, so the standalone package requires an explicit
   # --ncs-version; mkNrfShell instantiates its own nix-nrf with the
@@ -47,33 +47,31 @@
   };
 
   # ── West backend (experimental; public `backend = "west"`) ────────
-  # Version metadata lives entirely in nix/west-backend/versions.nix;
+  # Version metadata lives entirely in nix/backends/west/versions.nix;
   # the wiring below only selects the metadata key and hands the
-  # builders to mkNrfShell, which constructs per-shell instances from
-  # the selected metadata. Builders contain no release-specific
-  # literals.
-  westBackendVersions = import ../west-backend/versions.nix;
+  # builders to the public dispatcher (nix/backends/default.nix), which
+  # forwards them to the west backend constructor. Builders contain no
+  # release-specific literals.
+  westBackendVersions = import ../backends/west/versions.nix;
   # Metadata key used by this repository's shells and checks.
   westBackendNcsVersion = "v3.3.0";
   westBackendEntry = westBackendVersions.${westBackendNcsVersion};
   # Exact Zephyr SDK package output (also exposed as
   # packages.west-zephyr-sdk-v3_3_0).
-  westZephyrSdkBuilder = import ../west-backend/zephyr-sdk.nix;
+  westZephyrSdkBuilder = import ../backends/west/zephyr-sdk.nix;
   westZephyrSdk = westZephyrSdkBuilder {
     inherit pkgs;
     sdk = westBackendEntry.zephyrSdk;
   };
-  westEnvironmentBuilder = import ../west-backend/environment.nix;
-  westBootstrapBuilder = import ../nix-nrf-west-bootstrap.nix;
-  westVersionsCommandBuilder = import ../west-backend/versions-command.nix;
+  westBootstrapBuilder = import ../backends/west/bootstrap.nix;
+  westVersionsCommandBuilder = import ../backends/west/versions-command.nix;
 
-  mkNrfShell = import ../mk-nrf-shell.nix {
+  mkNrfShell = import ../backends/default.nix {
     inherit
       pkgs
       openocd-master
       nrfutil
       westZephyrSdkBuilder
-      westEnvironmentBuilder
       westBootstrapBuilder
       westVersionsCommandBuilder
       ;
@@ -95,7 +93,6 @@ in {
     westBackendEntry
     westZephyrSdk
     westZephyrSdkBuilder
-    westEnvironmentBuilder
     westBootstrapBuilder
     westVersionsCommandBuilder
     mkNrfShell

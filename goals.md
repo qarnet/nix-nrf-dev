@@ -58,7 +58,8 @@ functions take `pkgs` as the first argument; per-system convenience wrappers
 are optional sugar. This also makes the function usable from non-flake
 contexts and from flake-parts modules.
 
-**How:** `nix/mk-nrf-shell.nix` already takes `pkgs` — the change is mostly
+**How:** `nix/backends/default.nix` (the public `mkNrfShell` dispatcher)
+already takes `pkgs` — the change is mostly
 plumbing in `flake.nix`: build openocd-master/nrfutil from the
 *given* pkgs (via the overlay from 1.1) and construct `nix-nrf` from them
 (the probes command module is owned internally by `nix-nrf`), then export both
@@ -271,7 +272,7 @@ workspace is bootstrapped (`nix-nrf bootstrap`). The pure `sdk-nrf` name
 remains reserved but rejected at evaluation.
 
 **Version direction:** the west backend uses version metadata keyed by NCS
-release in `nix/west-backend/versions.nix` — each entry derives the NCS
+release in `nix/backends/west/versions.nix` — each entry derives the NCS
 version, tested west, Python interpreter (`python`/`pythonPackage`), Zephyr
 SDK release and targets, asset URLs/hashes, requirement files, and pip
 constraints for that release. Caller selection stays an explicit, required

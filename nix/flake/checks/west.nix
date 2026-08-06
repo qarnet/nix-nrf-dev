@@ -7,7 +7,6 @@
   westBackendVersions,
   westBackendEntry,
   westZephyrSdk,
-  westEnvironmentBuilder,
   westBootstrapBuilder,
   westVersionsCommandBuilder,
   openocd-master,
@@ -26,7 +25,7 @@
   # module and asserts it installs only $out/libexec/nix-nrf/bootstrap
   # (no standalone $out/bin/nix-nrf-west-* command).
   westBootstrapTests = let
-    module = import ../../nix-nrf-west-bootstrap.nix {
+    module = import ../../backends/west/bootstrap.nix {
       inherit pkgs;
       inherit (westBackendEntry) pythonPackage;
       metadata = westBackendEntry;
@@ -192,12 +191,11 @@
         mkdir -p $out
         printf '%s' ${pkgs.lib.escapeShellArg sdk.version} > $out/sdk_version
       '';
-    nastyModule = import ../../mk-nrf-shell.nix {
+    nastyModule = import ../../backends/default.nix {
       inherit
         pkgs
         openocd-master
         nrfutil
-        westEnvironmentBuilder
         westBootstrapBuilder
         westVersionsCommandBuilder
         ;

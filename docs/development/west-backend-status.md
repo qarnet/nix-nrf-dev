@@ -25,13 +25,13 @@ removed; the proof history below is preserved.
   rejected for west; `autoBootstrap`, `name`, `packages`, `withMultilib`,
   `extraShellHook`, and `inputsFrom` behave like the nrfutil backend. The
   nrfutil backend remains the default and is unchanged.
-- `nix/west-backend/versions.nix` — plain attrset keyed by NCS release
+- `nix/backends/west/versions.nix` — plain attrset keyed by NCS release
   (`v3.3.0`: NCS version, tested west 1.4.0, Python 3.12 +
   `pythonPackage = "python312"`, Zephyr SDK 0.17.0 with `arm-zephyr-eabi` +
   `riscv64-zephyr-elf`, official x86_64-linux asset URLs + fixed hashes,
   requirement file list, pip constraint lines). Builders contain no
   release-specific literals.
-- `nix/west-backend/zephyr-sdk.nix` — exact Zephyr SDK package assembled from
+- `nix/backends/west/zephyr-sdk.nix` — exact Zephyr SDK package assembled from
   the official v0.17.0 minimal bundle and the two compiler archives, with
   official directory layout (`sdk_version`, `cmake/`, `<target>/`), the
   interactive setup/host-tools installer scripts removed, auto-patchelf
@@ -39,7 +39,7 @@ removed; the proof history below is preserved.
   `ZEPHYR_TOOLCHAIN_VARIANT=zephyr` / `ZEPHYR_SDK_INSTALL_DIR=$out`, and
   in-build validation (sdk_version, CMake package files, compiler `--version`
   after patching, no installer scripts left).
-- `bin/nix-nrf-west-bootstrap` + `nix/nix-nrf-west-bootstrap.nix` — west
+- `bin/nix-nrf-west-bootstrap` + `nix/backends/west/bootstrap.nix` — west
   bootstrap module packaged at `$out/libexec/nix-nrf/bootstrap` (no standalone
   `$out/bin` command), wrapped with the exact Nix Python (metadata-selected
   `pythonPackage`) and metadata defaults. Public invocation is `nix-nrf
@@ -57,7 +57,7 @@ removed; the proof history below is preserved.
   absolute path (tilde + CWD resolution) before any subprocess runs. Never
   re-inits, never deletes/resets an existing workspace, never runs `west
   zephyr-export`, nrfutil, sudo, or sourced scripts.
-- `nix/west-backend/versions-command.nix` + `bin/nix-nrf-west-versions` —
+- `nix/backends/west/versions-command.nix` + `bin/nix-nrf-west-versions` —
   exact `nix-nrf versions` command module for the west backend, packaged at
   `$out/libexec/nix-nrf/versions`. Lists the sorted attr names of
   versions.nix (text, one per line) or a `--json` string array; `--help` exit
@@ -73,7 +73,7 @@ removed; the proof history below is preserved.
   workspace/Zephyr SDK"`). Only human message strings use the label; JSON
   field names/schema and exit semantics never change. The doctor still
   invokes bootstrap only with `--check --quiet --print-sdk-path` (read-only).
-- `nix/west-backend/environment.nix` — the public west backend shell (no
+- `nix/backends/west/shell.nix` — the public west backend shell (no
   `west-prototype` name): exact SDK, metadata-selected Python, host tools
   (cmake/ninja/dtc/gperf/git/ccache/dfu-util/file/xz/make/which), optional
   multilib GCC, openocd-master, the backend-aware `nix-nrf` facade, and a

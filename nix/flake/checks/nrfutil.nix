@@ -29,7 +29,7 @@
     '';
 
   # Shell-quoting regression for the internal bootstrap module:
-  # instantiate and build nix/nix-nrf-bootstrap.nix with caller
+  # instantiate and build nix/backends/nrfutil/bootstrap.nix with caller
   # selector values containing spaces and single/double quotes,
   # proving wrapProgram generation succeeds without shell injection
   # or syntax break, then round-trip the generated wrapper's exports
@@ -38,7 +38,7 @@
   bootstrapQuotingCheck = let
     nastyNcsVersion = "v3.3.0 with space 'and quote'";
     nastyBundleId = "bundle \"with\" 'quotes' and spaces";
-    module = import ../../nix-nrf-bootstrap.nix {
+    module = import ../../backends/nrfutil/bootstrap.nix {
       inherit pkgs;
       nrfutilPackage = nrfutil;
       ncsVersion = nastyNcsVersion;

@@ -10,7 +10,7 @@
 #     (`./nix-nrf-probes.nix`, installed at $out/libexec/nix-nrf/probes; read-only
 #     CMSIS-DAP probe/target identification).
 #   nix-nrf bootstrap  — by default delegates to the internal nrfutil-backed
-#     bootstrap command module (`./nix-nrf-bootstrap.nix`, installed at
+#     bootstrap command module (`./backends/nrfutil/bootstrap.nix`, installed at
 #     $out/libexec/nix-nrf/bootstrap; ensures the configured NCS SDK source
 #     and selected toolchain exist). The west backend supplies an exact
 #     `bootstrapCommand` store path instead (its west-workspace/venv bootstrap
@@ -82,7 +82,7 @@ assert bootstrapCommand
     if bootstrapCommand != null
     then bootstrapCommand
     else "${
-      import ./nix-nrf-bootstrap.nix {
+      import ./backends/nrfutil/bootstrap.nix {
         inherit
           pkgs
           nrfutilPackage

@@ -74,7 +74,7 @@ build. There is no sdk-manager-only composition that avoids J-Link.
   workspace and a version-local venv own the NCS source, west, and workspace
   Python requirements — no nrfutil/sdk-manager. Currently supports only
   `v3.3.0` on `x86_64-linux` (metadata-driven in
-  `nix/west-backend/versions.nix`).
+  `nix/backends/west/versions.nix`).
 - `"sdk-nrf"` — reserved for a future Nix-native build environment (see
   `goals.md`). It is **not** implemented: any unsupported value fails at Nix
   evaluation with an unsupported-backend error instead of silently falling

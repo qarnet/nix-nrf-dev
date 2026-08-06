@@ -33,7 +33,6 @@
     westBackendVersions
     westBackendEntry
     westZephyrSdk
-    westEnvironmentBuilder
     westBootstrapBuilder
     westVersionsCommandBuilder
     mkNrfShell
@@ -94,7 +93,6 @@
         westBackendVersions
         westBackendEntry
         westZephyrSdk
-        westEnvironmentBuilder
         westBootstrapBuilder
         westVersionsCommandBuilder
         openocd-master

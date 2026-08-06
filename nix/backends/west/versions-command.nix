@@ -1,4 +1,4 @@
-# nix/west-backend/versions-command.nix — packaged `nix-nrf versions` command
+# nix/backends/west/versions-command.nix — packaged `nix-nrf versions` command
 # module for the west backend. Installs bin/nix-nrf-west-versions at
 # $out/libexec/nix-nrf/versions and exposes no standalone $out/bin command.
 #
@@ -28,7 +28,7 @@ in
     ];
   }
   ''
-    install -Dm755 ${../../bin/nix-nrf-west-versions} $out/libexec/nix-nrf/versions
+    install -Dm755 ${../../../bin/nix-nrf-west-versions} $out/libexec/nix-nrf/versions
     patchShebangs $out/libexec/nix-nrf/versions
     # Values are shell-escaped before interpolation so wrapProgram arguments
     # never break the generated build script (version strings with spaces or

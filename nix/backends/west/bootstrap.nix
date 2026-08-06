@@ -1,12 +1,12 @@
-# nix-nrf-west-bootstrap — internal west-workspace/venv bootstrap module for
-# the west backend. Installs bin/nix-nrf-west-bootstrap at
+# nix/backends/west/bootstrap.nix — west backend west-workspace/venv bootstrap
+# module. Installs bin/nix-nrf-west-bootstrap at
 # $out/libexec/nix-nrf/bootstrap and exposes no standalone $out/bin command:
 # public invocation is only `nix-nrf bootstrap` (via the shell-specific
 # backend-aware nix-nrf facade).
 #
 # The wrapper pins the exact Nix Python interpreter (selected by the
 # release-specific `pythonPackage` metadata name from
-# nix/west-backend/versions.nix) and the metadata defaults as environment
+# nix/backends/west/versions.nix) and the metadata defaults as environment
 # variables — never ambient PATH lookup — and unsets PYTHONHOME/PYTHONPATH
 # like the other command modules, because NCS toolchain shells export them
 # for their own python.
@@ -42,7 +42,7 @@ in
     ];
   }
   ''
-    install -Dm755 ${../bin/nix-nrf-west-bootstrap} $out/libexec/nix-nrf/bootstrap
+    install -Dm755 ${../../../bin/nix-nrf-west-bootstrap} $out/libexec/nix-nrf/bootstrap
     patchShebangs $out/libexec/nix-nrf/bootstrap
     # Metadata values are shell-escaped before interpolation so wrapProgram
     # arguments never break the generated build script.

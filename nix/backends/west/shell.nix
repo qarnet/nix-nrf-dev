@@ -1,4 +1,4 @@
-# nix/west-backend/environment.nix — public west backend dev shell, selected
+# nix/backends/west/shell.nix — public west backend dev shell, selected
 # by `mkNrfShell { backend = "west"; ncsVersion = ...; }`.
 #
 # The hybrid model:
@@ -32,14 +32,14 @@
 # runs setup/update/pip.
 {
   pkgs,
-  # Exact Zephyr SDK package (nix/west-backend/zephyr-sdk.nix output).
+  # Exact Zephyr SDK package (nix/backends/west/zephyr-sdk.nix output).
   sdkPackage,
   # Version metadata entry (versions.nix), keyed by NCS release.
   metadata,
   # Nixpkgs package attribute name for the metadata-selected Python (e.g.
   # "python312"); never a release-specific literal in this builder.
   pythonPackage,
-  # Packaged west bootstrap module (nix/nix-nrf-west-bootstrap.nix output);
+  # Packaged west bootstrap module (nix/backends/west/bootstrap.nix output);
   # reached through the shell-specific `nix-nrf bootstrap`, never exposed on
   # PATH itself.
   westBootstrap,
