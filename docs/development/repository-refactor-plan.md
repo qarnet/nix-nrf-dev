@@ -57,9 +57,11 @@ nix/
 ├── backends/
 │   ├── default.nix                 # public mkNrfShell dispatcher
 │   ├── nrfutil/
+│   │   ├── default.nix
 │   │   ├── shell.nix
 │   │   └── bootstrap.nix
 │   └── west/
+│       ├── default.nix
 │       ├── shell.nix
 │       ├── bootstrap.nix
 │       ├── versions.nix
