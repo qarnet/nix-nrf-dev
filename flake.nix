@@ -34,9 +34,6 @@
     supportedSystems = ["x86_64-linux"];
   in
     flake-utils.lib.eachSystem supportedSystems (
-      # Per-system construction (configured Nixpkgs, components,
-      # formatter/pre-commit, checks, dev shells) lives in
-      # nix/flake/per-system.nix.
       system:
         import ./nix/flake/per-system.nix {
           inherit
