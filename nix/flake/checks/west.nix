@@ -79,7 +79,7 @@
       mkdir -p "$out"
     '';
 
-  # Cheap metadata schema gate: asserts every nix/west-backend
+  # Cheap metadata schema gate: asserts every nix/backends/west
   # versions.nix entry has the required shape (ncsVersion matches its
   # key, testedWestVersion/python/pythonPackage/requirements strings,
   # zephyrSdk version/targets/assets with x86_64-linux URLs + fixed

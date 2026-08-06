@@ -3,7 +3,7 @@
 #
 # tests/unit/test_nix_nrf_west_versions.py — fake-boundary unit tests for the
 # west backend `nix-nrf versions` command module (bin/nix-nrf-west-versions,
-# packaged by nix/west-backend/versions-command.nix).
+# packaged by nix/backends/west/versions-command.nix).
 #
 # The wrapped module is exercised as a subprocess; the supported-release list
 # and JSON come from the wrapper's NIX_NRF_WEST_VERSIONS /
