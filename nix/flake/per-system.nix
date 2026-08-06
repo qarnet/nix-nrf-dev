@@ -1,7 +1,7 @@
 # Per-system flake construction: configured Nixpkgs, components,
-# formatter/pre-commit, checks, and dev shells. Imported once per default
-# system by the root flake's eachDefaultSystem, so flake.nix stays a thin
-# description of inputs plus the non-system outputs.
+# formatter/pre-commit, checks, and dev shells. Imported once per supported
+# system by the root flake's eachSystem supportedSystems, so flake.nix stays
+# a thin description of inputs plus the non-system outputs.
 {
   self,
   system,

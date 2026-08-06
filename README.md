@@ -4,6 +4,10 @@ Reusable Nix tooling for Nordic nRF firmware development: an NCS toolchain dev
 shell and CMSIS-DAP flashing via a pinned openocd-master build. Verified on
 nRF5340 and nRF54L15 hardware.
 
+**Platform support:** the published flake outputs are `x86_64-linux` only.
+macOS and Linux ARM64 remain unsupported; no tested non-`x86_64-linux` public
+contract exists.
+
 ## Install
 
 ### New project (template)
@@ -417,6 +421,10 @@ This propagates the given derivations' environment variables and packages into
 the shell without polluting the scoped `west` wrapper.
 
 ## Outputs
+
+Current flake outputs are `x86_64-linux` only; macOS and Linux ARM64 remain
+unsupported (all `<system>`-parameterized outputs below resolve to
+`x86_64-linux`).
 
 | Output | What |
 |--------|------|

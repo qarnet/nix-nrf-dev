@@ -20,7 +20,10 @@
     nix-nrf-dev,
     ...
   }:
-    flake-utils.lib.eachDefaultSystem (system: {
+  # Supported platforms only: the consumer references nix-nrf-dev.lib via
+  # the system key, so it must stay in sync with nix-nrf-dev's published
+  # systems (x86_64-linux only).
+    flake-utils.lib.eachSystem ["x86_64-linux"] (system: {
       devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
         backend = "nrfutil";
         ncsVersion = "v3.3.0";

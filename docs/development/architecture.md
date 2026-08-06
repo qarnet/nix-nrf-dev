@@ -9,7 +9,8 @@ ownership and construction only.
 
 ## 1. Public entry points
 
-- Root `flake.nix` — thin flake: inputs, `eachDefaultSystem` delegating to
+- Root `flake.nix` — thin flake: inputs, `eachSystem supportedSystems`
+  (`supportedSystems = [ "x86_64-linux" ]`) delegating to
   `nix/flake/per-system.nix`, plus the non-system `templates.default` and
   `nixosModules.default` outputs.
 - `nix/flake/per-system.nix` — per-system construction: configured Nixpkgs

@@ -26,8 +26,14 @@
     treefmt-nix,
     git-hooks,
     ...
-  }:
-    flake-utils.lib.eachDefaultSystem (
+  }: let
+    # Repository's implemented host platform only. Per-system construction
+    # (configured Nixpkgs, components, formatter/pre-commit, checks, dev
+    # shells) lives in nix/flake/per-system.nix. Future platform expansion
+    # must add implementation, metadata, and proof before being listed here.
+    supportedSystems = ["x86_64-linux"];
+  in
+    flake-utils.lib.eachSystem supportedSystems (
       # Per-system construction (configured Nixpkgs, components,
       # formatter/pre-commit, checks, dev shells) lives in
       # nix/flake/per-system.nix.
