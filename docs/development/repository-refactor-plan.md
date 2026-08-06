@@ -77,11 +77,11 @@ nix/
 └── lib/
     └── mk-python-command.nix
 
-scripts/
+bin/
 ├── backends/
-│   ├── nrfutil/bootstrap.py
-│   └── west/{bootstrap.py,versions.py}
-└── commands/{doctor.py,probes.py}
+│   ├── nrfutil/nix-nrf-bootstrap
+│   └── west/{nix-nrf-west-bootstrap,nix-nrf-west-versions}
+└── commands/{nix-nrf-doctor,nix-nrf-probes}
 
 tests/
 ├── fixtures/west-workspace.py
