@@ -1,6 +1,6 @@
 # Shared core gates: standalone `nix-nrf --help` wording, fake-boundary
-# doctor tests, udev-rule byte-identity, shell-doctor udev wiring, and
-# fake-OpenOCD flash-recipe semantic tests.
+# doctor tests, XIAO doctor preflight parser tests, udev-rule byte-identity,
+# shell-doctor udev wiring, and fake-OpenOCD flash-recipe semantic tests.
 # `defaultDevShell` is the flake's devShells.default (constructed by
 # dev-shells.nix), passed explicitly; the check pulls the exact packaged
 # nix-nrf from it, same derivation as self.devShells.${system}.default.
@@ -80,6 +80,33 @@
       cp "$testFile" test_nix_nrf_doctor.py
       NIX_NRF_DOCTOR_SCRIPT="$PWD/nix-nrf-doctor" python3 test_nix_nrf_doctor.py
       echo "doctor tests passed" >&2
+      mkdir -p "$out"
+    '';
+
+  # XIAO doctor preflight parser gate: runs
+  # tests/unit/test_preflight_xiao.py against the copied
+  # tests/hardware/preflight_xiao.py, with sandboxed Python stdlib. Proves
+  # the hardware harness's own consumer contract of `nix-nrf doctor --json`
+  # (exactly one candidate with the requested serial, explicit CMSIS-DAP v2
+  # bulk USB: type cmsis-dap, accessible, access_method usb, no fallback,
+  # and an accessible USB node) plus exit-class handling for malformed
+  # input and remediation forwarding — no hardware, no real /sys or /dev,
+  # no doctor or OpenOCD invocation, no network. The parser is the same
+  # file tests/hardware/run.sh pipes doctor output into; the physical proof
+  # stays in the manual hardware workflow.
+  preflightXiaoTests =
+    pkgs.runCommand "nix-nrf-preflight-xiao-tests"
+    {
+      nativeBuildInputs = [pkgs.python3];
+      preflightScript = ../../../tests/hardware/preflight_xiao.py;
+      testFile = ../../../tests/unit/test_preflight_xiao.py;
+    }
+    ''
+      cp "$preflightScript" preflight_xiao.py
+      chmod +x preflight_xiao.py
+      cp "$testFile" test_preflight_xiao.py
+      NIX_NRF_PREFLIGHT_XIAO_SCRIPT="$PWD/preflight_xiao.py" python3 test_preflight_xiao.py
+      echo "preflight-xiao tests passed" >&2
       mkdir -p "$out"
     '';
 
@@ -225,4 +252,5 @@ in {
   udev-rules = udevRulesCheck;
   doctor-udev-wiring = doctorUdevWiringCheck;
   nixos-module = nixosModuleCheck;
+  preflight-xiao-tests = preflightXiaoTests;
 }

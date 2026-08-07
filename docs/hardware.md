@@ -11,6 +11,11 @@ probes and its pinned openocd-master build:
 Other nRF families are not claimed: the recipes and recovery guidance below
 apply only to these two devices/families.
 
+The hardware workflow (`tests/hardware/run.sh`) additionally asserts the
+doctor contract before any build or flash: the exact XIAO serial must be
+usable through the explicit CMSIS-DAP v2 bulk USB transport
+(`tests/hardware/preflight_xiao.py` over `nix-nrf doctor --json`).
+
 ## Host permissions
 
 A Nix dev shell cannot activate host udev policy — probe access is a system
@@ -63,6 +68,11 @@ OpenOCD should never run as root.
   reports ready/missing SDK state, visible probes, and access, and prints the
   exact remediation. It never runs mutating actions, `sudo`, or udev
   reloads.
+- `tests/hardware/run.sh` — before any probe fingerprint, NCS build, or
+  flash, the hardware workflow asserts the doctor v2 USB preflight: the
+  exact XIAO serial usable through explicit CMSIS-DAP v2 bulk USB, run
+  inside the dev shell (`NIX_NRF_DOCTOR_SKIP_SDK=1 nix-nrf doctor --json |
+  python3 tests/hardware/preflight_xiao.py 8EE9B3FF`).
 
 ## Flash recipes
 

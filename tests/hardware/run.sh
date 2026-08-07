@@ -23,6 +23,16 @@
 # bundle ("Verified image: <bundle>"). FLPR EXECUTION is not observed —
 # this harness proves flashability, not runtime IPC/heartbeat.
 #
+# Before ANY probe enumeration, NCS build, or flash, the harness proves the
+# real XIAO probe (serial 8EE9B3FF) is usable through the explicit
+# CMSIS-DAP v2 bulk USB transport: `nix-nrf doctor --json` (read-only, with
+# NIX_NRF_DOCTOR_SKIP_SDK=1) is piped into the stdlib parser
+# tests/hardware/preflight_xiao.py, which asserts the exact consumer
+# contract. OpenOCD is never invoked by the preflight, and nothing is
+# mutated. The parser itself is covered by hosted CI
+# (checks.preflight-xiao-tests); the physical proof stays in this manual
+# hardware workflow.
+#
 # The harness never recovers or mass-erases: nrf53 flash_both is invoked
 # with allow_recovery 0, so a locked app core aborts the run instead of
 # erasing the chip (recovery is out of the authorized hardware scope).
@@ -59,7 +69,23 @@ command -v west >/dev/null 2>&1 || fail "tools" "west not on PATH — enter the 
 command -v python3 >/dev/null 2>&1 || fail "tools" "python3 not on PATH (needed for Intel HEX layout validation)"
 echo "OK: openocd, nix-nrf, west, python3 present"
 
-# ── 1. Identify probes and targets ──────────────────────────────────────────
+# ── 1. XIAO probe preflight: doctor contract over explicit CMSIS-DAP v2 ─────
+# Before any probe fingerprint, NCS build, or flash, prove the real XIAO
+# (serial 8EE9B3FF) is usable through the explicit CMSIS-DAP v2 bulk USB
+# transport. `nix-nrf doctor --json` is read-only and never opens probes;
+# NIX_NRF_DOCTOR_SKIP_SDK=1 keeps this step to probe visibility/access (the
+# SDK is exercised by the west builds below). The stdlib parser
+# tests/hardware/preflight_xiao.py consumes the JSON contract; OpenOCD is
+# never invoked here and nothing is mutated.
+step "XIAO CMSIS-DAP v2 USB preflight (nix-nrf doctor --json)"
+DOCTOR_JSON="$(
+  NIX_NRF_DOCTOR_SKIP_SDK=1 nix-nrf doctor --json
+)" || fail "preflight-xiao" "nix-nrf doctor --json failed (exit $?)"
+if ! printf '%s' "$DOCTOR_JSON" | python3 tests/hardware/preflight_xiao.py 8EE9B3FF; then
+  fail "preflight-xiao" "XIAO 8EE9B3FF not usable via explicit CMSIS-DAP v2 bulk USB (parser stderr above)"
+fi
+
+# ── 2. Identify probes and targets ──────────────────────────────────────────
 step "nix-nrf probes enumeration"
 nix-nrf probes || fail "nix-nrf-probes" "nix-nrf probes failed to enumerate probes"
 
@@ -71,7 +97,7 @@ step "Find nRF54L15 probe"
 SER54L="$(nix-nrf probes --find nrf54l)" || fail "find-nrf54l" "no unique nRF54L15 probe found (exit $?)"
 echo "OK: nRF54L15 probe serial: $SER54L"
 
-# ── 2. Build four artifacts from NCS ────────────────────────────────────────
+# ── 3. Build four artifacts from NCS ────────────────────────────────────────
 # The west wrapper loads the NCS toolchain env. If NCS v3.3.0 is not
 # installed, west fails with a clear message — run.sh surfaces that.
 NCS_ROOT="${ZEPHYR_BASE:-$HOME/ncs/v3.3.0/zephyr}/.."
@@ -121,7 +147,7 @@ else
   fail "build-nrf54l-flpr" "west build for xiao_nrf54l15/nrf54l15/cpuflpr failed"
 fi
 
-# ── 3. Require exact non-empty root artifacts (sysbuild contract) ───────────
+# ── 4. Require exact non-empty root artifacts (sysbuild contract) ───────────
 # No fallback paths: exact root locations are part of the tested sysbuild
 # contract. `-s` requires a non-empty regular file.
 step "Verify build artifacts"
@@ -142,7 +168,7 @@ echo "OK: nRF54L15 blinky hex: $HEX54L"
 echo "OK: nRF54L15 FLPR bundle hex: $HEX54L_FLPR"
 echo "OK: FLPR domains.yaml declares domains 'empty' and 'vpr_launcher'"
 
-# ── 4. Intel HEX layout validation ──────────────────────────────────────────
+# ── 5. Intel HEX layout validation ──────────────────────────────────────────
 # Stdlib Python Intel HEX parser: validates record checksums, handles
 # extended segment (02) / linear (04) address records, rejects malformed
 # or unsupported address state, counts data bytes per required region,
@@ -289,7 +315,7 @@ validate_hex_layout "$HEX53_NET" "cpunet:0x01000000:0x01040000"
 step "Validate nRF54L15 FLPR bundle hex layout (launcher < 0x00165000, FLPR RRAM 0x00165000..0x0017D000)"
 validate_hex_layout "$HEX54L_FLPR" "cpuapp-launcher:0x00000000:0x00165000,flpr-rram:0x00165000:0x0017D000"
 
-# ── 5. Flash nRF5340 via our TCL recipe ─────────────────────────────────────
+# ── 6. Flash nRF5340 via our TCL recipe ─────────────────────────────────────
 step "Flash nRF5340 (distinct CPUAPP + CPUNET images) via tcl/nrf53_flash.tcl"
 # flash_both must receive two DISTINCT images: CPUAPP at 0x00000000 and
 # CPUNET at 0x01000000. The old harness passed the same merged.hex twice,
@@ -321,7 +347,7 @@ grep -qF "Verified net core: $HEX53_NET" "$LOG_FLASH53" || \
   fail "flash-nrf53" "missing exact 'Verified net core: $HEX53_NET' line — see $LOG_FLASH53"
 echo "OK: nRF5340 both cores flashed and byte-verified"
 
-# ── 6. Flash nRF54L15 blinky via our TCL recipe (existing normal app proof) ─
+# ── 7. Flash nRF54L15 blinky via our TCL recipe (existing normal app proof) ─
 step "Flash nRF54L15 blinky via tcl/nrf54l_flash.tcl"
 if openocd \
   -f interface/cmsis-dap.cfg \
@@ -338,7 +364,7 @@ else
   fail "flash-nrf54l" "openocd flash via nrf54l_flash.tcl failed (exit $?) — see $LOG_FLASH54L"
 fi
 
-# ── 7. Flash nRF54L15 FLPR bundle via our TCL recipe ────────────────────────
+# ── 8. Flash nRF54L15 FLPR bundle via our TCL recipe ────────────────────────
 step "Flash nRF54L15 FLPR bundle via tcl/nrf54l_flash.tcl"
 if openocd \
   -f interface/cmsis-dap.cfg \
