@@ -25,7 +25,7 @@
   nrfutilPackage ? nrfutil,
 }: let
   useMultilib = pkgs.stdenv.isLinux && withMultilib;
-  # ── nrfutil backend shell (unchanged behavior) ────────────────────────────
+  # ── nrfutil backend shell ───────────────────────────────────────────
   nrfutilShell = let
     nrfutilExe = "${nrfutilPackage}/bin/nrfutil";
 

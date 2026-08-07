@@ -11,7 +11,8 @@
 # toolchain env readiness, and records every install command.
 #
 # Run standalone from the repo:  python3 tests/unit/test_nix_nrf_bootstrap.py
-# Wired as checks.bootstrap-tests in flake.nix (sandboxed Python stdlib);
+# Wired as checks.bootstrap-tests in nix/flake/checks/nrfutil.nix (sandboxed
+# Python stdlib);
 # the derivation sets NIX_NRF_BOOTSTRAP_SCRIPT to the copied script.
 
 import json
@@ -384,8 +385,9 @@ class BootstrapTestCase(unittest.TestCase):
     def test_sdk_ready_toolchain_missing_yes_exact_one_line(self):
         # Installed SDK + missing toolchain + --yes --print-sdk-path (exact
         # bundle): exactly one output line, one toolchain install, exit 0.
-        # Regresses the pre-fix duplicate-line stdout (path emitted before
-        # --check handling AND again after install).
+        # Invariant: stdout stays empty until --print-sdk-path succeeds, and
+        # the path is emitted exactly once (not before --check handling and
+        # again after install).
         self.write_state("sdk_ok")
         proc = self.run_bootstrap(
             "--yes",

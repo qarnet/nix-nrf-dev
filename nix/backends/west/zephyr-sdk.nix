@@ -68,8 +68,9 @@ in
     ];
     # gdb-py binaries need libpython3.10.so.1.0 (not in pinned Nixpkgs —
     # Python 3.10 is EOL) and the legacy libcrypt.so.1 ABI (Nixpkgs libxcrypt
-    # ships libcrypt.so.2). The plain gdb and all compilers work; the
-    # python-enabled gdb stays unpatched/out of scope this phase.
+    # ships libcrypt.so.2). The python-enabled gdb intentionally remains
+    # unpatched because of those missing EOL/legacy ABIs; the plain gdb and
+    # all compilers work.
     autoPatchelfIgnoreMissingDeps = [
       "libpython3.10.so.1.0"
       "libcrypt.so.1"

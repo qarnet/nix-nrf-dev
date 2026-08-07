@@ -84,7 +84,8 @@ Keep this handoff document in the commit as implementation provenance.
 
 ## Out of scope
 
-- Do not edit `goals.md`; it is pre-existing untracked user work.
+- Do not edit the pre-existing root goals document; it was untracked user
+  work at the time.
 - Do not add a generic `nrf-env` wrapper.
 - Do not package the full NCS toolchain hermetically.
 - Do not change `west`, OpenOCD, nrfutil, probe detection, TCL, flashing, or
@@ -126,7 +127,7 @@ flashing paths.
 ## Repository and commit constraints
 
 - Follow `CONTRIBUTING.md` and Conventional Commits.
-- Do not stage or modify pre-existing untracked `goals.md`.
+- Do not stage or modify the pre-existing untracked root goals document.
 - Inspect `git status`, `git diff`, and `git log --oneline -10` before commit.
 - Stage only files in this handoff's scope.
 - Commit completed work before returning. Suggested message:

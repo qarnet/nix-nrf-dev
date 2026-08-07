@@ -190,7 +190,7 @@ logic beyond this contract.
 - Unit-test fallback script paths.
 - Check source paths.
 - `treefmt.nix` Python formatter comment.
-- Active README/goals/status/feasibility/refactor docs.
+- Active README/roadmap/status/feasibility/refactor docs.
 - Current source/test headers.
 
 Leave completed historical handoffs unchanged; Phase 4 archives them.

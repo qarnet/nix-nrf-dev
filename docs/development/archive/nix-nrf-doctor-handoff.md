@@ -308,8 +308,8 @@ Update normal CI:
 - devshell verifies help;
 - flake check runs fixture tests and byte-for-byte rule check.
 
-Update README, CONTRIBUTING, `goals.md`,
-`docs/development/clean-bootstrap-versioning-plan.md`, and
+Update README, CONTRIBUTING, the then-current roadmap document, the
+bootstrap versioning notes, and
 `docs/development/nrfutil-backend-status.md`. Mark Phase 4 done only after
 fixture gates and one read-only current-host doctor run.
 

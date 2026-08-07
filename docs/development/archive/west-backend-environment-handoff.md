@@ -342,7 +342,8 @@ integration defines manual workflow/caching.
 ## Documentation
 
 Add `docs/development/west-backend-status.md` with evidence and limitations.
-Update README experimental section and goals. Mark prior `sdk-nrf` prototype
+Update README experimental section and the roadmap document. Mark prior
+`sdk-nrf` prototype
 handoff superseded. Keep public `sdk-nrf` rejection and nrfutil default
 unchanged.
 

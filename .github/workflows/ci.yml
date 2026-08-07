@@ -2,7 +2,8 @@
 # Builds all packages (cached via Cachix qarnet), runs smoke tests, flake
 # checks, template-init, devshell-enter, real-OpenOCD source-compat gates,
 # and fake-OpenOCD semantic flash-recipe tests. Runs on PRs, pushes to main,
-# and nightly (catches upstream openocd rev/hash drift).
+# and nightly (scheduled regression coverage of the pinned inputs/builds —
+# the openocd rev/hash is a fixed pin and cannot drift).
 name: CI
 
 on:
@@ -10,7 +11,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '0 0 * * *'  # nightly — catches upstream openocd rev/hash drift
+    - cron: '0 0 * * *'  # nightly regression coverage of pinned inputs/builds
 
 # Cancel in-progress runs on the same ref when a new run is triggered.
 concurrency:
@@ -119,9 +120,11 @@ jobs:
 
       # A6 — real-OpenOCD source-compat gate: real OpenOCD sources+parses the
       # recipe Tcl before trying to open a probe, so syntax errors surface
-      # distinctly from "no probe" errors. The hosted runner has no probe, so
-      # the step must exit non-zero at the adapter-open stage; an unexpected
-      # exit 0 would mean the gate did not exercise the expected probe-open
+      # distinctly from "no probe" errors. The impossible `adapter serial`
+      # value guarantees the adapter-open stage fails after the scripts parse
+      # — deterministic regardless of whether the host has a probe attached
+      # (the hosted runner's USB state is irrelevant). An unexpected exit 0
+      # would mean the gate did not exercise the expected probe-open
       # boundary. Recipe proc semantics (command order, args, conditionals)
       # are owned by the checks.flash-recipe-tests flake check, not this gate.
       - name: Real OpenOCD source-compat nRF53 recipe
@@ -129,10 +132,12 @@ jobs:
           set +e
           nix run .#openocd-master -- \
             -f interface/cmsis-dap.cfg \
+            -c "adapter serial __nix_nrf_source_compat_no_probe__" \
             -c "transport select swd" \
             -c "adapter speed 1000" \
             -f target/nordic/nrf53.cfg \
             -f tcl/nrf53_flash.tcl \
+            -c init \
             -c shutdown > /tmp/nrf53.log 2>&1
           rc=$?
           cat /tmp/nrf53.log
@@ -141,8 +146,9 @@ jobs:
             echo "ERROR: Tcl parse error detected" >&2
             exit 1
           fi
-          # Hosted runner has no probe: exit 0 means the source-compat gate
-          # did not reach the expected adapter-open failure boundary.
+          # Exit 0 means the adapter-open boundary was not reached: the
+          # impossible serial must force a probe-open failure after the
+          # scripts parsed.
           if [ "$rc" -eq 0 ]; then
             echo "ERROR: expected non-zero probe-open failure, got exit 0" >&2
             exit 1
@@ -153,10 +159,12 @@ jobs:
           set +e
           nix run .#openocd-master -- \
             -f interface/cmsis-dap.cfg \
+            -c "adapter serial __nix_nrf_source_compat_no_probe__" \
             -c "transport select swd" \
             -c "adapter speed 1000" \
             -f target/nordic/nrf54l.cfg \
             -f tcl/nrf54l_flash.tcl \
+            -c init \
             -c shutdown > /tmp/nrf54l.log 2>&1
           rc=$?
           cat /tmp/nrf54l.log

@@ -56,7 +56,7 @@ Current code:
 - `nix/mk-nrf-shell.nix`: required `ncsVersion`, optional
   `toolchainBundleId`, scoped `west` wrapper, fragile shell-hook SDK-path
   derivation.
-- `docs/development/clean-bootstrap-versioning-plan.md`: accepted lazy
+- the bootstrap versioning plan: accepted lazy
   bootstrap direction, but still uses old standalone `nrf-bootstrap` naming
   and incorrectly implies sdk-manager itself accepts `--yes`.
 
@@ -286,11 +286,11 @@ Update:
 - `README.md` with explicit, lazy, manual mode, confirmation/env override,
   exact-bundle behavior, and shell re-entry note;
 - `templates/default/flake.nix` with commented `autoBootstrap` option;
-- `docs/development/clean-bootstrap-versioning-plan.md` to mark phase done,
+- the bootstrap versioning plan to mark phase done,
   use unified `nix-nrf bootstrap`, distinguish repository `--yes` from Nordic
   arguments, record JSON fields/evidence, and remove disproven assumptions;
-- `docs/development/nrfutil-backend-status.md`, `goals.md`, and relevant live
-  command inventories.
+- `docs/development/nrfutil-backend-status.md`, the roadmap document, and
+  relevant live command inventories.
 
 Preserve completed historical handoffs as historical records.
 

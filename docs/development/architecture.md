@@ -89,8 +89,8 @@ ownership and construction only.
   boundary), `west.nix`
   (bootstrap/versions/metadata/quoting/shell-boundary), `core.nix`
   (doctor/help/probes/udev wiring, fake-OpenOCD flash-recipe semantic tests,
-  + public NixOS module evaluation). See README
-  for the full 18-check list.
+  + public NixOS module evaluation). `nix/flake/checks/default.nix`
+  composes the exact check set.
 - Unit tests in `tests/unit/` run fake-boundary subprocess suites (sandboxed
   stdlib) wired into the corresponding checks; `tests/fixtures/`
   `west-workspace.py` is the shared fake workspace creator covered by

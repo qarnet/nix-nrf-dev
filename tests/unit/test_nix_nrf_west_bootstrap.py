@@ -15,7 +15,8 @@
 #   mutations.log  — venv creation, pip installs, west init/update
 #
 # Run standalone from the repo:  python3 tests/unit/test_nix_nrf_west_bootstrap.py
-# Wired as checks.west-bootstrap-tests in flake.nix (sandboxed Python stdlib);
+# Wired as checks.west-bootstrap-tests in nix/flake/checks/west.nix
+# (sandboxed Python stdlib);
 # the derivation sets NIX_NRF_WEST_BOOTSTRAP_SCRIPT to the copied script.
 
 import os

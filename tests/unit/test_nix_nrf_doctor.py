@@ -13,7 +13,8 @@
 # semantics in every sandbox; production code always uses os.access.
 #
 # Run standalone from the repo:  python3 tests/unit/test_nix_nrf_doctor.py
-# Wired as checks.doctor-tests in flake.nix (sandboxed Python stdlib); the
+# Wired as checks.doctor-tests in nix/flake/checks/core.nix (sandboxed Python
+# stdlib); the
 # derivation sets NIX_NRF_DOCTOR_SCRIPT to the copied script.
 
 import json

@@ -6,9 +6,9 @@ attached. The tests verify the full flashing workflow end-to-end on real
 hardware: probe identification via `nix-nrf probes`, and flashing both nRF5340
 and nRF54L15 via the TCL recipes.
 
-The workflow lives at `.github/workflows/hardware.yml` and is triggered:
-- manually via `workflow_dispatch` (GitHub Actions UI → Run workflow), and
-- nightly via `schedule` once uncommented in the workflow file.
+The workflow lives at `.github/workflows/hardware.yml` and is triggered
+manually via `workflow_dispatch` (GitHub Actions UI → Run workflow); it has
+no schedule.
 
 It runs on a self-hosted runner with the `nrf-hardware` label.
 
@@ -82,10 +82,10 @@ secrets available to the workflow. This has implications:
 `tests/hardware/run.sh` runs on the self-hosted runner:
 
 1. Enter the nix dev shell (`nix develop`).
-2. Run `nix-nrf probes` and assert the table shows the expected nRF5340 and
-   nRF54L15 targets.
+2. Run `nix-nrf probes` and assert enumeration succeeds (the harness does
+   not parse table content).
 3. Run `nix-nrf probes --find nrf53` and `nix-nrf probes --find nrf54l` to
-   capture probe serials.
+   capture probe serials — these calls prove the expected families exist.
 4. Build four runtime artifacts from NCS (each in its own `mktemp` dir,
    all removed on exit):
    - nRF5340 CPUAPP blinky (`nrf5340dk/nrf5340/cpuapp`);
@@ -122,7 +122,7 @@ secrets available to the workflow. This has implications:
 Each OpenOCD invocation is captured to a per-step temporary log (removed on
 exit) so a failure surfaces the exact OpenOCD evidence.
 
-**Explicit limit:** this phase proves *flashability* — that distinct
+**Explicit limit:** this test proves *flashability* — that distinct
 CPUAPP/CPUNET images exist at the correct address spaces and that the official
 FLPR payload lives at the FLPR RRAM addresses, with OpenOCD
 `load_image` + `verify_image` succeeding byte-for-byte. It does **not** observe

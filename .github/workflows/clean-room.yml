@@ -4,7 +4,7 @@
 # Deliberately NOT part of normal PR CI: a cold multi-gigabyte SDK/toolchain
 # bootstrap is too large and slow for `.github/workflows/ci.yml`. Dispatch
 # manually on the known self-hosted runner when a full cold-bootstrap proof
-# is wanted. No schedule yet, no hardware/probe/flashing step.
+# is wanted. Manual-only: no schedule, no hardware/probe/flashing step.
 #
 # See tests/clean-room/README.md for the test's behavior and safety controls.
 name: Clean room

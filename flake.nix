@@ -54,7 +54,7 @@
       # Minimal NixOS module: activate the packaged upstream OpenOCD
       # udev rules (60-openocd.rules) for the current system, so CMSIS-DAP
       # and J-Link nodes get MODE="660", GROUP="plugdev", TAG+="uaccess"
-      # without hand-written rules. No options in this version.
+      # without hand-written rules. The module exposes no options.
       #
       # Consumer:
       #   imports = [ nix-nrf-dev.nixosModules.default ];

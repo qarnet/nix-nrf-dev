@@ -8,9 +8,10 @@ network downloads.
 The test:
 
 1. Enters the public west shell via the flake's public `lib.mkNrfShell`
-   (`nix develop --impure --expr '<backend = "west"; ncsVersion =
-   "v3.3.0">'`) with `--ignore-env` and an isolated `HOME`, so no developer
-   state is inherited.
+   (`nix develop --impure --expr 'let flake = builtins.getFlake (toString
+   ./.); in flake.lib.x86_64-linux.mkNrfShell { backend = "west"; ncsVersion
+   = "v3.3.0"; }'`) with `--ignore-env` and an isolated `HOME`, so no
+   developer state is inherited.
 2. Runs `nix-nrf bootstrap --yes`, which creates the mutable west workspace
    (`west init` + `west update`) and the version-local venv (pip-installed
    west and the workspace requirement files) under the isolated home.

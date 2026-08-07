@@ -176,12 +176,13 @@ Update:
 - `CONTRIBUTING.md`: local clean-room command, download/disk warning, manual
   workflow, no use in normal pre-commit gate.
 - `README.md`: concise clean bootstrap proof/status and link to test script.
-- `docs/development/clean-bootstrap-versioning-plan.md`: mark Phase 3 done only
+- the then-current bootstrap versioning plan: mark Phase 3 done only
   after real run passes; record date, host platform, elapsed times, measured
   installed size, exact build/artifact evidence, and workflow policy.
 - `docs/development/nrfutil-backend-status.md`: clean-home bootstrap/build now
   proven; remove it from open follow-up.
-- `goals.md`: adjust any live claim that CI never performs real west build.
+- the then-current roadmap document: adjust any live claim that CI never
+  performs real west build.
 
 Add `tests/clean-room/README.md` documenting behavior, safety controls,
 requirements (Linux, network, 25 GiB free, time), manual invocation, and that it

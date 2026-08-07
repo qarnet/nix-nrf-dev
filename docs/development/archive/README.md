@@ -14,10 +14,10 @@ For current information use:
   ownership;
 - `docs/development/west-backend-status.md` and
   `docs/development/nrfutil-backend-status.md` — backend status;
+- `docs/development/roadmap.md` — open future direction (non-binding);
 - `docs/development/sdk-nrf-feasibility-draft.md` — non-binding future
   direction;
-- `docs/development/clean-bootstrap-versioning-plan.md` — accepted bootstrap
-  design and phase history.
+- `tests/clean-room/README.md` — clean-room bootstrap/build test contract.
 
 ## Grouped index
 

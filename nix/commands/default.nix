@@ -34,7 +34,7 @@
 # packages — never ambient PATH lookup — and `exec`, so delegated stdout,
 # stderr, options, and exit status are preserved unchanged. `nix-nrf` owns its
 # project command modules; there is no standalone `nrf-bootstrap`/`nrf-probes`/
-# `nrf-doctor` binary or package. No dynamic plugin discovery in this phase.
+# `nrf-doctor` binary or package. No dynamic plugin discovery.
 {
   pkgs,
   openocd,

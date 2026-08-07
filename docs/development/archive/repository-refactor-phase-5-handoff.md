@@ -146,7 +146,7 @@ Final active development docs:
 
 ```text
 architecture.md
-clean-bootstrap-versioning-plan.md
+roadmap.md
 nrfutil-backend-status.md
 sdk-nrf-feasibility-draft.md
 west-backend-status.md

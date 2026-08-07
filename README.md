@@ -80,9 +80,9 @@ build. There is no sdk-manager-only composition that avoids J-Link.
   `v3.3.0` on `x86_64-linux` (metadata-driven in
   `nix/backends/west/versions.nix`).
 - `"sdk-nrf"` — reserved for a future Nix-native build environment (see
-  `goals.md`). It is **not** implemented: any unsupported value fails at Nix
-  evaluation with an unsupported-backend error instead of silently falling
-  back.
+  `docs/development/roadmap.md`). It is **not** implemented: any unsupported
+  value fails at Nix evaluation with an unsupported-backend error instead of
+  silently falling back.
 
 ```nix
 # nrfutil (default, recommended):
@@ -182,13 +182,6 @@ manually via `.github/workflows/clean-room.yml` (`workflow_dispatch` on the
 `nrf-hardware` self-hosted runner, no schedule) — normal PR CI never
 downloads SDK/toolchain bundles. See `tests/clean-room/README.md`.
 
-**Proven 2026-08-05 (Linux x86_64):** `bash tests/clean-room/run.sh` exited 0
-with bootstrap 458 s, blinky sysbuild 66 s, and a measured clean-home NCS
-install of 13 G under `$HOME/ncs/v3.3.0` with toolchain bundle `911f4c5c26`;
-artifacts `blinky/zephyr/zephyr.elf` and `domains.yaml` were asserted
-non-empty. The GitHub workflow was not dispatched; evidence is the local real
-run (see `docs/development/clean-bootstrap-versioning-plan.md`, Phase 3).
-
 ## Experimental: west backend (public, v3.3.0 / x86_64-linux only)
 
 The west backend (`mkNrfShell { backend = "west"; ... }`) is the hybrid
@@ -196,11 +189,11 @@ model: Nix supplies the exact Zephyr SDK, host tools, and Python interpreter,
 while the official mutable west workspace and a version-local Python venv own
 the NCS source, west, and workspace Python requirements — no nrfutil/
 sdk-manager and no Nordic toolchain bundle. See
-`docs/development/archive/west-backend-environment-handoff.md` and
-`docs/development/west-backend-status.md`. This supersedes the earlier
-`sdk-nrf` prototype plan (`docs/development/archive/sdk-nrf-prototype-handoff.md`).
+`docs/development/west-backend-status.md` for current status and behavior.
 It is **experimental**: only `v3.3.0` on `x86_64-linux` is supported, and the
-nrfutil backend remains the default/recommended fallback.
+nrfutil backend remains the default/recommended fallback. A pure Nix-native
+`sdk-nrf` backend remains reserved — see `docs/development/roadmap.md` and
+`docs/development/sdk-nrf-feasibility-draft.md`.
 
 Backend-aware surface:
 
@@ -209,11 +202,9 @@ packages.west-zephyr-sdk-v3_3_0      exact Zephyr SDK 0.17.0 (minimal + ARM/RISC
 nix-nrf versions                     lists west backend metadata releases (never nrfutil)
 nix-nrf bootstrap                    creates/updates the mutable west workspace + venv
 tests/west-backend/run.sh            clean-room proof (real setup + blinky sysbuild)
-checks.west-bootstrap-tests          fake-boundary fixture tests
-checks.west-versions-tests           fake-boundary versions command tests
-checks.west-backend-metadata         versions.nix schema check
-checks.west-backend-quoting          metadata quote-embedding regression
-checks.west-shell-boundary           public shell boundary gate (fake-ready workspace)
+checks.<system> west gates           fake-boundary + shell-boundary checks (see
+                                     nix/flake/checks/default.nix and
+                                     docs/development/west-backend-status.md)
 ```
 
 Typical flow inside a public west shell:
@@ -227,32 +218,7 @@ west build -p always -b xiao_nrf54l15/nrf54l15/cpuapp --sysbuild zephyr/samples/
 The west backend supports only `x86_64-linux`. The real clean-home proof
 (`tests/west-backend/run.sh`) downloads several GiB; each run requires its
 own fresh explicit approval — approval is never permanent. Normal CI never
-downloads a workspace.
-
-**Proven 2026-08-05 (Linux x86_64):** the prototype-phase
-`bash tests/west-backend/run.sh` exited 0 from a script-created isolated
-`/tmp` HOME: `nix-nrf bootstrap --yes` completed in 436 s (west init + west
-update + venv requirements with the then-current metadata constraint
-`cbor2<6`, which installed `cbor2==5.9.0`; since tightened to the exact
-`cbor2==5.9.0` pin), the scoped west wrapper then built
-`xiao_nrf54l15/nrf54l15/cpuapp` sysbuild blinky in 18 s, artifacts
-`zephyr.elf`/`domains.yaml` were asserted non-empty, and the temp home was
-removed on exit. Workspace (incl. venv) 6.4 G, build 29 M; Zephyr SDK came
-from `/nix/store/...-zephyr-sdk-0.17.0`; `nrfutil` absent throughout. See
-`docs/development/west-backend-status.md`.
-
-**Proven 2026-08-06 (Linux x86_64, public API rerun):** `bash
-tests/west-backend/run.sh` exited 0 through the public
-`backend = "west"` shell from a script-created isolated `/tmp` HOME:
-`nix-nrf bootstrap --yes` 474 s (west init + west update + venv requirements
-with the metadata `cbor2==5.9.0` pin), scoped `west` sysbuild blinky 19 s,
-workspace (incl. venv) 6.4 G / build 29 M, artifacts `zephyr.elf` and
-`domains.yaml` asserted non-empty, west v1.4.0, compilers `(Zephyr SDK
-0.17.0) 12.2.0`, `ZEPHYR_SDK_INSTALL_DIR` under `/nix/store`, `nrfutil` and
-the temporary `nix-nrf-west-setup` command absent from PATH, zero approval
-prompts on the ready second entry (the lazy bootstrap is a no-op when the
-workspace is ready), and the temp home removed on exit. See
-`docs/development/west-backend-status.md`.
+downloads a workspace. See `docs/development/west-backend-status.md`.
 
 ## nix-nrf CLI
 
@@ -361,7 +327,7 @@ the doctor still checks the west workspace/venv only through the read-only
 ## NixOS udev rules
 
 OpenOCD's canonical `60-openocd.rules` (pinned revision
-`e6752ecbcf72efe4e213e8418e381ff2e0ffdf54`) grants non-root access to
+`da3920b0a52dc2d394afb222c688dac7e57acc1b`) grants non-root access to
 CMSIS-DAP and J-Link probes (`MODE="660"`, `GROUP="plugdev"`,
 `TAG+="uaccess"`, covering `usb`, `tty`, and `hidraw` subsystems). The flake
 exposes it as `packages.udev-rules`, copied byte-for-byte from the built
@@ -439,7 +405,7 @@ unsupported (all `<system>`-parameterized outputs below resolve to
 | `devShells.default` | dogfood shell for hacking on this repo |
 | `formatter.<system>` | treefmt wrapper (`nix fmt`) |
 | `nixosModules.default` | minimal NixOS module adding `packages.udev-rules` to `services.udev.packages` (no options; see [NixOS udev rules](#nixos-udev-rules)) |
-| `checks.<system>` | `formatting` (treefmt) + `backend-selector` (eval gate: `ncsVersion` required, omitted equals nrfutil, `nrfutil`/`west`+v3.3.0 evaluate, `sdk-nrf`/west-unknown-release/west-toolchainBundleId/west-nrfutilPackage rejected, `toolchainBundleId` evaluates, `autoBootstrap` omitted/true/false evaluates for both backends, exact bundle in either bootstrap mode) + `bootstrap-tests` (fake-boundary unit tests, no network/real SDK) + `bootstrap-quoting` (wrapper shell-quoting regression for selector values with spaces/quotes) + `nrfutil-shell-boundary` (public nrfutil shell boundary gate: real shell hook + scoped `west` wrapper against a fake nrfutil state and fake real west; no network/real SDK/hardware) + `doctor-tests` (fake sysfs/dev-root doctor unit tests, no hardware) + `probes-tests` (fake sysfs + fake-openocd probes unit tests, no hardware/network) + `flash-recipe-tests` (sources the real flash recipes under tclsh with fake OpenOCD commands: proves command order, argument preservation incl. paths with spaces, conditionals, and UICR safety branches; no hardware/real OpenOCD) + `doctor-udev-wiring` (shell doctor reports the exact packaged udev-rule path) + `nix-nrf-help` (byte-for-byte standalone `nix-nrf --help` wording) + `udev-rules` (installed rule byte-identical to the pinned OpenOCD contrib rule) + `nixos-module` (public NixOS module evaluated through pinned Nixpkgs `lib.nixosSystem`: exact packaged udev-rules package appears exactly once in `services.udev.packages` and equals `packages.udev-rules`; no VM/hardware) + `west-bootstrap-tests` (fake-boundary west bootstrap tests, no network/workspace; also runs the shared fake-west-workspace fixture safety suite) + `west-versions-tests` (fake-boundary west `versions` command tests) + `west-backend-metadata` (versions.nix schema) + `west-backend-quoting` (metadata quote-embedding regression for the public west shell hook/wrapper) + `west-shell-boundary` (public west shell boundary gate against a fake-ready workspace) + `pre-commit` (git-hooks.nix) |
+| `checks.<system>` | `nix flake check` gate with the exact check set in `nix/flake/checks/default.nix` (grouped by domain in `nix/flake/checks/`): formatting (treefmt) and pre-commit; backend-selection evaluation (required `ncsVersion`, dispatch, west-only rejections); fake-boundary behavior gates for the public commands and flash recipes (bootstrap/versions/quoting, doctor, probes, real `tcl/` sources under tclsh with fake OpenOCD); public shell-boundary gates for both backends; and wiring/byte-identity checks (udev rules, doctor rule path, help wording, public NixOS module evaluation). Normal checks never download SDK/toolchain bundles, run mutable west workspaces, or touch hardware |
 | `templates.default` | project skeleton (flake.nix + .envrc) |
 | `tcl/` | canonical flash recipes (see below) |
 

@@ -31,10 +31,11 @@ Formatting and lint hooks run automatically via `pre-commit` (wired through
 `git-hooks.nix`). To run them manually:
 
 ```bash
-nix fmt                       # format all files (alejandra for Nix, black for Python)
-nix flake check -L             # run all checks in a sandbox (incl. doctor-tests
-                               # and the udev-rules byte-for-byte check)
-pre-commit run --all-files      # run hooks without committing
+nix fmt                                 # format all files (alejandra for Nix, black for Python)
+nix flake check --all-systems --no-build -L  # evaluate all checks without building (fast pass)
+nix flake check -L                      # build and run all checks (incl. doctor-tests
+                                        # and the udev-rules byte-for-byte check)
+pre-commit run --all-files              # run hooks without committing
 nix develop .#clean-env-test --command sh -ceu '
   case "${LD_LIBRARY_PATH:-}" in *ncs/toolchains*) exit 1;; esac
   case "${PYTHONPATH:-}" in *ncs/toolchains*) exit 1;; esac
@@ -46,6 +47,11 @@ nix develop .#clean-env-test --command sh -ceu '
   python3 -c "import json"
 '  # prove Nordic sdk-manager variables do not poison external tools
 ```
+
+Flake checks cover evaluation gates, fake-boundary unit suites, shell-boundary
+gates, and wiring/byte-identity checks; they do not build the flake's package
+outputs (`packages.*`) — CI has a separate package-build step, so run
+`nix build` for a package locally when you changed its derivation.
 
 ## Clean-room bootstrap test
 
@@ -126,8 +132,7 @@ openocd. To add one:
 ## CI and the openocd-master build
 
 `openocd-master` is built from source in CI on every PR and nightly, cached
-via [Cachix](https://app.cachix.org) under the `qarnet` cache. The first build
-takes ~10 minutes; subsequent builds pull from the cache in under a minute.
+via [Cachix](https://app.cachix.org) under the `qarnet` cache.
 
 Hardware integration tests run on a self-hosted GitHub Actions runner with
 CMSIS-DAP probes and target boards attached. See

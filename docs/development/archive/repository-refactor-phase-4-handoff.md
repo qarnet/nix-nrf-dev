@@ -72,20 +72,21 @@ and points to current README/status/feasibility/refactor docs.
 ## Active documents kept in place
 
 ```text
-docs/development/clean-bootstrap-versioning-plan.md
 docs/development/nrfutil-backend-status.md
 docs/development/west-backend-status.md
 docs/development/sdk-nrf-feasibility-draft.md
 docs/development/archive/repository-refactor-plan.md
 ```
 
-`clean-bootstrap-versioning-plan.md` mixes accepted design and proof history but
-is still referenced by README/current nrfutil status; keep it active this phase.
+The bootstrap versioning plan mixed accepted design and proof history and was
+still referenced by README/current nrfutil status; keep it active this phase
+and fold its remaining direction into the current roadmap/status docs
+afterward.
 
 Update links from active files to archived files, including:
 
 - README west environment and superseded sdk-nrf prototype references;
-- goals west environment reference;
+- the roadmap's west environment reference;
 - west status prototype/integration handoff references;
 - clean bootstrap plan reference to bootstrap handoff;
 - any archived document linking another moved document.

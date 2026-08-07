@@ -1,6 +1,5 @@
 # west-backend regression gates: bootstrap/versions/metadata/quoting tests
-# and the public west shell boundary gate. Comments moved verbatim with the
-# implementations.
+# and the public west shell boundary gate.
 {
   pkgs,
   mkNrfShell,
@@ -456,9 +455,8 @@
       PYEOF
 
       # ── Scoped west: exact venv west, expected exports ──────────────
-      # No approval needed: the ready workspace short-circuits the
-      # bootstrap (nrfutil parity), exactly the regression the real
-      # clean-room run exposed.
+      # No approval needed: a ready workspace must short-circuit the
+      # bootstrap without approval or mutation (nrfutil parity).
       "$westPkg/bin/west" list --format=json > wrapper.out
       grep -F "argv=list --format=json ZEPHYR_BASE=$HOME/ncs/v3.3.0/zephyr ZEPHYR_TOOLCHAIN_VARIANT=zephyr ZEPHYR_SDK_INSTALL_DIR=$expectedSdk PATH=" "$HOME/venv.log" >/dev/null || {
       echo "FAIL: scoped west did not reach the venv west with the expected environment" >&2

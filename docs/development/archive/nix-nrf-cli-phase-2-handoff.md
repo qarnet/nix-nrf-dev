@@ -27,7 +27,8 @@ nix-nrf probes --find FAMILY
   `flake.nix` and `nix/mk-nrf-shell.nix` pass/add that package separately.
 - Active repository callers: `.github/workflows/ci.yml`, `README.md`,
   `CONTRIBUTING.md`, `tests/hardware/run.sh`, `tests/hardware/README.md`,
-  `treefmt.nix`, `goals.md`, and current development status/plan documents.
+  `treefmt.nix`, the roadmap document, and current development
+  status/plan documents.
 - Probe behavior to preserve lives in `bin/nrf-probes`: table output;
   serial filtering; family/chip matching; `--find` exit 0 for one match, 1 for
   no match, 2 for ambiguity; read-only OpenOCD fingerprinting.
@@ -117,12 +118,12 @@ Update active callers atomically:
   `nix-nrf` and assert `nrf-probes` is absent.
 - `README.md`: remove compatibility language and `packages.nrf-probes` output;
   document only `nix-nrf probes`.
-- `CONTRIBUTING.md`, `treefmt.nix`, `goals.md`,
+- `CONTRIBUTING.md`, `treefmt.nix`, the roadmap document,
   `docs/development/archive/nix-nrf-cli-plan.md`, and
   `docs/development/nrfutil-backend-status.md`: update live paths, commands,
   package inventories, planned composition, and status.
 - Update live/future references in
-  `docs/development/clean-bootstrap-versioning-plan.md`; preserve its explicit
+  the bootstrap versioning plan; preserve its explicit
   historical Phase 1 record where old names document what that completed
   phase originally shipped.
 
@@ -147,7 +148,7 @@ Out of scope:
 - Refactoring probe logic or adding chip families.
 - Adding bootstrap, flash, doctor, RTT, debug, or console commands.
 - Dynamic plugin discovery.
-- Probe unit-test refactor tracked separately in `goals.md`.
+- Probe unit-test refactor tracked separately in the roadmap.
 - Hardware execution or flashing.
 - Changes to upstream command surfaces.
 

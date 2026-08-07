@@ -1,15 +1,10 @@
 # nRF Util Backend Status
 
-Status of the nrfutil backend after the Nixpkgs migration. The previous
-custom-launcher/core-bootstrap direction (see git history) was rejected and
-removed: there is no custom `nrfutil-core` package, no launcher/core tarball
-pinning, no runtime `nrfutil install sdk-manager=<version>` step, and no
-controlled `NRFUTIL_HOME` scheme.
-
-The nrfutil backend remains the default and its behavior is unchanged. It is
-no longer the *only* implemented backend: the experimental west backend
-(`backend = "west"`, v3.3.0 / x86_64-linux only) is also public — see
-`docs/development/west-backend-status.md`.
+Current status of the nrfutil backend. nrfutil is the default backend and
+provides the NCS toolchain environment via Nordic sdk-manager (Nixpkgs
+packaged nrfutil with the sdk-manager extension). The experimental west
+backend (`backend = "west"`, v3.3.0 / x86_64-linux only) is an additional
+backend — see `docs/development/west-backend-status.md`.
 
 ## Current state
 
@@ -61,19 +56,16 @@ no longer the *only* implemented backend: the experimental west backend
 - Clean-home bootstrap/build is proven: `tests/clean-room/run.sh` bootstraps
   NCS v3.3.0 and the selected toolchain under an isolated, script-created
   HOME, re-enters the shell, derives `ZEPHYR_BASE` from that installation,
-  and builds the XIAO nRF54L15 sysbuild blinky (see
-  `docs/development/clean-bootstrap-versioning-plan.md`, Phase 3 evidence).
+  and builds the XIAO nRF54L15 sysbuild blinky. It runs manually
+  (`.github/workflows/clean-room.yml`, `workflow_dispatch` on the
+  `nrf-hardware` runner); normal PR CI never downloads SDK/toolchain bundles.
+  See `tests/clean-room/README.md` for the full contract.
 
-## Open follow-up (not this phase)
+## Future work
 
-- Version-keyed SDK/toolchain CI caching — see
-  `docs/development/clean-bootstrap-versioning-plan.md` (Phase 3 CI-split
-  discussion; the current manual clean-room workflow bypasses any cache).
-- Parallel-bootstrap locking: confirm whether sdk-manager serializes installs
-  itself; document a lock as follow-up if it does not.
-- Nix-native `sdk-nrf` backend — reserved, rejected at evaluation until
-  implemented.
-- Scheduled version-discovery PR automation — needs separate workflow
-  permission, update policy, and failure-semantics design.
-- Doctor extras from `goals.md` 3.3: `ZEPHYR_BASE`/multilib checks, a
-  shellHook "warn once" mode, and a standalone `packages.nrf-doctor` output.
+Open direction for the nrfutil backend and its surroundings is tracked in
+`docs/development/roadmap.md` (CI caching, automation, doctor extras) and in
+`docs/development/sdk-nrf-feasibility-draft.md` for the pure Nix-native
+`sdk-nrf` backend research question (reserved, rejected at evaluation until
+implemented). Parallel-bootstrap locking — confirming whether sdk-manager
+serializes installs itself — remains an open verification item.

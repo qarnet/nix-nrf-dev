@@ -99,8 +99,8 @@ Update current user-facing and status references in:
 - `README.md`
 - `CONTRIBUTING.md` where command inventory is described
 - `docs/development/nrfutil-backend-status.md`
-- `docs/development/clean-bootstrap-versioning-plan.md`
-- `goals.md` where current package/command names appear
+- the then-current bootstrap versioning plan document
+- the roadmap document where current package/command names appear
 
 Examples should lead with `nix-nrf versions` and `nix-nrf probes`. Clearly mark
 `nrf-probes` as a compatibility command, not preferred new API. Remove claims

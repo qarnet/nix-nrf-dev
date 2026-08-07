@@ -309,7 +309,7 @@ Update:
   replace temporary command/prototype shell names, preserve proof history.
 - `docs/development/nrfutil-backend-status.md`: replace stale claim that only
   nrfutil is implemented; keep nrfutil behavior/status unchanged.
-- `goals.md` 3.1: rename direction to hybrid west backend and record public
+- roadmap item 3.1: rename direction to hybrid west backend and record public
   integration. Do not claim fully hermetic workspace or hardware parity.
 - `tests/west-backend/README.md` and harness comments/commands: public API.
 

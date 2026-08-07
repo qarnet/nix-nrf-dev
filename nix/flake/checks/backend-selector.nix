@@ -1,6 +1,5 @@
 # Evaluation gate for the public mkNrfShell backend selector: pure Nix
 # evaluation (builtins.tryEval / functionArgs), no SDK build, no network.
-# Regression comments moved verbatim with the implementation.
 {
   pkgs,
   mkNrfShell,

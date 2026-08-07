@@ -54,9 +54,9 @@ step() {
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$REPO_ROOT"
 
-# NCS release pinned by devShells.clean-env-test in flake.nix. The test never
-# installs a different release; sdk-manager remains the runtime authority for
-# what the selector resolves to.
+# NCS release pinned by devShells.clean-env-test in nix/flake/dev-shells.nix.
+# The test never installs a different release; sdk-manager remains the
+# runtime authority for what the selector resolves to.
 NCS_VERSION="v3.3.0"
 MIN_FREE_GIB="${NIX_NRF_CLEAN_MIN_FREE_GIB:-25}"
 CLEAN_HOME="${NIX_NRF_CLEAN_HOME:-}"

@@ -60,9 +60,8 @@ Behavior after this phase:
   `tests/hardware/run.sh`, `tests/hardware/README.md`, `.github/workflows/ci.yml`
   (no longer builds/smoke-runs `.#nrf-probes`; devshell and template checks
   assert `nrf-probes` is absent), `README.md`, `CONTRIBUTING.md`, `treefmt.nix`,
-  `goals.md`, `nrfutil-backend-status.md`, and this plan document.
-  `clean-bootstrap-versioning-plan.md` live references were updated while its
-  historical Phase 1 record was preserved.
+  the then-current roadmap document, `nrfutil-backend-status.md`, and this plan
+  document.
 
 Constraints:
 

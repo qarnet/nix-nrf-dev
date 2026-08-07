@@ -16,7 +16,7 @@
 #   itself fails to load shared libraries, nix-store pythons pick up the
 #   wrong stdlib, git may misbehave). Instead of eval'ing that script into
 #   the whole shell, the `west` wrapper evals it only inside west's process
-#   tree (~100 ms overhead per invocation). Builds still see the full
+#   tree. Builds still see the full
 #   toolchain because cmake/ninja/gcc are spawned by west.
 #
 #   Lazy bootstrap: the `west` wrapper invokes the shell-specific

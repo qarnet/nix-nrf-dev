@@ -1,6 +1,6 @@
 # nrfutil-backend regression gates: fake-boundary bootstrap lifecycle tests,
 # the bootstrap wrapper quoting round-trip, and the public nrfutil shell
-# boundary gate. Comments moved verbatim with the implementations.
+# boundary gate.
 {
   pkgs,
   nrfutil,

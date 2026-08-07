@@ -167,7 +167,7 @@ Do not weaken or replace direct module checks.
 Update current/live path references only:
 
 - `README.md`;
-- `goals.md`;
+- the roadmap document;
 - `docs/development/west-backend-status.md`;
 - `docs/development/nrfutil-backend-status.md` when relevant;
 - `docs/development/sdk-nrf-feasibility-draft.md` future shared path reference;

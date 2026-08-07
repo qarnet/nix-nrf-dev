@@ -14,7 +14,8 @@
 #
 # Run standalone from the repo:
 #   python3 tests/unit/test_nix_nrf_west_versions.py
-# Wired as checks.west-versions-tests in flake.nix (sandboxed Python stdlib);
+# Wired as checks.west-versions-tests in nix/flake/checks/west.nix (sandboxed
+# Python stdlib);
 # the derivation sets NIX_NRF_WEST_VERSIONS_COMMAND to the packaged module
 # executable.
 

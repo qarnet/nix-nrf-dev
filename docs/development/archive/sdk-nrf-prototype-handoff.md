@@ -367,8 +367,8 @@ Add `docs/development/sdk-nrf-prototype-status.md` recording:
 - limitations: one release, one board/sample, minimal modules, no consumer
   shell, no flashing, no binary-cache policy.
 
-Update `goals.md`, README experimental section, and
-`docs/development/clean-bootstrap-versioning-plan.md`. Keep `sdk-nrf` backend
+Update the README experimental section, the then-current roadmap document, and
+the bootstrap versioning status notes. Keep `sdk-nrf` backend
 status open/rejected. Do not mark roadmap item 3.1 complete.
 
 ## Scope

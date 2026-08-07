@@ -363,11 +363,12 @@ def approve(args):
 
 
 def run_setup(args, workspace):
-    """Mutating setup per the handoff command order. Approval was already
-    granted by the caller. On an existing ready workspace this still runs
-    `west update` and reinstalls the requirement files for the current
-    manifest (documented mutation); it never re-inits and never resets or
-    deletes anything."""
+    """Mutating setup. The caller has already established that mutation is
+    required and approved (a ready workspace returns before this function is
+    ever reached). A partial or existing workspace may be updated — venv,
+    west init/update, and requirement installs run as needed — but this
+    function never re-inits an existing .west and never resets or deletes
+    anything."""
     ncs_version = os.environ.get("NIX_NRF_WEST_NCS_VERSION")
     if not ncs_version:
         fail("NIX_NRF_WEST_NCS_VERSION is not set — run through the packaged nix-nrf-west-bootstrap")
@@ -428,8 +429,9 @@ def run_setup(args, workspace):
             check_message="west init",
         )
 
-    # 4. Update the mutable west workspace (also on re-runs: the manifest may
-    #    have moved upstream).
+    # 4. Update the mutable west workspace (reachable partial/existing
+    #    reruns: the manifest may have moved upstream; a ready workspace
+    #    never reaches this function).
     run(
         [str(venv_west), "update"],
         workspace,
@@ -437,7 +439,8 @@ def run_setup(args, workspace):
     )
 
     # 5. Install each metadata requirement file with the venv python/pip in
-    #    declared order (also on re-runs: requirements may have changed).
+    #    declared order (on partial/existing reruns: requirements may have
+    #    changed; a ready workspace never reaches this function).
     for req in required_requirements():
         run(
             pip_install_argv(

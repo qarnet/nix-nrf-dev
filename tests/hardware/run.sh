@@ -21,7 +21,7 @@
 # BOTH cores ("Verified app core:" / "Verified net core:") with no "no
 # flash bank found" warning, and the FLPR run must byte-verify the whole
 # bundle ("Verified image: <bundle>"). FLPR EXECUTION is not observed —
-# this phase proves flashability, not runtime IPC/heartbeat.
+# this harness proves flashability, not runtime IPC/heartbeat.
 #
 # The harness never recovers or mass-erases: nrf53 flash_both is invoked
 # with allow_recovery 0, so a locked app core aborts the run instead of

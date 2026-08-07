@@ -4,7 +4,6 @@
 # `defaultDevShell` is the flake's devShells.default (constructed by
 # dev-shells.nix), passed explicitly; the check pulls the exact packaged
 # nix-nrf from it, same derivation as self.devShells.${system}.default.
-# Comments moved verbatim with the implementations.
 {
   pkgs,
   nix-nrf,
@@ -137,9 +136,9 @@
   # internal udevRules closure wiring) reports the exact packaged udev
   # rule path in its remediation. Runs the real shell `nix-nrf doctor`
   # against a temporary fake sysfs/dev root with one blocked candidate —
-  # no host USB, no network, no SDK. Regresses the pre-fix state where
-  # mkNrfShell omitted udevRules and the shell doctor dropped the exact
-  # packaged-rule-path line.
+  # no host USB, no network, no SDK. The gate prevents a shell-specific
+  # doctor from losing the exact packaged-rule-path line (mkNrfShell must
+  # keep passing the internal udevRules package through the closure).
   doctorUdevWiringCheck = let
     devShell = defaultDevShell;
     nixNrf = let
