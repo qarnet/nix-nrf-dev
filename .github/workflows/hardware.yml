@@ -1,7 +1,9 @@
 # Hardware integration tests — runs on a self-hosted runner with CMSIS-DAP
-# probes and nRF target boards attached. Dispatch-only until phase 6 lands
-# tests/hardware/run.sh and the user registers a runner with the
-# `nrf-hardware` label.
+# probes and nRF target boards attached. run.sh builds four NCS artifacts at
+# runtime (nRF5340 CPUAPP/CPUNET, nRF54L15 blinky + FLPR bundle), validates
+# their Intel HEX layouts, and byte-verifies every flash through the TCL
+# recipes. Dispatch-only until a runner with the `nrf-hardware` label is
+# registered.
 #
 # See tests/hardware/README.md for runner registration and security notes.
 name: Hardware
@@ -19,7 +21,10 @@ concurrency:
 jobs:
   hardware:
     runs-on: [self-hosted, nrf-hardware]
-    timeout-minutes: 15
+    # Four clean NCS builds (two blinky + two empty-sample sysbuilds) plus
+    # two-board flashing: 15 minutes was too tight for clean cold builds on
+    # the self-hosted runner.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
 

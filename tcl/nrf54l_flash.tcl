@@ -29,6 +29,8 @@ proc nrf54l_flash {image} {
     reset halt
     nrf54l_rram_we
     load_image $image
+    puts "Verifying image: $image"
     verify_image $image
+    puts "Verified image: $image"
     reset run
 }

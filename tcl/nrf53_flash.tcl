@@ -98,6 +98,9 @@ proc flash_both {app_hex net_hex} {
     # Flash app core while halted at reset vector.
     puts "Flashing app core: $app_hex"
     flash write_image erase $app_hex
+    puts "Verifying app core: $app_hex"
+    verify_image $app_hex
+    puts "Verified app core: $app_hex"
     uicr_unprotect_app
 
     # Release net core from FORCEOFF and examine.
@@ -111,6 +114,9 @@ proc flash_both {app_hex net_hex} {
     wait_halt 2000
     flash probe 2
     flash write_image erase $net_hex
+    puts "Verifying net core: $net_hex"
+    verify_image $net_hex
+    puts "Verified net core: $net_hex"
     uicr_unprotect_net
 
     puts "Resetting both cores..."

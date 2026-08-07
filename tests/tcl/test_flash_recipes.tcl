@@ -212,6 +212,8 @@ assert_eq $::log \
         [list verify_image $image] \
         [list reset run]] \
     "nrf54l_flash exact order and single-argument image preservation"
+assert_contains_substr $::puts_log "Verified image: $image" \
+    "nrf54l_flash reports verification success with the exact image path"
 
 # 3. Erased UICR performs one exact `flash fillw <addr> 0x50FA50FA 1`.
 reset_state
@@ -292,6 +294,7 @@ assert_eq $::log \
         [list reset halt] \
         [list wait_halt 2000] \
         [list flash write_image erase $app_hex] \
+        [list verify_image $app_hex] \
         [list nrf53.cpuapp read_memory 0x00FF8000 32 1] \
         [list flash fillw 0x00FF8000 0x50FA50FA 1] \
         [list nrf53.cpuapp read_memory 0x00FF801C 32 1] \
@@ -303,6 +306,7 @@ assert_eq $::log \
         [list wait_halt 2000] \
         [list flash probe 2] \
         [list flash write_image erase $net_hex] \
+        [list verify_image $net_hex] \
         [list nrf53.cpunet read_memory 0x01FF8000 32 1] \
         [list flash fillw 0x01FF8000 0x50FA50FA 1] \
         [list reset run]] \
@@ -310,19 +314,24 @@ assert_eq $::log \
 assert_count_cmd nrf53_recover "flash_both unlocked does not recover" 0
 # Ordered-subsequence claims re-proven independently of the full equality.
 assert_subseq \
-    [list [list flash write_image erase $app_hex] \
+    [list [list flash write_image erase $app_hex] [list verify_image $app_hex] \
         [list nrf53.cpuapp read_memory 0x00FF8000 32 1]] \
-    $::log "app image write before app UICR writes"
+    $::log "app image write and verify before app UICR writes"
 assert_subseq \
     [list [list nrf53_cpunet_release nrf53] [list targets nrf53.cpunet]] \
     $::log "cpunet release/examine before selecting net"
 assert_subseq \
-    [list [list flash probe 2] [list flash write_image erase $net_hex]] \
-    $::log "net halt/wait + flash probe 2 before net image write"
+    [list [list flash probe 2] [list flash write_image erase $net_hex] \
+        [list verify_image $net_hex]] \
+    $::log "net halt/wait + flash probe 2 before net image write and verify"
 assert_subseq \
-    [list [list flash write_image erase $net_hex] \
+    [list [list flash write_image erase $net_hex] [list verify_image $net_hex] \
         [list nrf53.cpunet read_memory 0x01FF8000 32 1]] \
-    $::log "net UICR handling after net image write"
+    $::log "net UICR handling after net image write and verify"
+assert_contains_substr $::puts_log "Verified app core: $app_hex" \
+    "flash_both reports app verification success"
+assert_contains_substr $::puts_log "Verified net core: $net_hex" \
+    "flash_both reports net verification success"
 assert_eq [lindex $::log end] [list reset run] "flash_both ends with reset run"
 
 # 9. flash_both locked path: recovery after failed app examine and before app
@@ -348,6 +357,7 @@ assert_eq $::log \
         [list reset halt] \
         [list wait_halt 2000] \
         [list flash write_image erase $app_hex] \
+        [list verify_image $app_hex] \
         [list nrf53.cpuapp read_memory 0x00FF8000 32 1] \
         [list flash fillw 0x00FF8000 0x50FA50FA 1] \
         [list nrf53.cpuapp read_memory 0x00FF801C 32 1] \
@@ -359,6 +369,7 @@ assert_eq $::log \
         [list wait_halt 2000] \
         [list flash probe 2] \
         [list flash write_image erase $net_hex] \
+        [list verify_image $net_hex] \
         [list nrf53.cpunet read_memory 0x01FF8000 32 1] \
         [list flash fillw 0x01FF8000 0x50FA50FA 1] \
         [list reset run]] \
