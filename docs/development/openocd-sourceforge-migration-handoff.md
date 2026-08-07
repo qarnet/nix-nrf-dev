@@ -6,7 +6,7 @@ Move project OpenOCD source pin from GitHub mirror to canonical SourceForge Git
 repository, while preserving immutable Nix inputs and all existing Nordic flash
 behavior.
 
-Current branch is `feat/nrfutil-sdk-manager`; starting commit is `bf8b2ba`.
+Current branch is `feat/nrfutil-sdk-manager`; starting worktree was clean.
 
 ## In scope
 

@@ -107,7 +107,8 @@ from the canonical SourceForge Git repository
    `nix build .#openocd-master-unwrapped` — Nix will print the correct
    `sha256-...` hash for the failed fetch; paste it in).
 4. Run `nix build .#openocd-master-unwrapped -L` and `nix build .#openocd-master -L`.
-5. Verify on hardware that the flash recipes still work (see
+5. Run the normal flake gate: `nix flake check --all-systems -L`.
+6. Verify on hardware that the flash recipes still work (see
    `tests/hardware/` — explicit, manual hardware work on a self-hosted
    runner; never part of the default gate).
 
