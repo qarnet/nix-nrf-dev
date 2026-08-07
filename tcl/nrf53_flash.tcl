@@ -1,11 +1,16 @@
 # SPDX-License-Identifier: MIT
 #
 # Flash both nRF5340 cores in a single OpenOCD session.
-# Recovers only if APPROTECT is engaged; otherwise uses reset halt.
-# Usage: openocd -f interface/cmsis-dap.cfg -c "transport select swd" \
+# Recovers only if APPROTECT is engaged and recovery is allowed; otherwise
+# uses reset halt. Usage:
+#   openocd -f interface/cmsis-dap.cfg -c "transport select swd" \
 #               -c "adapter speed 1000" -f target/nordic/nrf53.cfg \
 #               -f nrf53_flash.tcl \
-#               -c init -c "flash_both APP_HEX NET_HEX" -c shutdown
+#               -c init -c "flash_both APP_HEX NET_HEX [ALLOW_RECOVERY]" \
+#               -c shutdown
+# ALLOW_RECOVERY defaults to 1 (recovery on locked app core). Pass 0 to
+# abort with an error instead of running nrf53_recover — the hardware
+# harness calls `flash_both APP_HEX NET_HEX 0` and never recovers.
 #
 # Canonical copy extracted from le-audio-receiver (proven flow):
 # check_approtect recovery -> app flash -> UICR APPROTECT programming ->
@@ -80,12 +85,19 @@ proc flash_west {app_hex} {
 }
 
 # ── manual flash fallback ───────────────────────────────────────────────────
-proc flash_both {app_hex net_hex} {
+# allow_recovery defaults to 1 for backward compatibility: the original
+# two-argument form recovers a locked app core exactly as before. Pass 0
+# to turn recovery into a hard abort (used by the hardware harness, which
+# is authorized to flash but never to recover/mass erase).
+proc flash_both {app_hex net_hex {allow_recovery 1}} {
     init
 
-    # If app core is locked by APPROTECT, recover first.
+    # If app core is locked by APPROTECT, recover only when allowed.
     set app_locked [catch {nrf53.cpuapp arp_examine} err]
     if {$app_locked} {
+        if {!$allow_recovery} {
+            error "App core locked (APPROTECT) — recovery disabled (allow_recovery 0); refusing nrf53_recover, no flash/verify/UICR performed"
+        }
         puts "App core locked — running nrf53_recover..."
         nrf53_recover
     }

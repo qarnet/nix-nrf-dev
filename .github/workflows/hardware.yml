@@ -38,4 +38,6 @@ jobs:
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
       - name: Run hardware integration tests
-        run: bash tests/hardware/run.sh
+        # Tools (nix-nrf, west wrapper, openocd, python3) come from the
+        # flake dev shell; run.sh must execute inside it.
+        run: nix develop --command bash tests/hardware/run.sh

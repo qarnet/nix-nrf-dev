@@ -108,9 +108,11 @@ secrets available to the workflow. This has implications:
    original defect where the CPUAPP-only image was passed as both the app and
    net image, making the net-core claim a false positive.
 6. Flash the nRF5340 via `tcl/nrf53_flash.tcl` `flash_both` with the distinct
-   CPUAPP and CPUNET hexes, assert the log has no `no flash bank found`
-   warning, and assert byte verification of both cores (exact `Verified app
-   core:` / `Verified net core:` lines).
+   CPUAPP and CPUNET hexes and `allow_recovery 0` (the harness is authorized
+   to flash but never to recover or mass erase — a locked app core aborts the
+   run), assert the log has no `no flash bank found` warning, and assert byte
+   verification of both cores (exact `Verified app core:` / `Verified net
+   core:` lines).
 7. Flash the nRF54L15 blinky via `tcl/nrf54l_flash.tcl` (existing normal app
    proof).
 8. Flash the nRF54L15 FLPR bundle via `tcl/nrf54l_flash.tcl`, asserting the
@@ -126,7 +128,8 @@ FLPR payload lives at the FLPR RRAM addresses, with OpenOCD
 `load_image` + `verify_image` succeeding byte-for-byte. It does **not** observe
 FLPR runtime execution, IPC, or heartbeat; proving runtime FLPR needs
 dedicated observable firmware and is separate work. It never runs recovery or
-mass erase.
+mass erase: `flash_both` is called with `allow_recovery 0`, so a locked
+nRF5340 aborts the harness instead of triggering `nrf53_recover`.
 
 ## Required hardware
 

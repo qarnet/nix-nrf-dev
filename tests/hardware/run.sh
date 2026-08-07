@@ -23,6 +23,10 @@
 # bundle ("Verified image: <bundle>"). FLPR EXECUTION is not observed —
 # this phase proves flashability, not runtime IPC/heartbeat.
 #
+# The harness never recovers or mass-erases: nrf53 flash_both is invoked
+# with allow_recovery 0, so a locked app core aborts the run instead of
+# erasing the chip (recovery is out of the authorized hardware scope).
+#
 # Runs inside the nix dev shell (provided by the hardware workflow's
 # cachix/install-nix-action + the flake's devShells.default). The runner
 # must have NCS v3.3.0 installed via nrfutil sdk-manager.
@@ -290,6 +294,9 @@ step "Flash nRF5340 (distinct CPUAPP + CPUNET images) via tcl/nrf53_flash.tcl"
 # flash_both must receive two DISTINCT images: CPUAPP at 0x00000000 and
 # CPUNET at 0x01000000. The old harness passed the same merged.hex twice,
 # making the "net core" claim a false positive ("no flash bank found").
+# The trailing 0 disables flash_both's recovery branch: the harness is
+# authorized to flash but never to recover/mass erase, so a locked app
+# core must abort the run instead of erasing the chip.
 [ "$HEX53" != "$HEX53_NET" ] || fail "flash-nrf53" "CPUAPP and CPUNET hex files must be distinct (both $HEX53)"
 if openocd \
   -f interface/cmsis-dap.cfg \
@@ -299,7 +306,7 @@ if openocd \
   -f target/nordic/nrf53.cfg \
   -f tcl/nrf53_flash.tcl \
   -c init \
-  -c "flash_both $HEX53 $HEX53_NET" \
+  -c "flash_both $HEX53 $HEX53_NET 0" \
   -c shutdown 2>&1 | tee "$LOG_FLASH53"; then
   echo "OK: nRF5340 openocd exited 0"
 else

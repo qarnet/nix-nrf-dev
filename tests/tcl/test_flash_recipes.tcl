@@ -333,6 +333,8 @@ assert_contains_substr $::puts_log "Verified app core: $app_hex" \
 assert_contains_substr $::puts_log "Verified net core: $net_hex" \
     "flash_both reports net verification success"
 assert_eq [lindex $::log end] [list reset run] "flash_both ends with reset run"
+# Snapshot the unlocked two-argument flow for the 9c equality below.
+set ::expected_unlocked_log $::log
 
 # 9. flash_both locked path: recovery after failed app examine and before app
 #    reset/flash, then continues the normal flow.
@@ -374,6 +376,40 @@ assert_eq $::log \
         [list flash fillw 0x01FF8000 0x50FA50FA 1] \
         [list reset run]] \
     "flash_both locked recovery then normal flow"
+
+# 9b. flash_both locked path with recovery disabled (allow_recovery 0):
+#     raises an error naming recovery disabled BEFORE any nrf53_recover,
+#     flash write, verify, or UICR write — the harness is authorized to
+#     flash but never to recover.
+reset_state
+set ::app_locked 1
+set app_hex "/path/to/app core.hex"
+set net_hex "/path/to/net core.hex"
+set raised [catch {flash_both $app_hex $net_hex 0} errmsg]
+assert_eq $raised 1 "locked no-recovery flash_both raises an error"
+assert_eq $::log \
+    [list [list init] [list nrf53.cpuapp arp_examine]] \
+    "locked no-recovery flash_both records only init and the failed examine"
+assert_count_cmd nrf53_recover "locked no-recovery flash_both never calls nrf53_recover" 0
+assert_count_cmd flash "locked no-recovery flash_both issues no flash command" 0
+assert_count_cmd verify_image "locked no-recovery flash_both issues no verify_image" 0
+assert_count_cmd reset "locked no-recovery flash_both issues no reset" 0
+assert_count_cmd targets "locked no-recovery flash_both never selects a target" 0
+assert_eq $::puts_log [list] \
+    "locked no-recovery flash_both prints no recovery or success lines"
+assert_eq $errmsg \
+    "App core locked (APPROTECT) — recovery disabled (allow_recovery 0); refusing nrf53_recover, no flash/verify/UICR performed" \
+    "locked no-recovery flash_both error text names recovery disabled exactly"
+
+# 9c. flash_both unlocked path with explicit allow_recovery 0 (the harness
+#     invocation): command sequence is identical to the two-argument default
+#     form.
+reset_state
+set app_hex "/path/to/app core.hex"
+set net_hex "/path/to/net core.hex"
+flash_both $app_hex $net_hex 0
+assert_eq $::log $::expected_unlocked_log \
+    "flash_both unlocked with allow_recovery 0 matches the default flow"
 
 # 10. flash_west: uses the exact NET_CORE_HEX, runs no manual init/app
 #     reset-halt sequence, flashes the app before release/net flow, and ends
