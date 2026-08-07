@@ -10,6 +10,11 @@
 # generic `*CMSIS-DAP*` products plus SEGGER J-Link VID/PIDs and applies to
 # the usb, tty, and hidraw subsystems with MODE="660", GROUP="plugdev",
 # TAG+="uaccess".
+#
+# This package only relocates the rule file. It does not create the
+# `plugdev` group and does not modify users: group creation and user
+# membership are explicit host policy configured by the consumer
+# (docs/hardware.md). The rule file itself is never transformed.
 {
   pkgs,
   openocd,

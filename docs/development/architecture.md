@@ -12,7 +12,7 @@ ownership and construction only.
 - Root `flake.nix` — thin flake: inputs, `eachSystem supportedSystems`
   (`supportedSystems = [ "x86_64-linux" ]`) delegating to
   `nix/flake/per-system.nix`, plus the non-system `templates.default` and
-  `nixosModules.default` outputs.
+  `nixosModules.udevRules` outputs.
 - `nix/flake/per-system.nix` — per-system construction: configured Nixpkgs
   (allowUnfree + SEGGER acceptance), components, formatter/pre-commit,
   checks, dev shells.
@@ -20,8 +20,11 @@ ownership and construction only.
   `nix/backends/default.nix`), exported via `nix/flake/per-system.nix`
   `lib` output.
 - `packages.<system>.nix-nrf` — standalone CLI facade (`nix run .# -- ...`).
-- `nixosModules.default` — activates the packaged udev rules
-  (`services.udev.packages = [ self.packages.<system>.udev-rules ]`).
+- `nixosModules.udevRules` — convenience module that sets only
+  `services.udev.packages = [ self.packages.<system>.udev-rules ]`; it never
+  creates the `plugdev` group or modifies users. Direct
+  `services.udev.packages` configuration is the primary documented path
+  (`docs/hardware.md`).
 - `templates.default` — consumer skeleton flake.
 
 ## 2. Construction flow

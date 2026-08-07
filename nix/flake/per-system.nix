@@ -115,8 +115,8 @@ in {
       nix-nrf
       ;
     default = nix-nrf;
-    # Host configuration consumes udev-rules (via nixosModules.default);
-    # keep it separate from nix-nrf.
+    # Host configuration consumes udev-rules (via nixosModules.udevRules or
+    # direct services.udev.packages); keep it separate from nix-nrf.
     udev-rules = nrfUdevRules;
     # West backend SDK package: exact Zephyr SDK from official release
     # assets (packaged output backing `backend = "west"` shells).

@@ -23,7 +23,12 @@ configuration, not an environment variable. Two paths:
 
 ### NixOS
 
-Import the module in your `nixosSystem` configuration:
+Adding the flake input alone changes nothing. The packaged rule is the
+unmodified upstream OpenOCD `contrib/60-openocd.rules`, which assigns
+`MODE="660", GROUP="plugdev", TAG+="uaccess"` to its matched nodes, and
+NixOS does not create a `plugdev` group for you. The primary,
+least-intrusive path is the direct `services.udev.packages` form with an
+explicit `plugdev` group and user membership:
 
 ```nix
 {
@@ -36,25 +41,61 @@ Import the module in your `nixosSystem` configuration:
     nixosConfigurations.myHost = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
       modules = [
-        { imports = [ nix-nrf-dev.nixosModules.default ]; }
+        ({ pkgs, ... }: {
+          users.groups.plugdev = {};
+          users.users.myuser.extraGroups = [ "plugdev" ];
+          services.udev.packages = [
+            nix-nrf-dev.packages.${pkgs.stdenv.hostPlatform.system}.udev-rules
+          ];
+        })
       ];
     };
   };
 }
 ```
 
-The module activates the packaged OpenOCD udev rules so CMSIS-DAP and J-Link
-probe nodes are user-accessible.
+The named `nixosModules.udevRules` module is a convenience equivalent: it
+sets only the same `services.udev.packages` and never creates the group or
+modifies users, so the explicit `plugdev` setup is still required:
+
+```nix
+{
+  users.groups.plugdev = {};
+  users.users.myuser.extraGroups = [ "plugdev" ];
+  imports = [ nix-nrf-dev.nixosModules.udevRules ];
+}
+```
+
+The rule activates the packaged OpenOCD udev rules so CMSIS-DAP and J-Link
+probe nodes are user-accessible. Then rebuild, log out/in (or reboot) so
+the new group membership applies, replug the probe, and confirm with
+`nix-nrf doctor`.
+
+#### Upstream provenance
+
+`packages.<system>.udev-rules` contains exactly one file:
+`lib/udev/rules.d/60-openocd.rules`, copied byte-for-byte from the pinned
+OpenOCD build's `contrib/60-openocd.rules`. The upstream source URL, exact
+revision, and hash live in `nix/hardware/openocd.nix`; this repository
+maintains no VID/PID catalog and does not edit the rule. The upstream file's
+generic `*CMSIS-DAP*` match covers CMSIS-DAP probes (including the Seeed
+XIAO and Raspberry Pi Debug Probe) on the usb, tty, and hidraw subsystems,
+and the file also carries SEGGER J-Link entries; every relevant line uses
+`MODE="660", GROUP="plugdev", TAG+="uaccess"`.
 
 ### Other Linux
+
+Ensure the `plugdev` group exists and that your user is a member, using
+your distribution's documented procedure:
 
 ```bash
 nix build github:qarnet/nix-nrf-dev#udev-rules
 ```
 
 Install `result/lib/udev/rules.d/60-openocd.rules` using your distribution's
-documented udev procedure, then reload the rules and replug the probe.
-OpenOCD should never run as root.
+documented udev procedure. If you changed group membership, log out/in or
+reboot, reload the rules, and replug the probe. Confirm with
+`nix-nrf doctor`. OpenOCD should never run as root.
 
 ## Diagnosing probe access
 

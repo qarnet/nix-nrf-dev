@@ -49,3 +49,9 @@ Current behavior and proof for what already exists live in
 `docs/development/nrfutil-backend-status.md`,
 `docs/development/west-backend-status.md`, `docs/development/architecture.md`,
 and `tests/clean-room/README.md`.
+
+## Active plan
+
+The accepted implementation plan (udev API/safety, project initializer,
+test expansion) is tracked in
+[`docs/development/nixos-safety-init-testing-plan.md`](nixos-safety-init-testing-plan.md).

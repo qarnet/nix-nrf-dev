@@ -54,11 +54,21 @@
       # Minimal NixOS module: activate the packaged upstream OpenOCD
       # udev rules (60-openocd.rules) for the current system, so CMSIS-DAP
       # and J-Link nodes get MODE="660", GROUP="plugdev", TAG+="uaccess"
-      # without hand-written rules. The module exposes no options.
+      # without hand-written rules. The module exposes no options and sets
+      # only `services.udev.packages`; it does NOT create the `plugdev`
+      # group or modify users. Group creation and user membership are
+      # explicit host policy the consumer must configure:
+      #
+      #   users.groups.plugdev = {};
+      #   users.users.<username>.extraGroups = [ "plugdev" ];
+      #
+      # Direct `services.udev.packages` configuration (docs/hardware.md) is
+      # the primary least-intrusive path; this named module is a convenience
+      # equivalent that contributes no host policy beyond the package list.
       #
       # Consumer:
-      #   imports = [ nix-nrf-dev.nixosModules.default ];
-      nixosModules.default = {pkgs, ...}: let
+      #   imports = [ nix-nrf-dev.nixosModules.udevRules ];
+      nixosModules.udevRules = {pkgs, ...}: let
         system = pkgs.stdenv.hostPlatform.system;
       in {
         services.udev.packages = [

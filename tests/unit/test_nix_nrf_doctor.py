@@ -20,6 +20,7 @@
 import json
 import os
 import pathlib
+import pwd
 import subprocess
 import sys
 import tempfile
@@ -43,6 +44,21 @@ def _resolve_doctor_script() -> str:
 
 
 DOCTOR_SCRIPT = _resolve_doctor_script()
+
+# The doctor's remediation quotes the caller's resolved username into Nix
+# config; the fake-boundary subprocess runs as the same user, so the expected
+# membership line uses the real current username.
+CURRENT_USER = pwd.getpwuid(os.getuid()).pw_name
+
+# Remediation fragments asserted on blocked-candidate output (human and JSON).
+NIXOS_REMEDIATION_HEADING = "NixOS (plugdev is required by upstream OpenOCD rules):"
+PLUGDEV_GROUP_LINE = "  users.groups.plugdev = {};"
+PLUGDEV_MEMBERSHIP_LINE = f'  users.users."{CURRENT_USER}".extraGroups = [ "plugdev" ];'
+DIRECT_PACKAGE_LINE = (
+    "nix-nrf-dev.packages.${pkgs.stdenv.hostPlatform.system}.udev-rules"
+)
+NAMED_MODULE_LINE = "imports = [ nix-nrf-dev.nixosModules.udevRules ];"
+SESSION_GUIDANCE_LINE = "  Rebuild, log out/in or reboot, then replug probe."
 
 # Fake bootstrap: records every invocation in argv.log, then exits with the
 # code in boot_exit (default 0) and prints boot_stdout (default empty).
@@ -356,17 +372,29 @@ class DoctorTestCase(unittest.TestCase):
         proc = self.run_doctor(env_extra=self.access_env(override))
         self.assertEqual(proc.returncode, 1)
         self.assertIn("probe visible but inaccessible", proc.stdout)
-        self.assertIn("NixOS:", proc.stdout)
-        self.assertIn("imports = [ nix-nrf-dev.nixosModules.default ]", proc.stdout)
+        self.assertIn(NIXOS_REMEDIATION_HEADING, proc.stdout)
+        self.assertIn(PLUGDEV_GROUP_LINE, proc.stdout)
+        self.assertIn(PLUGDEV_MEMBERSHIP_LINE, proc.stdout)
+        self.assertIn(DIRECT_PACKAGE_LINE, proc.stdout)
+        self.assertIn(NAMED_MODULE_LINE, proc.stdout)
+        self.assertIn(SESSION_GUIDANCE_LINE, proc.stdout)
         self.assertIn("nix build .#udev-rules", proc.stdout)
         self.assertIn("Packaged udev rule:", proc.stdout)
         self.assertIn("OpenOCD should not run as root.", proc.stdout)
+        self.assertNotIn("nixosModules.default", proc.stdout)
         self.assertNotIn("sudo", proc.stdout)
         data = self.doctor_json(
             self.run_doctor("--json", env_extra=self.access_env(override))
         )
         self.assertFalse(data["ok"])
         self.assertTrue(data["remediation"])
+        remediation_text = "\n".join(data["remediation"])
+        self.assertIn(PLUGDEV_GROUP_LINE, remediation_text)
+        self.assertIn(PLUGDEV_MEMBERSHIP_LINE, remediation_text)
+        self.assertIn(DIRECT_PACKAGE_LINE, remediation_text)
+        self.assertIn(NAMED_MODULE_LINE, remediation_text)
+        self.assertIn(SESSION_GUIDANCE_LINE, remediation_text)
+        self.assertNotIn("nixosModules.default", remediation_text)
         self.assertFalse(data["hardware"]["candidates"][0]["accessible"])
 
     # 5. Accessible J-Link via USB node -> pass.
@@ -507,7 +535,7 @@ class DoctorTestCase(unittest.TestCase):
         proc = self.run_doctor(env_extra=self.access_env(override))
         self.assertEqual(proc.returncode, 1)
         self.assertIn("probe visible but inaccessible", proc.stdout)
-        self.assertIn("NixOS:", proc.stdout)
+        self.assertIn(NIXOS_REMEDIATION_HEADING, proc.stdout)
         data = self.doctor_json(
             self.run_doctor("--json", env_extra=self.access_env(override))
         )
@@ -731,15 +759,19 @@ class DoctorTestCase(unittest.TestCase):
         override = self.add_xiao(accessible=False)
         proc = self.run_doctor(env_extra=self.access_env(override))
         self.assertEqual(proc.returncode, 1)
-        self.assertIn("NixOS:", proc.stdout)
-        self.assertIn("imports = [ nix-nrf-dev.nixosModules.default ]", proc.stdout)
+        self.assertIn(NIXOS_REMEDIATION_HEADING, proc.stdout)
+        self.assertIn(PLUGDEV_GROUP_LINE, proc.stdout)
+        self.assertIn(PLUGDEV_MEMBERSHIP_LINE, proc.stdout)
+        self.assertIn(DIRECT_PACKAGE_LINE, proc.stdout)
+        self.assertIn(NAMED_MODULE_LINE, proc.stdout)
+        self.assertIn(SESSION_GUIDANCE_LINE, proc.stdout)
         self.assertIn("Other Linux:", proc.stdout)
         self.assertIn("nix build .#udev-rules", proc.stdout)
-        self.assertIn(
-            "documented udev procedure, reload rules, then replug probe.", proc.stdout
-        )
+        self.assertIn("documented udev procedure", proc.stdout)
+        self.assertIn("reload rules, then replug probe.", proc.stdout)
         self.assertIn("Packaged udev rule:", proc.stdout)
         self.assertIn("OpenOCD should not run as root.", proc.stdout)
+        self.assertNotIn("nixosModules.default", proc.stdout)
         self.assertNotIn("sudo", proc.stdout)
         self.assertTrue(proc.stdout.rstrip().endswith("FAIL"))
 

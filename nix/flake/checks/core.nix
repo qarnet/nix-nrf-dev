@@ -203,7 +203,7 @@
     '';
 
   # Public NixOS module evaluation gate: evaluates the real
-  # `self.nixosModules.default` through the pinned Nixpkgs
+  # `self.nixosModules.udevRules` through the pinned Nixpkgs
   # `lib.nixosSystem` (no build, no VM) and asserts the exact packaged
   # udev-rules derivation appears exactly once in
   # `config.services.udev.packages`, and that the public
@@ -214,7 +214,7 @@
     evaluated = nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
-        self.nixosModules.default
+        self.nixosModules.udevRules
         {system.stateVersion = "26.11";}
       ];
     };

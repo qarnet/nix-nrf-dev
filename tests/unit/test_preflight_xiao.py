@@ -289,7 +289,15 @@ class PreflightXiaoTestCase(unittest.TestCase):
     # 11. Contract failure forwards top-level string remediation entries.
     def test_remediation_included_on_failure(self):
         remediation = [
-            "NixOS:\n  imports = [ nix-nrf-dev.nixosModules.default ];",
+            "NixOS (plugdev is required by upstream OpenOCD rules):\n"
+            "  users.groups.plugdev = {};\n"
+            '  users.users."tester".extraGroups = [ "plugdev" ];\n'
+            "  Direct, least-intrusive integration:\n"
+            "  services.udev.packages = [\n"
+            "    nix-nrf-dev.packages.${pkgs.stdenv.hostPlatform.system}.udev-rules\n"
+            "  ];\n"
+            "  Module alternative:\n"
+            "  imports = [ nix-nrf-dev.nixosModules.udevRules ];",
             "Other Linux:\n  nix build .#udev-rules",
             42,  # non-string entries must be skipped
         ]
@@ -297,7 +305,13 @@ class PreflightXiaoTestCase(unittest.TestCase):
         self.assertEqual(proc.returncode, 1)
         self.assertIn("FAIL: preflight-xiao:", proc.stderr)
         self.assertIn("remediation:", proc.stderr)
-        self.assertIn("imports = [ nix-nrf-dev.nixosModules.default ]", proc.stderr)
+        self.assertIn("users.groups.plugdev = {}", proc.stderr)
+        self.assertIn('users.users."tester".extraGroups = [ "plugdev" ]', proc.stderr)
+        self.assertIn(
+            "nix-nrf-dev.packages.${pkgs.stdenv.hostPlatform.system}.udev-rules",
+            proc.stderr,
+        )
+        self.assertIn("imports = [ nix-nrf-dev.nixosModules.udevRules ]", proc.stderr)
         self.assertIn("nix build .#udev-rules", proc.stderr)
         self.assertNotIn("42", proc.stderr)
 
