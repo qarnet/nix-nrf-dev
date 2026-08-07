@@ -26,7 +26,14 @@
     ;
   inherit (udevModule) udev-module-eval;
   inherit (udevVm) udev-vm;
-  inherit (nrfutil) bootstrap-tests bootstrap-quoting nrfutil-shell-boundary;
+  inherit
+    (nrfutil)
+    bootstrap-tests
+    bootstrap-quoting
+    nrfutil-shell-boundary
+    nrfutil-versions-boundary
+    nrfutil-search-offline
+    ;
   inherit
     (west)
     west-bootstrap-tests

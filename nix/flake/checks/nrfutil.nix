@@ -1,6 +1,8 @@
 # nrfutil-backend regression gates: fake-boundary bootstrap lifecycle tests,
-# the bootstrap wrapper quoting round-trip, and the public nrfutil shell
-# boundary gate.
+# the bootstrap wrapper quoting round-trip, the public nrfutil shell boundary
+# gate, the deterministic `nix-nrf versions` delegation boundary (fake
+# nrfutilPackage + real CLI), and the real packaged nrfutil forced-offline
+# sdk-manager search gate.
 {
   pkgs,
   nrfutil,
@@ -662,8 +664,322 @@
       echo "nrfutil shell boundary check passed" >&2
       mkdir -p "$out"
     '';
+
+  # ── `nix-nrf versions` delegation boundary ─────────────────────────────
+  # Purpose-specific fake nrfutil for the PUBLIC `nix-nrf versions` command
+  # (nix/commands/default.nix). Unlike the lifecycle fake above, this one has
+  # no install/toolchain/env state machine: the versions command only execs
+  # `sdk-manager search` and must preserve argv, streams, and exit status
+  # exactly. The fake therefore logs every argv as one JSON line to
+  # commands.log, enforces the scenario's expected argv when
+  # FAKE_VERSIONS_EXPECT_ARGV is set, and emits fixed deterministic
+  # stdout/stderr/status per FAKE_VERSIONS_MODE. Modes: success (0),
+  # remote-fail (1), cli-fail (2), status-37 (37), help (0, and the argv must
+  # be exactly `sdk-manager search --help`). Any other argv shape exits 1
+  # with the offending argv on stderr.
+  fakeVersionsNrfutil = pkgs.writeTextFile {
+    name = "fake-versions-nrfutil";
+    destination = "/bin/nrfutil";
+    executable = true;
+    text = ''
+      #!${pkgs.python3}/bin/python3
+      # SPDX-License-Identifier: MIT
+      #
+      # Test-only nrfutil stand-in for the `nix-nrf versions` delegation
+      # boundary gate (nix/flake/checks/nrfutil.nix). Contract: see the
+      # check's design comment above.
+      import json
+      import os
+      import sys
+      from pathlib import Path
+
+      STATE = os.environ.get("FAKE_VERSIONS_STATE", "")
+      MODE = os.environ.get("FAKE_VERSIONS_MODE", "")
+      EXPECT_ARGV = os.environ.get("FAKE_VERSIONS_EXPECT_ARGV", "")
+
+
+      def fail(msg):
+          print("fake versions nrfutil: " + msg, file=sys.stderr)
+          return 1
+
+
+      def log_command(argv):
+          if not STATE:
+              return
+          Path(STATE).mkdir(parents=True, exist_ok=True)
+          with open(os.path.join(STATE, "commands.log"), "a") as fh:
+              fh.write(json.dumps(argv) + "\n")
+
+
+      def main():
+          argv = sys.argv[1:]
+          if argv[:2] != ["sdk-manager", "search"]:
+              return fail("unexpected argv: " + json.dumps(argv))
+          log_command(argv)
+          if EXPECT_ARGV:
+              expected = json.loads(EXPECT_ARGV)
+              # EXPECT_ARGV carries the caller args nix-nrf forwarded (after
+              # the fixed `sdk-manager search` delegation prefix); the prefix
+              # itself is enforced above.
+              if argv[2:] != expected:
+                  return fail(
+                      "argv mismatch: got %s, expected %s"
+                      % (json.dumps(argv), json.dumps(expected))
+                  )
+          if MODE == "help":
+              if argv != ["sdk-manager", "search", "--help"]:
+                  return fail(
+                      "help delegation must be exactly sdk-manager search --help"
+                  )
+              print("fake versions help stdout")
+              print("fake versions help stderr", file=sys.stderr)
+              return 0
+          if "--help" in argv:
+              return fail("non-help scenario received --help: " + json.dumps(argv))
+          if MODE == "success":
+              print("fake versions success stdout")
+              print("fake versions success stderr", file=sys.stderr)
+              return 0
+          if MODE == "remote-fail":
+              print("fake versions remote-fail stdout")
+              print("fake versions remote-fail stderr", file=sys.stderr)
+              return 1
+          if MODE == "cli-fail":
+              print("fake versions cli-fail stdout")
+              print("fake versions cli-fail stderr", file=sys.stderr)
+              return 2
+          if MODE == "status-37":
+              print("fake versions status-37 stdout")
+              print("fake versions status-37 stderr", file=sys.stderr)
+              return 37
+          return fail("unknown mode: " + MODE)
+
+
+      if __name__ == "__main__":
+          sys.exit(main())
+    '';
+  };
+
+  # Test-only stand-in for the real OpenOCD package: the real
+  # nix/commands/default.nix only uses `openocd` to prefix the probes
+  # command's PATH (`${openocd}/bin`), which the versions boundary never
+  # exercises. An empty package with the bin directory suffices; nothing
+  # probes OpenOCD at runtime in this check.
+  tinyTestOpenocd = pkgs.runCommand "tiny-test-openocd" {} ''
+    mkdir -p "$out/bin"
+  '';
+
+  # Public `nix-nrf versions` delegation boundary gate: instantiates the REAL
+  # nix/commands/default.nix with the purpose-specific fake nrfutil package
+  # above (plus the tiny OpenOCD stand-in) and executes the packaged
+  # `$cli/bin/nix-nrf` binary — never copied shell fragments. Proves, against
+  # deterministic fake output: `versions` delegates the exact argv
+  # `sdk-manager search ...` with quoting preserved as single argv elements
+  # (spaces, single quote, double quote, option-like values); stdout, stderr,
+  # and status are preserved byte-for-byte for status 0, simulated
+  # remote/index failure status 1, CLI failure status 2, and an arbitrary
+  # nonstandard status 37 (never remapped); and both `versions --help` and
+  # `help versions` delegate the exact argv `sdk-manager search --help` with
+  # exact streams and status 0. The fake JSON argv log is parsed by Python
+  # and asserted as one exact ordered invocation list. The fake/package seam
+  # is test-only: no PATH or environment override is added to the production
+  # command (nix/commands/default.nix is untouched).
+  nrfutilVersionsBoundaryCheck = let
+    versionsCli = import ../../commands/default.nix {
+      inherit pkgs;
+      nrfutilPackage = fakeVersionsNrfutil;
+      openocd = tinyTestOpenocd;
+    };
+  in
+    pkgs.runCommand "nrfutil-versions-boundary-check"
+    {
+      nativeBuildInputs = [pkgs.python3];
+      inherit versionsCli fakeVersionsNrfutil;
+    }
+    ''
+      set -eu
+
+      export FAKE_VERSIONS_STATE="$PWD/state"
+      mkdir -p "$FAKE_VERSIONS_STATE"
+
+      # Expected stream content. The fake's deterministic stdout/stderr must
+      # reach the caller unchanged through the real nix-nrf exec; these files
+      # are the byte-for-byte contract and must match the fake's emitted
+      # lines.
+      printf 'fake versions success stdout\n' > expected.success.out
+      printf 'fake versions success stderr\n' > expected.success.err
+      printf 'fake versions remote-fail stdout\n' > expected.remote-fail.out
+      printf 'fake versions remote-fail stderr\n' > expected.remote-fail.err
+      printf 'fake versions cli-fail stdout\n' > expected.cli-fail.out
+      printf 'fake versions cli-fail stderr\n' > expected.cli-fail.err
+      printf 'fake versions status-37 stdout\n' > expected.status-37.out
+      printf 'fake versions status-37 stderr\n' > expected.status-37.err
+      printf 'fake versions help stdout\n' > expected.help.out
+      printf 'fake versions help stderr\n' > expected.help.err
+
+      # Build a JSON argv array from the given elements; the fake enforces it
+      # exactly before emitting its scenario output.
+      to_json() {
+        python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' "$@"
+      }
+
+      # run_scenario <label> <mode> <expected-json> <nix-nrf-args...>
+      run_scenario() {
+        label="$1"
+        mode="$2"
+        expected_json="$3"
+        shift 3
+        export FAKE_VERSIONS_MODE="$mode"
+        export FAKE_VERSIONS_EXPECT_ARGV="$expected_json"
+        set +e
+        "$versionsCli/bin/nix-nrf" "$@" > "$label.out" 2> "$label.err"
+        rc=$?
+        set -e
+        printf '%s\n' "$rc" > "$label.rc"
+      }
+
+      assert_exact() {
+        # assert_exact <label> <expected-rc> <expected-out> <expected-err>
+        label="$1"
+        expected_rc="$2"
+        expected_out="$3"
+        expected_err="$4"
+        actual_rc="$(cat "$label.rc")"
+        [ "$actual_rc" = "$expected_rc" ] || {
+          echo "FAIL: $label: status $actual_rc != $expected_rc" >&2
+          cat "$label.err" >&2
+          exit 1
+        }
+        cmp -s "$label.out" "$expected_out" || {
+          echo "FAIL: $label: stdout differs" >&2
+          diff -u "$expected_out" "$label.out" >&2 || true
+          exit 1
+        }
+        cmp -s "$label.err" "$expected_err" || {
+          echo "FAIL: $label: stderr differs" >&2
+          diff -u "$expected_err" "$label.err" >&2 || true
+          exit 1
+        }
+      }
+
+      # Success: values with spaces, a single quote, a double quote, and an
+      # option-like value must each stay one exact argv element.
+      run_scenario success success \
+        "$(to_json "v3.3.0 with spaces" "it's" 'say "hi"' "--option-like")" \
+        versions "v3.3.0 with spaces" "it's" 'say "hi"' "--option-like"
+      assert_exact success 0 expected.success.out expected.success.err
+
+      # Simulated remote/index failure: status 1 preserved.
+      run_scenario remote-fail remote-fail \
+        "$(to_json v3.3.0)" versions v3.3.0
+      assert_exact remote-fail 1 expected.remote-fail.out expected.remote-fail.err
+
+      # CLI failure: status 2 preserved.
+      run_scenario cli-fail cli-fail \
+        "$(to_json --ncs-version v3.3.0)" versions --ncs-version v3.3.0
+      assert_exact cli-fail 2 expected.cli-fail.out expected.cli-fail.err
+
+      # Arbitrary nonstandard status: 37 preserved, not remapped.
+      run_scenario status-37 status-37 \
+        "$(to_json status-37)" versions status-37
+      assert_exact status-37 37 expected.status-37.out expected.status-37.err
+
+      # Both help forms delegate the exact argv `sdk-manager search --help`.
+      run_scenario help-flag help "$(to_json --help)" versions --help
+      assert_exact help-flag 0 expected.help.out expected.help.err
+
+      run_scenario help-subcommand help "$(to_json --help)" help versions
+      assert_exact help-subcommand 0 expected.help.out expected.help.err
+
+      # The fake JSON argv log is the exact ordered invocation record.
+      python3 - <<'PYEOF'
+      import json
+      import os
+
+      lines = [
+          json.loads(l)
+          for l in open(os.path.join(os.environ["FAKE_VERSIONS_STATE"], "commands.log"))
+      ]
+      expected = [
+          ["sdk-manager", "search", "v3.3.0 with spaces", "it's", 'say "hi"', "--option-like"],
+          ["sdk-manager", "search", "v3.3.0"],
+          ["sdk-manager", "search", "--ncs-version", "v3.3.0"],
+          ["sdk-manager", "search", "status-37"],
+          ["sdk-manager", "search", "--help"],
+          ["sdk-manager", "search", "--help"],
+      ]
+      assert lines == expected, lines
+      PYEOF
+
+      echo "nrfutil versions boundary check passed" >&2
+      mkdir -p "$out"
+    '';
+
+  # ── Real packaged nrfutil forced-offline gate ──────────────────────────
+  # Runs the REAL packaged nrfutil (the same `nrfutil` the repository shells
+  # carry) inside an isolated writable HOME and NRFUTIL_HOME with both
+  # verified sdk-manager 1.15.0 index-override variables pointed at
+  # unreachable loopback URLs. With a fresh NRFUTIL_HOME there is no local
+  # config to fall back on, so sdk-manager must fetch the SDK remote config
+  # and fails with its own diagnostic naming the URL. This proves the public
+  # `nix-nrf versions` runtime authority (sdk-manager search) reports
+  # non-success plus a real network/index diagnostic under offline conditions
+  # — no separate global connectivity probe, and the check fails outright if
+  # the command unexpectedly succeeds. (The fake boundary above proves argv
+  # and status preservation deterministically; this real gate proves the
+  # packaged binary's genuine offline failure mode.)
+  nrfutilSearchOfflineCheck =
+    pkgs.runCommand "nrfutil-search-offline"
+    {
+      inherit nrfutil;
+    }
+    ''
+      set -eu
+
+      export HOME="$PWD/home"
+      export NRFUTIL_HOME="$PWD/nrfutil-home"
+      mkdir -p "$HOME" "$NRFUTIL_HOME"
+
+      export NRFUTIL_SDK_REMOTE_CONFIG_URL=http://127.0.0.1:9/sdk/config.json
+      export NRFUTIL_TOOLCHAIN_REMOTE_CONFIG_URL=http://127.0.0.1:9/toolchain/config.json
+
+      set +e
+      timeout 120 "$nrfutil/bin/nrfutil" sdk-manager search > search.out 2> search.err
+      rc=$?
+      set -e
+
+      [ "$rc" -ne 0 ] || {
+        echo "FAIL: nrfutil sdk-manager search unexpectedly succeeded" >&2
+        cat search.out >&2
+        cat search.err >&2
+        exit 1
+      }
+      [ "$rc" -ne 124 ] || {
+        echo "FAIL: nrfutil sdk-manager search timed out after 120s" >&2
+        cat search.out >&2
+        cat search.err >&2
+        exit 1
+      }
+      grep -F "Failed to download SDK remote config" search.err >/dev/null || {
+        echo "FAIL: sdk-manager diagnostic 'Failed to download SDK remote config' missing" >&2
+        cat search.out >&2
+        cat search.err >&2
+        exit 1
+      }
+      grep -F "127.0.0.1:9" search.err >/dev/null || {
+        echo "FAIL: loopback index URL missing from the diagnostic" >&2
+        cat search.out >&2
+        cat search.err >&2
+        exit 1
+      }
+
+      echo "nrfutil search offline check passed (status $rc)" >&2
+      mkdir -p "$out"
+    '';
 in {
   bootstrap-tests = bootstrapTests;
   bootstrap-quoting = bootstrapQuotingCheck;
   nrfutil-shell-boundary = nrfutilShellBoundaryCheck;
+  nrfutil-versions-boundary = nrfutilVersionsBoundaryCheck;
+  nrfutil-search-offline = nrfutilSearchOfflineCheck;
 }
