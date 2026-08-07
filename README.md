@@ -3,10 +3,10 @@
 nRF Connect SDK (NCS) toolchain environments are awkward to compose
 safely with Nix:
 
-- SDKs and toolchains live outside the Nix store 
+- SDKs and toolchains live outside the Nix store
 - their environment scripts can interfere with unrelated tools
 - CMSIS-DAP probes need extra setup for reliable flashing and probe access on nRF5340 and nRF54L15
-  
+
 This project packages all of that into one ready-to-use,
 project-scoped Nix environment for building and flashing modern Nordic
 firmware.
@@ -57,7 +57,7 @@ releases advertised by sdk-manager through `ncsVersion`.
 
 The **west** backend (experimental) instead lets Nix own the exact Zephyr SDK,
 host tools, and Python interpreter while a mutable west workspace holds the
-NCS source. 
+NCS source.
 
 A pure Nix-native `sdk-nrf` backend is not implemented and has no configuration.
 Full backend behavior and bootstrap details are in
