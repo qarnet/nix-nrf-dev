@@ -1,22 +1,25 @@
 # nix-nrf-dev
 
-Nordic nRF Connect SDK (NCS) toolchain environments are awkward to compose
-safely with Nix: sdk-manager-managed SDKs and toolchains live outside the Nix
-store, their environment scripts can interfere with unrelated tools, and
-CMSIS-DAP probes need extra setup for reliable flashing and probe access on
-nRF5340 and nRF54L15. This project packages all of that into one ready-to-use,
+nRF Connect SDK (NCS) toolchain environments are awkward to compose
+safely with Nix:
+
+- SDKs and toolchains live outside the Nix store 
+- their environment scripts can interfere with unrelated tools
+- CMSIS-DAP probes need extra setup for reliable flashing and probe access on nRF5340 and nRF54L15
+  
+This project packages all of that into one ready-to-use,
 project-scoped Nix environment for building and flashing modern Nordic
-firmware, tested on NCS v3.3.0 with `x86_64-linux`.
+firmware.
 
 ## What you get
 
-- **NCS shell** — project-scoped `nix develop` environment with `west`, the
-  Zephyr toolchain, and `ZEPHYR_BASE`, without contaminating your host tools.
-- **CMSIS-DAP / OpenOCD support** — a pinned openocd-master build plus the
+- **NCS shell**: project-scoped `nix develop` environment with `west`, the
+  Zephyr toolchain, and `ZEPHYR_BASE` pointing to the correct SDK, without contaminating your host tools.
+- **CMSIS-DAP / OpenOCD support**: a pinned openocd-master build plus the
   host udev policy needed for reliable probe access.
-- **`nix-nrf` helper** — `bootstrap`, `versions`, `probes`, and `doctor`
+- **`nix-nrf` helper**: `bootstrap`, `versions`, `probes`, and `doctor`
   commands for provisioning and diagnosing the environment.
-- **nRF5340 and nRF54L15 verification** — flashing flows proven on real
+- **nRF5340 and nRF54L15 verification**: flashing flows proven on real
   hardware for both families.
 
 ## Quick start
@@ -41,23 +44,22 @@ On first entry, provision the NCS SDK and toolchain:
 nix-nrf bootstrap
 ```
 
-It asks for confirmation before downloading several GiB — nothing is
-downloaded without explicit approval.
+It asks for confirmation before downloading several GiB.
 
 [direnv]: https://direnv.net
 
 ## Choose a backend
 
 `mkNrfShell` selects how the NCS toolchain is provided. The **nrfutil**
-backend — the default and recommended choice — uses Nordic's sdk-manager to
+backend (the default and recommended choice) uses Nordic's sdk-manager to
 manage a mutable SDK and toolchain under your home directory, and accepts
-releases advertised by sdk-manager through `ncsVersion` (tested baseline
-v3.3.0).
+releases advertised by sdk-manager through `ncsVersion`.
 
 The **west** backend (experimental) instead lets Nix own the exact Zephyr SDK,
 host tools, and Python interpreter while a mutable west workspace holds the
-NCS source; it currently supports only NCS v3.3.0 on `x86_64-linux`. A pure
-Nix-native `sdk-nrf` backend is not implemented and has no configuration.
+NCS source. 
+
+A pure Nix-native `sdk-nrf` backend is not implemented and has no configuration.
 Full backend behavior and bootstrap details are in
 [docs/backends.md](docs/backends.md).
 
