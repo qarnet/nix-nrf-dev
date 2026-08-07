@@ -1,481 +1,162 @@
 # nix-nrf-dev
 
-Reusable Nix tooling for Nordic nRF firmware development: an NCS toolchain dev
-shell and CMSIS-DAP flashing via a pinned openocd-master build. Verified on
-nRF5340 and nRF54L15 hardware.
+nRF Connect SDK (NCS) toolchain environments are awkward to compose
+safely with Nix:
 
-**Platform support:** the published flake outputs are `x86_64-linux` only.
-macOS and Linux ARM64 remain unsupported; no tested non-`x86_64-linux` public
-contract exists.
+- SDKs and toolchains live outside the Nix store
+- their environment scripts can interfere with unrelated tools
+- CMSIS-DAP probes need extra setup for reliable flashing and probe access on nRF5340 and nRF54L15
 
-## Install
+This project packages all of that into one ready-to-use,
+project-scoped Nix environment for building and flashing modern Nordic
+firmware.
 
-### New project (template)
+## What you get
+
+- **NCS shell**: project-scoped `nix develop` environment with `west`, the
+  Zephyr toolchain, and `ZEPHYR_BASE` pointing to the correct SDK, without contaminating your host tools.
+- **CMSIS-DAP / OpenOCD support**: a pinned openocd-master build plus the
+  host udev policy needed for reliable probe access.
+- **`nix-nrf` helper**: `bootstrap`, `versions`, `probes`, and `doctor`
+  commands for provisioning and diagnosing the environment.
+- **nRF5340 and nRF54L15 verification**: flashing flows proven on real
+  hardware for both families.
+
+## Quick start
+
+Prerequisites: Nix with flake support on `x86_64-linux`. [direnv] is
+recommended but optional.
 
 ```bash
+mkdir my-project && cd my-project
 nix flake init -t github:qarnet/nix-nrf-dev
-direnv allow          # or: nix develop
+direnv allow        # or: nix develop
 ```
 
-### Existing project (flake input)
+The generated `.envrc` contains `use flake`, which enters the flake's
+`devShells.default` when you `cd` into the project. direnv itself is
+documented in the [direnv project wiki](https://github.com/direnv/direnv/wiki);
+without direnv, run `nix develop` in the project directory instead.
 
-```nix
-{
-  inputs.nix-nrf-dev = {
-    url = "github:qarnet/nix-nrf-dev";
-    inputs.nixpkgs.follows = "nixpkgs";
-  };
-}
-```
-
-The `inputs.nixpkgs.follows = "nixpkgs"` directive lets the consumer's own
-Nixpkgs revision replace the one pinned in nix-nrf-dev's `flake.lock` — and
-with it the packaged nrfutil/sdk-manager versions.
-
-```nix
-devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
-  backend = "nrfutil";
-  ncsVersion = "v3.3.0";
-};
-```
-
-The shell provides `west` + Zephyr toolchain (via nrfutil sdk-manager, with
-lazy SDK/toolchain bootstrap on the first `west` invocation), `ZEPHYR_BASE`,
-`openocd` (master build), `nrfutil`, the `nix-nrf` CLI facade (`nix-nrf
-versions`, `nix-nrf probes`, `nix-nrf bootstrap`, `nix-nrf doctor`), and
-multilib GCC for `native_sim`.
-
-**Scoped toolchain environment:** Nordic's sdk-manager env script exports
-`PYTHONHOME`, `PYTHONPATH`, `LD_LIBRARY_PATH` and `GIT_EXEC_PATH` — toxic to
-non-toolchain tools. `mkNrfShell` does NOT eval it into the shell; a `west`
-wrapper loads it only inside west's process tree. The shell itself stays
-clean — `nix`, agents, and editors launched from it work normally.
-
-## SEGGER / J-Link
-
-The packaged nrfutil derivation in Nixpkgs unconditionally depends on
-`segger-jlink-headless` and sets `NRF_JLINK_DLL_PATH` — **including when only
-the sdk-manager extension is composed**. This repository therefore configures
-`allowUnfree = true` and `segger-jlink.acceptLicense = true` in its own
-Nixpkgs import. `inputs.nixpkgs.follows` only replaces the Nixpkgs *source*
-revision; nix-nrf-dev still imports that source with its own config, so
-consumers using the default package need no extra configuration. Consumers
-who construct or override nrfutil from their own `pkgs` — a `nrfutilPackage`
-override, or their own `pkgs.nrfutil.withExtensions [ "nrfutil-sdk-manager" ]`
-— must configure `allowUnfree = true` and `segger-jlink.acceptLicense = true`
-(or equivalent per-package license handling) or that package will fail to
-build. There is no sdk-manager-only composition that avoids J-Link.
-
-## Backends
-
-`mkNrfShell` takes a `backend` argument (default `"nrfutil"`):
-
-- `"nrfutil"` — uses Nordic's sdk-manager for the NCS toolchain environment.
-  This is the default and recommended backend. Omit the argument or pass
-  `backend = "nrfutil"` explicitly; both behave identically.
-- `"west"` — **experimental** hybrid backend: Nix owns the exact Zephyr SDK,
-  host tools, and Python interpreter, while the official mutable west
-  workspace and a version-local venv own the NCS source, west, and workspace
-  Python requirements — no nrfutil/sdk-manager. Currently supports only
-  `v3.3.0` on `x86_64-linux` (metadata-driven in
-  `nix/backends/west/versions.nix`).
-- `"sdk-nrf"` — reserved for a future Nix-native build environment (see
-  `docs/development/roadmap.md`). It is **not** implemented: any unsupported
-  value fails at Nix evaluation with an unsupported-backend error instead of
-  silently falling back.
-
-```nix
-# nrfutil (default, recommended):
-devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
-  backend = "nrfutil";
-  ncsVersion = "v3.3.0";
-};
-
-# west (experimental; v3.3.0 / x86_64-linux only):
-devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
-  backend = "west";
-  ncsVersion = "v3.3.0";
-};
-```
-
-`ncsVersion` is a **required** argument — every caller selects an NCS release
-explicitly (there is no `"latest"` alias or default). `"v3.3.0"` is the tested
-release used by this repository's own shells, examples, and template, but it
-is not an architecture lock. For `backend = "west"`, the release must exist in
-the west backend metadata; an unknown release fails evaluation naming the
-supported west versions.
-
-Toolchain selection (nrfutil backend):
-
-- Omit `toolchainBundleId` (normal case) → the west wrapper runs
-  `nrfutil sdk-manager toolchain env --ncs-version <ncsVersion>`, selecting
-  the newest compatible patched toolchain for that release.
-- Set `toolchainBundleId = "<bundle-id>"` → the wrapper runs
-  `nrfutil sdk-manager toolchain env --toolchain-bundle-id <bundle-id>`,
-  selecting that exact bundle. If it fails, the error names the exact bundle
-  rather than falling back to the newest compatible one.
-
-`backend = "west"` rejects `toolchainBundleId` and non-default
-`nrfutilPackage` overrides (no nrfutil participates); `autoBootstrap`,
-`packages`, `inputsFrom`, `name`, `withMultilib`, and `extraShellHook` behave
-like the nrfutil backend.
-
-## Bootstrap
-
-`nix-nrf bootstrap` provisions the configured NCS SDK source and selected
-toolchain before they are needed. It is **explicit** (`nix-nrf bootstrap`),
-**lazy** (the `west` wrapper checks on every invocation and installs only when
-something is missing), and **manual** when `autoBootstrap = false`:
-
-```text
-$ nix-nrf bootstrap                  # explicit; prompts before downloading
-$ nix-nrf bootstrap --yes            # approve the required downloads up front
-$ nix-nrf bootstrap --check          # inspect only; never installs (exit 1 when missing)
-$ nix-nrf bootstrap --print-sdk-path # print only the absolute SDK root on success
-```
-
-- `--yes` and `NIX_NRF_BOOTSTRAP_YES=1` bypass the interactive confirmation.
-  Nordic's sdk-manager itself has **no** `--yes` option — this flag is the
-  repository's confirmation bypass and is never forwarded to nrfutil. Without
-  a terminal, unapproved bootstrap fails with the exact re-run command and
-  exit 2 instead of mutating state.
-- With no exact `toolchainBundleId`, a missing SDK or toolchain runs
-  `nrfutil sdk-manager install <ncsVersion>` (SDK source plus the newest
-  compatible patched toolchain for the release).
-- With an exact `toolchainBundleId`, only the missing actions run:
-  `nrfutil sdk-manager sdk install <ncsVersion>` for the SDK source and
-  `nrfutil sdk-manager toolchain install --toolchain-bundle-id <bundle-id>`
-  for that exact toolchain — it never downloads the newest compatible
-  toolchain accidentally.
-- All status, prompts, and nrfutil progress go to stderr; stdout stays empty
-  unless `--print-sdk-path` succeeds, so command substitution stays
-  machine-readable.
-
-The `west` wrapper bootstraps lazily (`autoBootstrap = true`, the default):
-each invocation ensures the selected SDK source and toolchain exist (installing
-only when missing and approved), exports `ZEPHYR_BASE` inside west's process,
-then loads the scoped toolchain env. With `autoBootstrap = false`, west only
-checks and, if anything is missing, prints that automatic bootstrap is disabled
-plus the exact `nix-nrf bootstrap` remediation — it never mutates.
-
-Shell entry is always non-mutating: the shell hook runs the read-only
-`--check` path and exports `ZEPHYR_BASE` only when the installed SDK is found.
-A bootstrap that installs a missing SDK happens inside west's process; re-enter
-the shell (or `direnv reload`) to pick up `ZEPHYR_BASE` for non-west commands.
-
-## Clean bootstrap verification (clean-room)
-
-`tests/clean-room/run.sh` proves the whole flow from an empty, isolated Linux
-home: it bootstraps NCS v3.3.0 and the selected toolchain under a
-script-created `HOME`, re-enters the shell, derives `ZEPHYR_BASE` from the
-isolated installation, and runs a real `west build -p always --sysbuild` of
-the XIAO nRF54L15 blinky sample, verifying the resulting `zephyr.elf` and
-`domains.yaml`. It never flashes hardware.
+On first entry, provision the NCS SDK and toolchain:
 
 ```bash
-bash tests/clean-room/run.sh   # downloads several GiB; needs >= 25 GiB free
+nix-nrf bootstrap
 ```
 
-The isolated home is removed on exit unless `NIX_NRF_CLEAN_KEEP=1`; a
-caller-provided `NIX_NRF_CLEAN_HOME` is never removed. The test runs
-manually via `.github/workflows/clean-room.yml` (`workflow_dispatch` on the
-`nrf-hardware` self-hosted runner, no schedule) — normal PR CI never
-downloads SDK/toolchain bundles. See `tests/clean-room/README.md`.
+It asks for confirmation before downloading several GiB.
 
-## Experimental: west backend (public, v3.3.0 / x86_64-linux only)
+[direnv]: https://direnv.net
 
-The west backend (`mkNrfShell { backend = "west"; ... }`) is the hybrid
-model: Nix supplies the exact Zephyr SDK, host tools, and Python interpreter,
-while the official mutable west workspace and a version-local Python venv own
-the NCS source, west, and workspace Python requirements — no nrfutil/
-sdk-manager and no Nordic toolchain bundle. See
-`docs/development/west-backend-status.md` for current status and behavior.
-It is **experimental**: only `v3.3.0` on `x86_64-linux` is supported, and the
-nrfutil backend remains the default/recommended fallback. A pure Nix-native
-`sdk-nrf` backend remains reserved — see `docs/development/roadmap.md` and
-`docs/development/sdk-nrf-feasibility-draft.md`.
+## Choose a backend
 
-Backend-aware surface:
+`mkNrfShell` selects how the NCS toolchain is provided. The **nrfutil**
+backend (the default and recommended choice) uses Nordic's sdk-manager to
+manage a mutable SDK and toolchain under your home directory, and accepts
+releases advertised by sdk-manager through `ncsVersion`.
 
-```text
-packages.west-zephyr-sdk-v3_3_0      exact Zephyr SDK 0.17.0 (minimal + ARM/RISC-V compilers)
-nix-nrf versions                     lists west backend metadata releases (never nrfutil)
-nix-nrf bootstrap                    creates/updates the mutable west workspace + venv
-tests/west-backend/run.sh            clean-room proof (real setup + blinky sysbuild)
-checks.<system> west gates           fake-boundary + shell-boundary checks (see
-                                     nix/flake/checks/default.nix and
-                                     docs/development/west-backend-status.md)
-```
+The **west** backend (experimental) instead lets Nix own the exact Zephyr SDK,
+host tools, and Python interpreter while a mutable west workspace holds the
+NCS source.
 
-Typical flow inside a public west shell:
+A pure Nix-native `sdk-nrf` backend is not implemented and has no configuration.
+Full backend behavior and bootstrap details are in
+[docs/backends.md](docs/backends.md).
 
-```bash
-nix-nrf bootstrap --yes     # creates $HOME/ncs/v3.3.0 workspace + .venv (multi-GiB; approved)
-nix-nrf bootstrap --check   # read-only readiness (exit 0 ready, 1 missing)
-west build -p always -b xiao_nrf54l15/nrf54l15/cpuapp --sysbuild zephyr/samples/basic/blinky
-```
-
-The west backend supports only `x86_64-linux`. The real clean-home proof
-(`tests/west-backend/run.sh`) downloads several GiB; each run requires its
-own fresh explicit approval — approval is never permanent. Normal CI never
-downloads a workspace. See `docs/development/west-backend-status.md`.
-
-## nix-nrf CLI
-
-`nix-nrf` is the project's command facade: `nix-nrf versions`, `nix-nrf probes`,
-`nix-nrf bootstrap`, and `nix-nrf doctor`. It dispatches to the packaged tools
-with `exec`, so delegated stdout, stderr, options, and exit status are
-preserved:
-
-```
-$ nix-nrf versions
-$ nix-nrf versions --json
-$ nix-nrf versions --help
-$ nix-nrf probes
-$ nix-nrf probes --find nrf53
-$ nix-nrf probes --help
-$ nix-nrf bootstrap
-$ nix-nrf bootstrap --check
-$ nix-nrf bootstrap --help
-$ nix-nrf doctor
-$ nix-nrf doctor --json
-$ nix-nrf doctor --help
-$ nix-nrf help versions
-$ nix-nrf help probes
-$ nix-nrf help bootstrap
-$ nix-nrf help doctor
-```
-
-`nix-nrf versions` is backend-aware: in a nrfutil shell it delegates to
-`nrfutil sdk-manager search` without parsing or maintaining a local version
-list (sdk-manager remains the runtime authority); in a west shell it lists the
-repository-supported west backend metadata releases (sorted text or `--json`
-string array) and never invokes nrfutil. `nix-nrf probes` runs the internal
-probe command module (`$out/libexec/nix-nrf/probes`); `nix-nrf bootstrap` runs
-the internal bootstrap command module (`$out/libexec/nix-nrf/bootstrap` — the
-nrfutil-backed or the west workspace/venv module, depending on the shell's
-backend); `nix-nrf doctor` runs the internal doctor command module
-(`$out/libexec/nix-nrf/doctor`); there are no standalone
-`nrf-probes`/`nrf-bootstrap`/`nrf-doctor` binaries or packages. The old
-`nrf-sdk-versions` command is removed; use `nix-nrf versions`.
-
-## Hardware access diagnostics (`nix-nrf doctor`)
-
-`nix-nrf doctor` is read-only environment and probe-access diagnostics. It
-distinguishes a ready versus missing SDK/toolchain, no visible debug probe,
-visible-but-inaccessible CMSIS-DAP/J-Link candidates, at least one accessible
-candidate, and mixed access. It never opens probe nodes, never invokes
-OpenOCD/J-Link tools, never runs a mutating bootstrap (only the `--check`
-path), never runs `sudo`, and never installs or reloads host udev rules — it
-prints the exact remediation instead:
-
-```text
-$ nix-nrf doctor
-SDK/toolchain
-  status: pass
-  NCS v3.3.0 ready: /home/user/ncs/v3.3.0
-
-User access
-  user: user (uid 1000)
-  groups: dialout users wheel
-
-Debug probes
-  1 accessible probe(s), 1 with limited access
-  [OK] cmsis-dap  Debugprobe on Pico (CMSIS-DAP) (Raspberry Pi, ...)  /sys/bus/usb/devices/5-2.4
-    usb /dev/bus/usb/005/033: exists, readable, writable
-  [BLOCKED] cmsis-dap  Seeed Studio XIAO nrf54 CMSIS-DAP (Seeed Studio, ...)  /sys/bus/usb/devices/1-9
-    hidraw /dev/hidraw0: exists
-    usb /dev/bus/usb/001/017: exists, readable, writable
-
-Remediation
-  NixOS:
-    imports = [ nix-nrf-dev.nixosModules.default ];
-
-  Other Linux:
-    nix build .#udev-rules
-    Install result/lib/udev/rules.d/60-openocd.rules using your distribution's
-    documented udev procedure, reload rules, then replug probe.
-
-  Packaged udev rule: /nix/store/...-nix-nrf-udev-rules/lib/udev/rules.d/60-openocd.rules
-
-  OpenOCD should not run as root.
-
-PASS
-```
-
-Candidate recognition is descriptor-based (product/manufacturer strings), not
-a repository VID/PID catalog: CMSIS-DAP when the product contains
-`cmsis-dap`, J-Link when the product contains `j-link`/`jlink` or the
-manufacturer contains `segger`. Access is decided by `os.access` on the mapped
-nodes — hidraw for CMSIS-DAP (USB-node fallback when the probe exposes no
-HID interface, e.g. CMSIS-DAP v2 bulk), USB bus node for J-Link. The base
-`packages.nix-nrf` has no NCS default, so its doctor skips the SDK check but
-still diagnoses hardware; the shell's `nix-nrf` checks the configured
-selector. Both the standalone package and the shell's `nix-nrf` doctor carry
-the exact packaged udev-rule store path (the shell's comes from internal
-closure wiring in `mkNrfShell`, not a consumer option) and print it as
-`Packaged udev rule:` in the remediation.
-
-Exit: `0` when the SDK is pass/skip and at least one candidate is accessible,
-`1` for SDK or hardware failure, `2` for CLI usage errors. `--json` emits one
-JSON object with stable fields (`ok`, `sdk`, `user`, `hardware`,
-`remediation`). In a west shell the human heading/status/remediation label
-becomes `west workspace/Zephyr SDK` (JSON fields and exit codes never change);
-the doctor still checks the west workspace/venv only through the read-only
-`--check --quiet --print-sdk-path` contract.
-
-## NixOS udev rules
-
-OpenOCD's canonical `60-openocd.rules` (pinned revision
-`da3920b0a52dc2d394afb222c688dac7e57acc1b`) grants non-root access to
-CMSIS-DAP and J-Link probes (`MODE="660"`, `GROUP="plugdev"`,
-`TAG+="uaccess"`, covering `usb`, `tty`, and `hidraw` subsystems). The flake
-exposes it as `packages.udev-rules`, copied byte-for-byte from the built
-OpenOCD source (no repository VID/PID catalog), plus a minimal NixOS module
-that activates it on the current system:
+<details>
+<summary>nrfutil (recommended)</summary>
 
 ```nix
+# flake.nix
 {
   inputs.nix-nrf-dev.url = "github:qarnet/nix-nrf-dev";
-  # ...
-  nixosConfigurations.myHost = nixpkgs.lib.nixosSystem {
-    modules = [ { imports = [ nix-nrf-dev.nixosModules.default ]; } ];
+
+  outputs = { nix-nrf-dev, ... }: {
+    devShells.x86_64-linux.default =
+      nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
+        backend = "nrfutil";
+        ncsVersion = "v3.3.0";
+      };
   };
 }
 ```
 
-`services.udev.packages` imports every `etc/udev/rules.d` and
-`lib/udev/rules.d` file from the listed packages, so passing OpenOCD itself
-would not activate its contrib rule — the relocation package exists for that
-reason. On non-NixOS Linux, `nix build .#udev-rules` and install
-`result/lib/udev/rules.d/60-openocd.rules` via your distribution's documented
-udev procedure, then reload rules and replug the probe. OpenOCD should not run
-as root.
+</details>
 
-## Advanced: overriding nrfutil
-
-`mkNrfShell` accepts a public `nrfutilPackage` override (defaulting to this
-repository's composed package: Nixpkgs nrfutil with the sdk-manager
-extension). Every nrfutil invocation — the `west` wrapper and the `nix-nrf
-versions`/`bootstrap` subcommands included — uses the selected package, so an
-advanced caller can substitute another compatible derivation:
+<details>
+<summary>nrfutil with an exact toolchain bundle</summary>
 
 ```nix
-devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
-  ncsVersion = "v3.3.0";
-  nrfutilPackage = myNrfutil; # must provide `nrfutil` with sdk-manager
-};
+# flake.nix
+{
+  inputs.nix-nrf-dev.url = "github:qarnet/nix-nrf-dev";
+
+  outputs = { nix-nrf-dev, ... }: {
+    devShells.x86_64-linux.default =
+      nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
+        backend = "nrfutil";
+        ncsVersion = "v3.3.0";
+        toolchainBundleId = "<bundle-id>";
+      };
+  };
+}
 ```
 
-Without `nrfutilPackage`, replacing the Nixpkgs revision via
-`inputs.nixpkgs.follows` is the supported way to change nrfutil/sdk-manager
-versions.
+</details>
 
-## Hybrid consumers
-
-`mkNrfShell` accepts `inputsFrom` for composing additional derivations
-alongside the NCS toolchain:
+<details>
+<summary>west (experimental)</summary>
 
 ```nix
-devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
-  ncsVersion = "v3.3.0";
-  inputsFrom = [ myPackage ];
-};
+# flake.nix
+{
+  inputs.nix-nrf-dev.url = "github:qarnet/nix-nrf-dev";
+
+  outputs = { nix-nrf-dev, ... }: {
+    devShells.x86_64-linux.default =
+      nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
+        backend = "west";
+        ncsVersion = "v3.3.0";
+      };
+  };
+}
 ```
 
-This propagates the given derivations' environment variables and packages into
-the shell without polluting the scoped `west` wrapper.
+</details>
 
-## Outputs
+## Everyday commands
 
-Current flake outputs are `x86_64-linux` only; macOS and Linux ARM64 remain
-unsupported (all `<system>`-parameterized outputs below resolve to
-`x86_64-linux`).
-
-| Output | What |
-|--------|------|
-| `lib.<system>.mkNrfShell { backend, ncsVersion, toolchainBundleId, autoBootstrap, nrfutilPackage, packages, extraShellHook, withMultilib, inputsFrom, name }` | devShell factory — `ncsVersion` required; `backend` default `"nrfutil"` (recommended), `"west"` experimental (v3.3.0 / x86_64-linux only); `toolchainBundleId`/`autoBootstrap`/`nrfutilPackage` optional (nrfutil backend; rejected for west, see [Backends](#backends), [Bootstrap](#bootstrap), and [Advanced: overriding nrfutil](#advanced-overriding-nrfutil)) |
-| `packages.openocd-master` | openocd from master (pinned), wrapped for libudev |
-| `packages.openocd-master-unwrapped` | the raw build |
-| `packages.nrfutil` | Nixpkgs nrfutil composed with the sdk-manager extension (includes SEGGER J-Link, see [SEGGER / J-Link](#segger--j-link)) |
-| `packages.nix-nrf` | project CLI facade: `versions` (sdk-manager-backed NCS version list), `probes` (internal probe command module), `bootstrap` (internal SDK/toolchain bootstrap module), and `doctor` (internal read-only SDK/probe-access diagnostics module, see [Hardware access diagnostics](#hardware-access-diagnostics-nix-nrf-doctor) and [Bootstrap](#bootstrap)) |
-| `packages.udev-rules` | upstream OpenOCD `60-openocd.rules` relocated to `lib/udev/rules.d`, byte-for-byte (see [NixOS udev rules](#nixos-udev-rules)) |
-| `packages.default` | alias for `packages.nix-nrf` |
-| `packages.west-zephyr-sdk-v3_3_0` | west backend exact Zephyr SDK 0.17.0 package (minimal bundle + ARM/RISC-V compilers, official layout, setup hook; see [Experimental: west backend](#experimental-west-backend-public-v330--x86_64-linux-only)) |
-| `devShells.default` | dogfood shell for hacking on this repo |
-| `formatter.<system>` | treefmt wrapper (`nix fmt`) |
-| `nixosModules.default` | minimal NixOS module adding `packages.udev-rules` to `services.udev.packages` (no options; see [NixOS udev rules](#nixos-udev-rules)) |
-| `checks.<system>` | `nix flake check` gate with the exact check set in `nix/flake/checks/default.nix` (grouped by domain in `nix/flake/checks/`): formatting (treefmt) and pre-commit; backend-selection evaluation (required `ncsVersion`, dispatch, west-only rejections); fake-boundary behavior gates for the public commands and flash recipes (bootstrap/versions/quoting, doctor, probes, real `tcl/` sources under tclsh with fake OpenOCD); public shell-boundary gates for both backends; and wiring/byte-identity checks (udev rules, doctor rule path, help wording, public NixOS module evaluation). Normal checks never download SDK/toolchain bundles, run mutable west workspaces, or touch hardware |
-| `templates.default` | project skeleton (flake.nix + .envrc) |
-| `tcl/` | canonical flash recipes (see below) |
-
-## Probing devices
-
-`nix-nrf probes` is the preferred way to identify CMSIS-DAP probes and their
-attached targets (read-only). Never assume the probe↔board mapping — probes
-get replugged.
-
-```
-$ nix-nrf probes
-SERIAL            PROBE                              TARGET    DPIDR       PART        VARIANT
-8EE9B3FF          Seeed Studio XIAO nrf54 CMSIS-DAP  nRF54L15  0x6ba02477  0x00054b15  AAC0
-E6635C08CB1F502B  Debugprobe on Pico (CMSIS-DAP)     nRF5340   0x6ba02477  0x00005340  QKAA
-
-$ nix-nrf probes --find nrf53      # serial of the probe wired to an nRF53
-E6635C08CB1F502B
+```bash
+nix-nrf bootstrap    # provision the NCS SDK/toolchain (prompts before multi-GiB downloads)
+nix-nrf versions     # list available NCS versions
+nix-nrf probes       # list attached debug probes and targets
+nix-nrf doctor       # read-only environment and probe-access diagnostics
 ```
 
-Works on APPROTECT-locked chips via the DP/AP signature. Flash scripts should
-select probes with `--find <family>` instead of hardcoding serials.
+Backend-specific behavior and hardware setup live in
+[docs/backends.md](docs/backends.md) and [docs/hardware.md](docs/hardware.md).
 
-## Flash recipes (`tcl/`)
+> [!NOTE]
+> **SEGGER / J-Link caveat:** the packaged nrfutil includes J-Link and its
+> unfree license even when you only use a CMSIS-DAP probe. The default flake
+> handles this automatically, but custom nrfutil or Nixpkgs compositions may
+> need license configuration — see
+> [docs/backends.md#segger--j-link-caveat](docs/backends.md#segger--j-link-caveat).
 
-- **`nrf53_flash.tcl`** — nRF5340 dual-core flash with APPROTECT
-  check/recovery and mandatory UICR.APPROTECT programming. Integrates with
-  the west openocd runner (`check_approtect` / `flash_west`) or standalone
-  (`flash_both`).
-- **`nrf54l_flash.tcl`** — nRF54L RRAM flash (no flash driver; RRAMC
-  write-enable + `load_image`/`verify_image`).
+## Hardware access
 
-## Recovery coverage
+A Nix dev shell cannot install host udev policy — probe access is a system
+configuration, not part of the shell. NixOS users can activate the packaged
+rules with the `nixosModules.default` module; other Linux distributions
+install the packaged `60-openocd.rules` with their standard udev procedure.
+`nix-nrf doctor` reports whether your probes are visible and accessible.
+Full instructions are in [docs/hardware.md](docs/hardware.md).
 
-| Chip | Recovery | Notes |
-|------|----------|-------|
-| nRF5340 | openocd `nrf53_recover` | proven; nRF53-specific CTRL-AP proc |
-| nRF54L | **NONE** | upstream openocd has no nrf54l recovery. Fallback: `nrfutil device recover` with a J-Link. |
+## Documentation
 
-## Policy
-
-openocd-master is the only flash backend. probe-rs was evaluated and rejected:
-on the nRF5340 its attach model collides with soft-APPROTECT and its only
-unlock remedy is a destructive mass erase that recreates the lock.
-
-## Development
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). The repo uses Conventional Commits,
-`nix fmt` (alejandra + black), and pre-commit hooks via git-hooks.nix. CI
-builds all packages (cached via [Cachix](https://app.cachix.org) under
-`qarnet`), runs smoke tests, flake checks, real-OpenOCD source-compat gates,
-and fake-OpenOCD flash-recipe semantic tests on every PR.
-Hardware integration tests run on a self-hosted runner — see
-`tests/hardware/README.md`.
-
-## Repository architecture
-
-Maintainer reference: [docs/development/architecture.md](docs/development/architecture.md).
-
-- `nix/flake/` — per-system construction (configured Nixpkgs, components,
-  dev shells, checks).
-- `nix/backends/` — public `mkNrfShell` dispatcher plus the `nrfutil` and
-  `west` backend modules.
-- `nix/commands/` — shared `nix-nrf` dispatcher, doctor, and probes command
-  modules.
-- `nix/hardware/` — OpenOCD build and udev-rules package.
-- `nix/lib/mk-python-command.nix` — shared command packaging helper.
-- `bin/` — command scripts, owned by their backend (`bin/backends/`) or
-  shared (`bin/commands/`); installed only under `$out/libexec/nix-nrf/`.
-- `tests/` — unit suites, fixtures, and the manual clean-room / west /
-  hardware harnesses.
+- [docs/backends.md](docs/backends.md) — backend choice, toolchain selection, bootstrap
+- [docs/hardware.md](docs/hardware.md) — probe access, flashing, recovery safety
+- [CONTRIBUTING.md](CONTRIBUTING.md) — contributing to nix-nrf-dev itself
 
 ## License
 
