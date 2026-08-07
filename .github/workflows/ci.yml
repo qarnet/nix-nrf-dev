@@ -1,8 +1,9 @@
 # CI — the "clone and it works" gate.
 # Builds all packages (cached via Cachix qarnet), runs smoke tests, flake
-# checks, template-init, devshell-enter, and TCL-parse tests for both flash
-# recipes. Runs on PRs, pushes to main, and nightly (catches upstream
-# openocd rev/hash drift).
+# checks, template-init, devshell-enter, real-OpenOCD source-compat gates,
+# and fake-OpenOCD semantic flash-recipe tests. Runs on PRs, pushes to main,
+# and nightly (scheduled regression coverage of the pinned inputs/builds —
+# the openocd rev/hash is a fixed pin and cannot drift).
 name: CI
 
 on:
@@ -10,7 +11,7 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '0 0 * * *'  # nightly — catches upstream openocd rev/hash drift
+    - cron: '0 0 * * *'  # nightly regression coverage of pinned inputs/builds
 
 # Cancel in-progress runs on the same ref when a new run is triggered.
 concurrency:
@@ -27,33 +28,77 @@ jobs:
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-          nix_path: nixpkgs=channel:nixos-25.11
 
       - uses: cachix/cachix-action@v17
         with:
           name: qarnet
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
-      # A3 — flake eval + checks (fast, sandboxed). Runs treefmt check + pre-commit check.
+      # A3 — flake eval + checks (fast, sandboxed). First proves every
+      # published system output evaluates across all published systems
+      # (no build — unsupported platforms cannot silently return); second
+      # realizes normal checks. Runs treefmt check + pre-commit check +
+      # fake-boundary bootstrap unit tests (no network, no real SDK/toolchain
+      # install).
       - name: Flake check
-        run: nix flake check -L
+        run: |
+          nix flake check --all-systems --no-build -L
+          nix flake check -L
 
       # A1 — build all packages. Cached after first run via Cachix.
       # openocd-master is ~10 min from source on first run; subsequent runs pull from cache.
+      # nrfutil pulls segger-jlink-headless (SEGGER license accepted in the flake config).
+      # nrf-probes is not a package: probe identification is the internal
+      # `nix-nrf probes` subcommand, built as part of .#nix-nrf.
+      # .#udev-rules is the OpenOCD udev-rule relocation package consumed by
+      # the NixOS module and reported by `nix-nrf doctor`.
+      # .#west-zephyr-sdk-v3_3_0 is the west backend exact Zephyr SDK package
+      # (packages.default aliases nix-nrf, so it is not built separately).
       - name: Build packages
-        run: nix build -L .#openocd-master-unwrapped .#openocd-master .#nrf-probes .#nrfutil-core
+        run: nix build -L .#openocd-master-unwrapped .#openocd-master .#nrfutil .#nix-nrf .#udev-rules .#west-zephyr-sdk-v3_3_0
 
       # A2 — smoke-run: verify the built binaries actually execute.
       - name: Smoke run openocd
         run: nix run .#openocd-master -- --version
-      - name: Smoke run nrf-probes
-        run: nix run .#nrf-probes -- --help
       - name: Smoke run nrfutil
-        run: nix run .#nrfutil-core -- --version
+        run: nix run .#nrfutil -- --version
+      - name: Smoke run nix-nrf help
+        run: nix run .#nix-nrf -- --help
+      # nix-nrf versions delegates to `nrfutil sdk-manager search`; --help only,
+      # so normal PR CI never depends on live Nordic index availability.
+      - name: Smoke run nix-nrf versions help
+        run: nix run .#nix-nrf -- versions --help
+      - name: Smoke run nix-nrf probes help
+        run: nix run .#nix-nrf -- probes --help
+      # nix-nrf bootstrap delegates to the internal bootstrap module; --help
+      # only, so normal PR CI never installs or downloads SDK/toolchain
+      # bundles. All missing/install paths are proven by the fake-boundary
+      # bootstrap-tests check.
+      - name: Smoke run nix-nrf bootstrap help
+        run: nix run .#nix-nrf -- bootstrap --help
+      # nix-nrf doctor delegates to the internal doctor module; --help only,
+      # so normal PR CI never depends on the hosted runner's USB state. All
+      # classification/remediation paths are proven by the fake-boundary
+      # doctor-tests check.
+      - name: Smoke run nix-nrf doctor help
+        run: nix run .#nix-nrf -- doctor --help
+      # Unknown subcommands must fail with exit code 2.
+      - name: nix-nrf unknown subcommand exits 2
+        run: |
+          set +e
+          nix run .#nix-nrf -- does-not-exist
+          rc=$?
+          set -e
+          test "$rc" -eq 2
 
-      # A5 — devshell-enter: verify the dogfood shell provides the tools.
+      # A5 — devshell-enter: verify the dogfood shell provides the tools and
+      # the removed nrf-probes/nrf-sdk-versions are absent. Fresh CI has no
+      # stale environment, so `! command -v` is reliable here. Only
+      # `nix-nrf bootstrap --help` / `nix-nrf doctor --help` are invoked —
+      # never a bare bootstrap, install, or doctor run against missing state
+      # or hosted USB.
       - name: Devshell provides tools
-        run: nix develop --command sh -c "command -v openocd && command -v nrf-probes && nrf-probes --help"
+        run: nix develop --command sh -ceu 'command -v nrfutil; command -v nix-nrf; command -v openocd; command -v west; nix-nrf bootstrap --help >/dev/null; nix-nrf doctor --help >/dev/null; ! command -v nrf-probes; ! command -v nrf-sdk-versions'
 
       # A8 — clean-env regression gate: prove Nordic sdk-manager variables
       # do not poison non-toolchain tools (Node, Git, Python).
@@ -73,53 +118,78 @@ jobs:
             python3 -c "import json"
           '
 
-      # A6 — TCL parse: openocd sources+parses the TCL before trying to talk
-      # to a probe, so syntax errors surface distinctly from "no probe" errors.
-      # No probe attached in CI → openocd exits non-zero at the "unable to open
-      # CMSIS-DAP device" stage. We assert the failure is the probe-open stage
-      # and NOT a TCL parse/syntax error.
-      - name: TCL parse nRF53 recipe
+      # A6 — real-OpenOCD source-compat gate: real OpenOCD sources+parses the
+      # recipe Tcl before trying to open a probe, so syntax errors surface
+      # distinctly from "no probe" errors. The impossible `adapter serial`
+      # value guarantees the adapter-open stage fails after the scripts parse
+      # — deterministic regardless of whether the host has a probe attached
+      # (the hosted runner's USB state is irrelevant). An unexpected exit 0
+      # would mean the gate did not exercise the expected probe-open
+      # boundary. Recipe proc semantics (command order, args, conditionals)
+      # are owned by the checks.flash-recipe-tests flake check, not this gate.
+      - name: Real OpenOCD source-compat nRF53 recipe
         run: |
           set +e
           nix run .#openocd-master -- \
             -f interface/cmsis-dap.cfg \
+            -c "adapter serial __nix_nrf_source_compat_no_probe__" \
             -c "transport select swd" \
             -c "adapter speed 1000" \
             -f target/nordic/nrf53.cfg \
             -f tcl/nrf53_flash.tcl \
+            -c init \
             -c shutdown > /tmp/nrf53.log 2>&1
           rc=$?
           cat /tmp/nrf53.log
-          # Fail if the error is a TCL/syntax error (not the expected no-probe error).
+          # Fail if the error is a Tcl/syntax error (not the expected no-probe error).
           if grep -qiE "syntax error|wrong # args|can't read|invalid command name" /tmp/nrf53.log; then
-            echo "ERROR: TCL parse error detected" >&2
+            echo "ERROR: Tcl parse error detected" >&2
             exit 1
           fi
-          # Expected: non-zero exit due to no probe, but no parse error.
-          echo "OK: no TCL parse error (exit $rc was probe-open failure, expected)"
-      - name: TCL parse nRF54L recipe
+          # Exit 0 means the adapter-open boundary was not reached: the
+          # impossible serial must force a probe-open failure after the
+          # scripts parsed.
+          if [ "$rc" -eq 0 ]; then
+            echo "ERROR: expected non-zero probe-open failure, got exit 0" >&2
+            exit 1
+          fi
+          echo "OK: real OpenOCD sourced the recipe; exit $rc was the expected probe-open failure"
+      - name: Real OpenOCD source-compat nRF54L recipe
         run: |
           set +e
           nix run .#openocd-master -- \
             -f interface/cmsis-dap.cfg \
+            -c "adapter serial __nix_nrf_source_compat_no_probe__" \
             -c "transport select swd" \
             -c "adapter speed 1000" \
             -f target/nordic/nrf54l.cfg \
             -f tcl/nrf54l_flash.tcl \
+            -c init \
             -c shutdown > /tmp/nrf54l.log 2>&1
           rc=$?
           cat /tmp/nrf54l.log
           if grep -qiE "syntax error|wrong # args|can't read|invalid command name" /tmp/nrf54l.log; then
-            echo "ERROR: TCL parse error detected" >&2
+            echo "ERROR: Tcl parse error detected" >&2
             exit 1
           fi
-          echo "OK: no TCL parse error (exit $rc was probe-open failure, expected)"
+          if [ "$rc" -eq 0 ]; then
+            echo "ERROR: expected non-zero probe-open failure, got exit 0" >&2
+            exit 1
+          fi
+          echo "OK: real OpenOCD sourced the recipe; exit $rc was the expected probe-open failure"
 
       # A4 — template-init: verify `nix flake init -t` produces a working flake.
+      # Both the template source and the generated flake's nix-nrf-dev input
+      # point at the current checkout (path:$repo), so PR CI validates this
+      # feature before it exists on remote main. The path override is
+      # read-only; nothing is written back to the repository.
       - name: Template init
         run: |
+          repo="$(pwd)"
+          rm -rf /tmp/tpltest
           mkdir -p /tmp/tpltest
           cd /tmp/tpltest
-          nix flake init -t github:qarnet/nix-nrf-dev
-          nix flake check -L
-          nix develop --command sh -c "command -v openocd && command -v nrf-probes"
+          nix flake init -t "path:$repo"
+          nix flake check -L --override-input nix-nrf-dev "path:$repo"
+          nix develop --override-input nix-nrf-dev "path:$repo" --command sh -c "command -v openocd && command -v nix-nrf && ! command -v nrf-probes"
+          nix develop --override-input nix-nrf-dev "path:$repo" --command sh -c "nix-nrf probes --help && nix-nrf bootstrap --help" >/dev/null

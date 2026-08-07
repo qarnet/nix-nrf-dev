@@ -14,9 +14,9 @@ documented future direction, but reject it until implemented.
 - `flake.nix` constructs and exports `mkNrfShell` per system and uses it for
   both dogfood shells.
 - `templates/default/flake.nix` and `README.md` show consumer calls.
-- `docs/development/clean-bootstrap-versioning-plan.md` records the supported
+- the bootstrap versioning plan recorded the supported
   nrfutil backend and future Nix-native sdk-nrf backend.
-- `goals.md` item 3.1 records future Nix-native sdk-nrf work.
+- the roadmap's item 3.1 recorded future Nix-native sdk-nrf work.
 
 ## Exact API decision
 
@@ -97,14 +97,15 @@ Add `backend` to documented signature table. Explain:
 - `"sdk-nrf"` is reserved for future Nix-native environment and currently
   fails evaluation.
 - `ncsVersion` remains per-project and customizable; v3.3.0 is tested default,
-  not architecture lock.
+  not architecture lock. (Superseded by the later Nixpkgs nrfutil migration:
+  `ncsVersion` is now a required argument with no default.)
 
 ### Design and roadmap documentation
 
 Update:
 
-- `docs/development/clean-bootstrap-versioning-plan.md`
-- `goals.md`
+- the bootstrap versioning plan document
+- the roadmap document
 
 Use exact backend names:
 

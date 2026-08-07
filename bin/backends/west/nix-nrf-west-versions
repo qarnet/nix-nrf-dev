@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+#
+# nix-nrf-west-versions — `nix-nrf versions` command module for the west
+# backend: lists the NCS releases supported by the west backend metadata
+# (nix/backends/west/versions.nix).
+#
+# Internal backend command: installed by nix/backends/west/versions-command.nix
+# at $out/libexec/nix-nrf/versions and wrapped with the metadata version list
+# baked from the sorted attr names of versions.nix (the script source itself
+# contains no release literals):
+#   NIX_NRF_WEST_VERSIONS       newline-separated version strings, sorted
+#   NIX_NRF_WEST_VERSIONS_JSON  JSON string array of the same versions
+#
+# Contract (shared by the nix-nrf dispatcher and the public shell):
+#   nix-nrf versions          one supported west version per line, sorted
+#   nix-nrf versions --json   JSON string array, sorted
+#   nix-nrf versions --help   backend-specific help, exit 0
+# Unknown options and option combinations exit 2. This module never invokes
+# nrfutil or sdk-manager.
+
+import os
+import sys
+
+PROG = "nix-nrf versions"
+
+HELP = """\
+Usage: nix-nrf versions [--json]
+
+List NCS releases supported by the west backend metadata (sorted).
+
+Options:
+  --json   emit a JSON string array of the supported releases
+  --help   show this help and exit
+"""
+
+
+def main(argv=None):
+    versions = [
+        line
+        for line in os.environ.get("NIX_NRF_WEST_VERSIONS", "").splitlines()
+        if line.strip()
+    ]
+    versions_json = os.environ.get("NIX_NRF_WEST_VERSIONS_JSON", "")
+
+    args = argv if argv is not None else sys.argv[1:]
+    if len(args) > 1:
+        print(f"{PROG}: too many options", file=sys.stderr)
+        print("Run `nix-nrf versions --help` for usage.", file=sys.stderr)
+        return 2
+    option = args[0] if args else None
+    if option in (None, ""):
+        for version in versions:
+            print(version)
+        return 0
+    if option == "--json":
+        print(versions_json)
+        return 0
+    if option in ("--help", "-h"):
+        sys.stdout.write(HELP)
+        return 0
+    print(f"{PROG}: unknown option '{option}'", file=sys.stderr)
+    print("Run `nix-nrf versions --help` for usage.", file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

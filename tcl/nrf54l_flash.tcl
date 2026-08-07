@@ -6,8 +6,8 @@
 # set it is plain byte-writable memory, so load_image/verify_image suffice.
 # FLPR (RISC-V coprocessor) firmware is flashed the same way — its code
 # partition is an RRAM slice in the app core address space (0x165000 on the
-# nRF54L15). Verified on hardware 2026-07-05 (Xiao nRF54L15, built-in
-# CMSIS-DAP).
+# nRF54L15). tests/hardware/run.sh byte-verifies the FLPR bundle on a XIAO
+# nRF54L15.
 #
 # Use together with target/nordic/nrf54l.cfg (or a board cfg that sources
 # it), e.g.:
@@ -29,6 +29,8 @@ proc nrf54l_flash {image} {
     reset halt
     nrf54l_rram_we
     load_image $image
+    puts "Verifying image: $image"
     verify_image $image
+    puts "Verified image: $image"
     reset run
 }

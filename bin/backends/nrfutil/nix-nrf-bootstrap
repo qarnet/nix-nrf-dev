@@ -1,0 +1,366 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+#
+# nix-nrf bootstrap — ensure the configured NCS SDK source and selected
+# toolchain exist before Nordic's scoped toolchain environment is loaded.
+#
+# Internal command module for the `nix-nrf` facade: installed by
+# nix/backends/nrfutil/bootstrap.nix at $out/libexec/nix-nrf/bootstrap and wrapped with
+# the exact nrfutil store executable in NIX_NRF_NRFUTIL. Not a public package.
+#
+# sdk-manager interfaces (verified against nrfutil 8.2.0):
+#   nrfutil sdk-manager list --json --skip-overhead
+#     -> one JSON object or JSON-lines; the object with `versions` carries
+#        per-release {version, sdkStatus, dirNames[], toolchainStatus, ...};
+#        empty stdout when nothing is installed (fresh state)
+#   nrfutil sdk-manager config show --json --skip-overhead
+#     -> {"default": {"install_dir": ...}}; null means $HOME/ncs on Linux
+#   nrfutil sdk-manager toolchain env <selector> --as-script sh
+#     -> exit 0 when the selected toolchain exists, nonzero when unavailable
+#   nrfutil sdk-manager install <version>                  (SDK + newest compatible toolchain)
+#   nrfutil sdk-manager sdk install <version>              (SDK source only)
+#   nrfutil sdk-manager toolchain install --toolchain-bundle-id <id>
+#
+# sdk-manager has no --yes option. `--yes` and NIX_NRF_BOOTSTRAP_YES=1 are
+# this repository's confirmation bypass and are never forwarded to nrfutil.
+#
+# Exit contract:
+#   0  configured selection ready (including successful install)
+#   1  missing under --check, unreadable state, command failure, or
+#      incomplete post-install state
+#   2  CLI usage error, approval required without a terminal, or user declined
+#
+# stdout stays empty unless --print-sdk-path succeeds, so command
+# substitution stays machine-readable. All status, prompts, and nrfutil
+# progress go to stderr.
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+PROG = "nix-nrf bootstrap"
+
+# Suppresses normal status messages (--quiet); errors remain visible.
+_QUIET = False
+
+
+class BootstrapError(Exception):
+    """Fatal bootstrap failure; printed with the `nix-nrf bootstrap:` prefix."""
+
+
+def fail(message):
+    raise BootstrapError(message)
+
+
+def status(message):
+    if not _QUIET:
+        print(f"{PROG}: {message}", file=sys.stderr)
+
+
+def run_nrfutil(nrfutil_exe, args, *, capture=True):
+    """Run an exact nrfutil sdk-manager command.
+
+    capture=True captures stdout/stderr for state queries; capture=False
+    routes child stdout to this helper's stderr so command-substitution
+    stdout stays machine-readable, while child stderr is preserved.
+    """
+    try:
+        return subprocess.run(
+            [nrfutil_exe, "sdk-manager", *args],
+            capture_output=capture,
+            text=True,
+            stdout=sys.stderr if not capture else None,
+        )
+    except OSError as exc:
+        fail(f"cannot run nrfutil {nrfutil_exe}: {exc}")
+
+
+def query(nrfutil_exe, args):
+    """Run a read-only state query; non-success exits are unreadable state."""
+    proc = run_nrfutil(nrfutil_exe, args)
+    if proc.returncode != 0:
+        fail(
+            f"sdk-manager {' '.join(args)} failed (exit {proc.returncode}); cannot read SDK state"
+        )
+    return proc.stdout
+
+
+def list_versions(nrfutil_exe):
+    """Read installed SDK state as parsed JSON."""
+    return parse_versions_list(
+        query(nrfutil_exe, ["list", "--json", "--skip-overhead"])
+    )
+
+
+def parse_versions_list(output):
+    """Parse either one JSON object or JSON-lines output; return the object
+    carrying `versions`. An empty output means nothing is installed yet
+    (sdk-manager prints empty stdout on a fresh state). Malformed output is a
+    hard error, never "missing"."""
+    text = output.strip()
+    if not text:
+        return {"versions": []}
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        data = None
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                candidate = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(candidate, dict) and isinstance(
+                candidate.get("versions"), list
+            ):
+                data = candidate
+                break
+        if data is None:
+            fail("sdk-manager list returned malformed JSON")
+    if not isinstance(data, dict):
+        fail("sdk-manager list output has unexpected shape (not a JSON object)")
+    return data
+
+
+def find_sdk(data, ncs_version):
+    """Return the absolute SDK root whose version matches exactly and whose
+    first existing dirNames[] path contains zephyr/; None means SDK missing.
+    Missing expected shapes for the selected version are a hard error."""
+    versions = data.get("versions")
+    if not isinstance(versions, list):
+        fail("sdk-manager list output has unexpected shape ('versions' is not a list)")
+    for entry in versions:
+        if not isinstance(entry, dict):
+            fail(
+                "sdk-manager list output has unexpected shape (non-object version entry)"
+            )
+        if entry.get("version") != ncs_version:
+            continue
+        if entry.get("sdkStatus") != "installed":
+            return None
+        dirs = entry.get("dirNames")
+        if not isinstance(dirs, list):
+            fail(f"sdk-manager list entry for {ncs_version} is missing 'dirNames'")
+        for dir_name in dirs:
+            sdk_dir = Path(dir_name)
+            if sdk_dir.is_dir() and (sdk_dir / "zephyr").is_dir():
+                return str(sdk_dir)
+        # Declared installed but no dir with zephyr/: stale path, treat as missing.
+        return None
+    return None
+
+
+def toolchain_env_ready(nrfutil_exe, selector_args):
+    """Selected toolchain readiness: exit 0 of `toolchain env` means the
+    selected toolchain exists; nonzero means missing/unavailable."""
+    proc = run_nrfutil(
+        nrfutil_exe,
+        ["toolchain", "env", *selector_args, "--as-script", "sh"],
+    )
+    return proc.returncode == 0
+
+
+def install_dir(nrfutil_exe):
+    """Display destination from `default.install_dir`; null -> $HOME/ncs."""
+    data = None
+    try:
+        data = json.loads(
+            query(nrfutil_exe, ["config", "show", "--json", "--skip-overhead"])
+        )
+    except json.JSONDecodeError:
+        fail("sdk-manager config show returned malformed JSON")
+    if not isinstance(data, dict) or not isinstance(data.get("default"), dict):
+        fail("sdk-manager config show output has unexpected shape (missing 'default')")
+    dest = data["default"].get("install_dir")
+    if dest is None:
+        dest = str(Path.home() / "ncs")
+    return dest
+
+
+def run_install(nrfutil_exe, args):
+    """Run one install action; any nonzero child exit fails bootstrap."""
+    proc = run_nrfutil(nrfutil_exe, args, capture=False)
+    if proc.returncode != 0:
+        fail(f"nrfutil sdk-manager {' '.join(args)} failed (exit {proc.returncode})")
+
+
+def run_actions(nrfutil_exe, ncs_version, bundle_id, sdk_ready, toolchain_ready):
+    """Install matrix: combined install without an exact bundle; with an exact
+    bundle only the missing actions, never the combined install."""
+    if bundle_id is None:
+        # SDK source plus the newest compatible patched toolchain for the release.
+        run_install(nrfutil_exe, ["install", ncs_version])
+        return
+    if not sdk_ready:
+        run_install(nrfutil_exe, ["sdk", "install", ncs_version])
+    if not toolchain_ready:
+        run_install(
+            nrfutil_exe,
+            ["toolchain", "install", "--toolchain-bundle-id", bundle_id],
+        )
+
+
+def selector_args(ncs_version, bundle_id):
+    if bundle_id is not None:
+        return [
+            "--toolchain-bundle-id",
+            bundle_id,
+        ], f'exact toolchain bundle "{bundle_id}"'
+    return [
+        "--ncs-version",
+        ncs_version,
+    ], f'newest compatible toolchain for NCS "{ncs_version}"'
+
+
+def missing_components(sdk_path, toolchain_ready):
+    missing = []
+    if sdk_path is None:
+        missing.append("SDK source")
+    if not toolchain_ready:
+        missing.append("toolchain")
+    return missing
+
+
+def parse_args(argv):
+    parser = argparse.ArgumentParser(
+        prog=PROG,
+        description=(
+            "Ensure the configured NCS SDK source and selected toolchain exist "
+            "before Nordic's scoped toolchain environment is loaded."
+        ),
+    )
+    parser.add_argument(
+        "--ncs-version",
+        metavar="VERSION",
+        default=None,
+        help="NCS release (defaults to NIX_NRF_NCS_VERSION; required when unset)",
+    )
+    parser.add_argument(
+        "--toolchain-bundle-id",
+        metavar="ID",
+        default=None,
+        help="exact patched toolchain bundle (defaults to NIX_NRF_TOOLCHAIN_BUNDLE_ID; "
+        "omission selects the newest compatible patched toolchain for the release)",
+    )
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="approve required downloads without prompting",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="inspect only; never install or mutate",
+    )
+    parser.add_argument(
+        "--print-sdk-path",
+        action="store_true",
+        help="on success print only the absolute SDK root to stdout",
+    )
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="suppress normal status messages; errors remain visible",
+    )
+    return parser, parser.parse_args(argv)
+
+
+def main(argv=None):
+    global _QUIET
+
+    parser, args = parse_args(argv)
+    _QUIET = args.quiet
+
+    nrfutil_exe = os.environ.get("NIX_NRF_NRFUTIL")
+    if not nrfutil_exe:
+        fail("NIX_NRF_NRFUTIL is not set — run through `nix-nrf bootstrap`")
+
+    ncs_version = args.ncs_version or os.environ.get("NIX_NRF_NCS_VERSION")
+    if not ncs_version:
+        parser.error("--ncs-version is required when no default is configured")
+
+    bundle_id = args.toolchain_bundle_id or os.environ.get(
+        "NIX_NRF_TOOLCHAIN_BUNDLE_ID"
+    )
+    if not bundle_id:
+        bundle_id = None
+
+    yes = args.yes or os.environ.get("NIX_NRF_BOOTSTRAP_YES") == "1"
+    sel_args, sel_desc = selector_args(ncs_version, bundle_id)
+
+    # ── State detection (read-only) ────────────────────────────────────────
+    data = list_versions(nrfutil_exe)
+    sdk_path = find_sdk(data, ncs_version)
+    toolchain_ready = toolchain_env_ready(nrfutil_exe, sel_args)
+
+    if sdk_path is not None and toolchain_ready:
+        if args.print_sdk_path:
+            print(sdk_path)
+        return 0
+
+    missing = missing_components(sdk_path, toolchain_ready)
+    missing_msg = ", ".join(missing)
+
+    if args.check:
+        # An installed SDK root may still be emitted when the full selection
+        # is not ready (e.g. toolchain missing): the shell hook needs it to
+        # derive ZEPHYR_BASE. --check never mutates; the exit stays 1. The
+        # mutating path below emits no pre-install stdout, so a successful
+        # ready/install run prints exactly one path line and a failed or
+        # incomplete mutation prints none.
+        if args.print_sdk_path and sdk_path is not None:
+            print(sdk_path)
+        status(f"NCS version {ncs_version} not ready; missing: {missing_msg}")
+        status("no changes made (--check)")
+        return 1
+
+    # ── Mutation plan and approval ─────────────────────────────────────────
+    dest = install_dir(nrfutil_exe)
+    status(f"NCS version: {ncs_version}")
+    status(f"toolchain selector: {sel_desc}")
+    status(f"missing: {missing_msg}")
+    status(f"destination: {dest}")
+    status("this downloads several gigabytes from Nordic (SDK source and toolchain)")
+    status("re-running with everything already installed performs no download")
+
+    if not yes:
+        if sys.stdin.isatty() and sys.stderr.isatty():
+            status("proceed with download? [y/N]")
+            answer = sys.stdin.readline().strip().lower()
+            if answer not in ("y", "yes"):
+                status("declined")
+                return 2
+        else:
+            status("interactive approval required but no terminal is available")
+            status("re-run with explicit approval:")
+            status("  nix-nrf bootstrap --yes")
+            status("  or: NIX_NRF_BOOTSTRAP_YES=1 west ...")
+            return 2
+
+    run_actions(nrfutil_exe, ncs_version, bundle_id, sdk_path, toolchain_ready)
+
+    # ── Rerun state detection; success requires SDK path and toolchain ─────
+    data = list_versions(nrfutil_exe)
+    sdk_path = find_sdk(data, ncs_version)
+    toolchain_ready = toolchain_env_ready(nrfutil_exe, sel_args)
+    if sdk_path is not None and toolchain_ready:
+        if args.print_sdk_path:
+            print(sdk_path)
+        return 0
+
+    missing = missing_components(sdk_path, toolchain_ready)
+    status(f"install incomplete: still missing: {', '.join(missing)}")
+    return 1
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except BootstrapError as exc:
+        print(f"{PROG}: error: {exc}", file=sys.stderr)
+        sys.exit(1)

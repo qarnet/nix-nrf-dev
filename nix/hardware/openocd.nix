@@ -2,11 +2,10 @@
 pkgs.openocd.overrideAttrs (old: {
   pname = "openocd-master";
 
-  src = pkgs.fetchFromGitHub {
-    owner = "openocd-org";
-    repo = "openocd";
-    rev = "e6752ecbcf72efe4e213e8418e381ff2e0ffdf54";
-    hash = "sha256-5aW7C061BUmbNPENrCeEUg6PRqukLRF+asnJ4KPrL0w=";
+  src = pkgs.fetchgit {
+    url = "https://git.code.sf.net/p/openocd/code";
+    rev = "da3920b0a52dc2d394afb222c688dac7e57acc1b";
+    hash = "sha256-ILHycdQeoMbtZvpCl7nqPgMEXYD4A1LlR1XEiopvD9A=";
     fetchSubmodules = true;
   };
 
