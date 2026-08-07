@@ -18,6 +18,7 @@
     flash-recipe-tests
     nix-nrf-help
     nixos-module
+    preflight-xiao-tests
     probes-tests
     udev-rules
     ;

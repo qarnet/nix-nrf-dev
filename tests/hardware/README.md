@@ -82,11 +82,22 @@ secrets available to the workflow. This has implications:
 `tests/hardware/run.sh` runs on the self-hosted runner:
 
 1. Enter the nix dev shell (`nix develop`).
-2. Run `nix-nrf probes` and assert enumeration succeeds (the harness does
+2. Run the **XIAO doctor preflight** before any probe fingerprint, NCS
+   build, or flash: `nix-nrf doctor --json` (read-only, with
+   `NIX_NRF_DOCTOR_SKIP_SDK=1` so only probe visibility/access is proven)
+   is piped into `tests/hardware/preflight_xiao.py 8EE9B3FF`, which asserts
+   the exact consumer contract — exactly one candidate with the XIAO serial
+   `8EE9B3FF`, `type == "cmsis-dap"`, `accessible`, `access_method ==
+   "usb"` (explicit CMSIS-DAP v2 bulk USB, not v1 HID), no fallback, and at
+   least one accessible USB node. OpenOCD is never invoked here. The parser
+   itself is exercised in normal hosted CI with canned JSON
+   (`checks.preflight-xiao-tests`); the physical proof against the real
+   probe stays in this manual hardware workflow.
+3. Run `nix-nrf probes` and assert enumeration succeeds (the harness does
    not parse table content).
-3. Run `nix-nrf probes --find nrf53` and `nix-nrf probes --find nrf54l` to
+4. Run `nix-nrf probes --find nrf53` and `nix-nrf probes --find nrf54l` to
    capture probe serials — these calls prove the expected families exist.
-4. Build four runtime artifacts from NCS (each in its own `mktemp` dir,
+5. Build four runtime artifacts from NCS (each in its own `mktemp` dir,
    all removed on exit):
    - nRF5340 CPUAPP blinky (`nrf5340dk/nrf5340/cpuapp`);
    - nRF5340 CPUNET empty image (`nrf5340dk/nrf5340/cpunet`, official NCS
@@ -96,7 +107,7 @@ secrets available to the workflow. This has implications:
    - XIAO nRF54L15 FLPR sysbuild bundle (`xiao_nrf54l15/nrf54l15/cpuflpr`,
      official NCS `samples/basic/empty`), whose `domains.yaml` must declare
      both the `empty` (FLPR) and `vpr_launcher` (CPUAPP) domains.
-5. Validate every hex against its required address layout with a stdlib
+6. Validate every hex against its required address layout with a stdlib
    Python Intel HEX parser (checksums, extended segment/linear records,
    per-region byte counts, out-of-region byte rejection) before any flash
    write:
@@ -107,17 +118,17 @@ secrets available to the workflow. This has implications:
    Every listed region must contain at least one data byte. This catches the
    original defect where the CPUAPP-only image was passed as both the app and
    net image, making the net-core claim a false positive.
-6. Flash the nRF5340 via `tcl/nrf53_flash.tcl` `flash_both` with the distinct
+7. Flash the nRF5340 via `tcl/nrf53_flash.tcl` `flash_both` with the distinct
    CPUAPP and CPUNET hexes and `allow_recovery 0` (the harness is authorized
    to flash but never to recover or mass erase — a locked app core aborts the
    run), assert the log has no `no flash bank found` warning, and assert byte
    verification of both cores (exact `Verified app core:` / `Verified net
    core:` lines).
-7. Flash the nRF54L15 blinky via `tcl/nrf54l_flash.tcl` (existing normal app
+8. Flash the nRF54L15 blinky via `tcl/nrf54l_flash.tcl` (existing normal app
    proof).
-8. Flash the nRF54L15 FLPR bundle via `tcl/nrf54l_flash.tcl`, asserting the
+9. Flash the nRF54L15 FLPR bundle via `tcl/nrf54l_flash.tcl`, asserting the
    exact `Verified image: <bundle>` byte-verification line.
-9. Assert each step exits 0.
+10. Assert each step exits 0.
 
 Each OpenOCD invocation is captured to a per-step temporary log (removed on
 exit) so a failure surfaces the exact OpenOCD evidence.
