@@ -1,5 +1,6 @@
 # Shared core gates: standalone `nix-nrf --help` wording, fake-boundary
-# doctor tests, udev-rule byte-identity, and shell-doctor udev wiring.
+# doctor tests, udev-rule byte-identity, shell-doctor udev wiring, and
+# fake-OpenOCD flash-recipe semantic tests.
 # `defaultDevShell` is the flake's devShells.default (constructed by
 # dev-shells.nix), passed explicitly; the check pulls the exact packaged
 # nix-nrf from it, same derivation as self.devShells.${system}.default.
@@ -80,6 +81,30 @@
       cp "$testFile" test_nix_nrf_doctor.py
       NIX_NRF_DOCTOR_SCRIPT="$PWD/nix-nrf-doctor" python3 test_nix_nrf_doctor.py
       echo "doctor tests passed" >&2
+      mkdir -p "$out"
+    '';
+
+  # Fake-OpenOCD flash-recipe semantic regression gate: sources the REAL
+  # tcl/nrf53_flash.tcl and tcl/nrf54l_flash.tcl under tclsh (pinned pkgs.tcl)
+  # with fake OpenOCD commands that record command + args, then proves
+  # command order, single-argument preservation (incl. paths with spaces),
+  # conditionals, and UICR safety branches — no hardware, no real OpenOCD.
+  # Proc semantics live here; the real-OpenOCD hosted-CI steps only gate
+  # source/syntax compatibility. Recipe paths come from env vars set to the
+  # copied recipe files; the script fails clearly when they are unset.
+  flashRecipeTests =
+    pkgs.runCommand "nix-nrf-flash-recipe-tests"
+    {
+      nativeBuildInputs = [pkgs.tcl];
+      testFile = ../../../tests/tcl/test_flash_recipes.tcl;
+      nrf53Recipe = ../../../tcl/nrf53_flash.tcl;
+      nrf54lRecipe = ../../../tcl/nrf54l_flash.tcl;
+    }
+    ''
+      NIX_NRF_NRF53_FLASH_TCL="$nrf53Recipe" \
+      NIX_NRF_NRF54L_FLASH_TCL="$nrf54lRecipe" \
+        tclsh "$testFile"
+      echo "flash recipe tests passed" >&2
       mkdir -p "$out"
     '';
 
@@ -197,6 +222,7 @@ in {
   nix-nrf-help = nixNrfHelpCheck;
   doctor-tests = doctorTests;
   probes-tests = probesTests;
+  flash-recipe-tests = flashRecipeTests;
   udev-rules = udevRulesCheck;
   doctor-udev-wiring = doctorUdevWiringCheck;
   nixos-module = nixosModuleCheck;

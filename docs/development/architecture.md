@@ -88,12 +88,18 @@ ownership and construction only.
   (evaluation gate), `nrfutil.nix` (bootstrap tests + quoting + shell
   boundary), `west.nix`
   (bootstrap/versions/metadata/quoting/shell-boundary), `core.nix`
-  (doctor/help/probes/udev wiring + public NixOS module evaluation). See README
-  for the full 17-check list.
+  (doctor/help/probes/udev wiring, fake-OpenOCD flash-recipe semantic tests,
+  + public NixOS module evaluation). See README
+  for the full 18-check list.
 - Unit tests in `tests/unit/` run fake-boundary subprocess suites (sandboxed
   stdlib) wired into the corresponding checks; `tests/fixtures/`
   `west-workspace.py` is the shared fake workspace creator covered by
   `tests/unit/test_west_workspace_fixture.py` inside `checks.west-bootstrap-tests`.
+- `tests/tcl/test_flash_recipes.tcl` sources the real `tcl/` flash recipes
+  under tclsh with fake OpenOCD commands and asserts command order, argument
+  preservation (incl. paths with spaces), conditionals, and UICR safety
+  branches (`checks.flash-recipe-tests`); real-OpenOCD CI steps only gate
+  source/syntax compatibility.
 - Manual harnesses require explicit approval and real resources:
   `tests/clean-room/run.sh` (real SDK bootstrap + blinky build),
   `tests/west-backend/run.sh` (real west workspace), `tests/hardware/run.sh`

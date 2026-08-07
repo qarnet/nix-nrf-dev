@@ -15,6 +15,7 @@
     (core)
     doctor-tests
     doctor-udev-wiring
+    flash-recipe-tests
     nix-nrf-help
     nixos-module
     probes-tests

@@ -1,8 +1,8 @@
 # CI — the "clone and it works" gate.
 # Builds all packages (cached via Cachix qarnet), runs smoke tests, flake
-# checks, template-init, devshell-enter, and TCL-parse tests for both flash
-# recipes. Runs on PRs, pushes to main, and nightly (catches upstream
-# openocd rev/hash drift).
+# checks, template-init, devshell-enter, real-OpenOCD source-compat gates,
+# and fake-OpenOCD semantic flash-recipe tests. Runs on PRs, pushes to main,
+# and nightly (catches upstream openocd rev/hash drift).
 name: CI
 
 on:
@@ -117,12 +117,14 @@ jobs:
             python3 -c "import json"
           '
 
-      # A6 — TCL parse: openocd sources+parses the TCL before trying to talk
-      # to a probe, so syntax errors surface distinctly from "no probe" errors.
-      # No probe attached in CI → openocd exits non-zero at the "unable to open
-      # CMSIS-DAP device" stage. We assert the failure is the probe-open stage
-      # and NOT a TCL parse/syntax error.
-      - name: TCL parse nRF53 recipe
+      # A6 — real-OpenOCD source-compat gate: real OpenOCD sources+parses the
+      # recipe Tcl before trying to open a probe, so syntax errors surface
+      # distinctly from "no probe" errors. The hosted runner has no probe, so
+      # the step must exit non-zero at the adapter-open stage; an unexpected
+      # exit 0 would mean the gate did not exercise the expected probe-open
+      # boundary. Recipe proc semantics (command order, args, conditionals)
+      # are owned by the checks.flash-recipe-tests flake check, not this gate.
+      - name: Real OpenOCD source-compat nRF53 recipe
         run: |
           set +e
           nix run .#openocd-master -- \
@@ -134,14 +136,19 @@ jobs:
             -c shutdown > /tmp/nrf53.log 2>&1
           rc=$?
           cat /tmp/nrf53.log
-          # Fail if the error is a TCL/syntax error (not the expected no-probe error).
+          # Fail if the error is a Tcl/syntax error (not the expected no-probe error).
           if grep -qiE "syntax error|wrong # args|can't read|invalid command name" /tmp/nrf53.log; then
-            echo "ERROR: TCL parse error detected" >&2
+            echo "ERROR: Tcl parse error detected" >&2
             exit 1
           fi
-          # Expected: non-zero exit due to no probe, but no parse error.
-          echo "OK: no TCL parse error (exit $rc was probe-open failure, expected)"
-      - name: TCL parse nRF54L recipe
+          # Hosted runner has no probe: exit 0 means the source-compat gate
+          # did not reach the expected adapter-open failure boundary.
+          if [ "$rc" -eq 0 ]; then
+            echo "ERROR: expected non-zero probe-open failure, got exit 0" >&2
+            exit 1
+          fi
+          echo "OK: real OpenOCD sourced the recipe; exit $rc was the expected probe-open failure"
+      - name: Real OpenOCD source-compat nRF54L recipe
         run: |
           set +e
           nix run .#openocd-master -- \
@@ -154,10 +161,14 @@ jobs:
           rc=$?
           cat /tmp/nrf54l.log
           if grep -qiE "syntax error|wrong # args|can't read|invalid command name" /tmp/nrf54l.log; then
-            echo "ERROR: TCL parse error detected" >&2
+            echo "ERROR: Tcl parse error detected" >&2
             exit 1
           fi
-          echo "OK: no TCL parse error (exit $rc was probe-open failure, expected)"
+          if [ "$rc" -eq 0 ]; then
+            echo "ERROR: expected non-zero probe-open failure, got exit 0" >&2
+            exit 1
+          fi
+          echo "OK: real OpenOCD sourced the recipe; exit $rc was the expected probe-open failure"
 
       # A4 — template-init: verify `nix flake init -t` produces a working flake.
       # Both the template source and the generated flake's nix-nrf-dev input
