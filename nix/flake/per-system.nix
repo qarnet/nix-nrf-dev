@@ -99,6 +99,14 @@
         nrfUdevRules
         ;
     };
+    # Booted VM clean-room gate: direct `services.udev.packages` activation
+    # of the packaged rule under real systemd-udevd with explicit plugdev.
+    udevVm = import ./checks/udev-vm.nix {
+      inherit
+        pkgs
+        nrfUdevRules
+        ;
+    };
     nrfutil = import ./checks/nrfutil.nix {inherit pkgs nrfutil mkNrfShell;};
     west = import ./checks/west.nix {
       inherit

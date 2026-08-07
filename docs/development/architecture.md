@@ -92,13 +92,17 @@ ownership and construction only.
   boundary), `west.nix`
   (bootstrap/versions/metadata/quoting/shell-boundary), `core.nix`
   (doctor/help/probes/udev wiring, fake-OpenOCD flash-recipe semantic tests,
-  + public NixOS module evaluation), and `udev-module.nix` (isolated
+  + public NixOS module evaluation), `udev-module.nix` (isolated
   `lib.evalModules` gate proving `nixosModules.udevRules` exposes exactly the
   `services.udev.packages` option AND observable config surfaces — an extra
   declared option or smuggled config path widens either asserted tree and
   fails — that a synthetic undeclared config definition is rejected by the
   enabled `_module.check`, and that the module contributes exactly the
-  expected package with an empty list when not imported).
+  expected package with an empty list when not imported), and `udev-vm.nix`
+  (booted NixOS VM clean-room gate: direct `services.udev.packages`
+  activation of the packaged rule under real systemd-udevd with explicit
+  `plugdev`, proving activation and an otherwise clean system — no project
+  tools, units, or device-event semantics).
   `nix/flake/checks/default.nix`
   composes the exact check set.
 - Unit tests in `tests/unit/` run fake-boundary subprocess suites (sandboxed

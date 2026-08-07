@@ -3,9 +3,10 @@
 Status: accepted implementation plan. Phase 0 (doctor CMSIS-DAP transport
 preflight, PR #4/#5) is merged. Phase 1 (upstream udev provenance and public
 NixOS API) is accepted and committed at `f69edeb`. Phase 2 (udev package,
-`evalModules`, and full-system evaluation) is accepted and committed on this
-branch; Phase 3 (NixOS VM clean-room udev activation) is next and not
-started.
+`evalModules`, and full-system evaluation) is accepted and committed at
+`9175995`. Phase 3 (NixOS VM clean-room udev activation) is accepted and
+committed on this branch; Phase 4 (nrfutil versions command coverage) is
+next and not started.
 
 Branch: `feat/nixos-safety-and-init`, rebased onto `main` at `a3fedcb`
 (after the CMSIS-DAP transport and hardware-preflight work from PR #4/#5
@@ -371,6 +372,13 @@ activates upstream rule without installing unrelated project tools.
 Before implementation, verify exact pinned-systemd behavior and availability
 of `udevadm verify`; use it only if its exit semantics are confirmed. Do not
 invent brittle assertions over unrelated baseline NixOS services.
+
+Pinned behavior verified: `udevadm verify --resolve-names=early` on the
+packaged rule fails without `plugdev` and passes once the group exists
+(systemd 261.1 on the pinned nixpkgs rev), so the VM deliberately runs it
+against the activated rule to prove NSS group resolution. The final test
+proves activation and a clean system only; it does not add a synthetic USB
+device or any USB-gadget/device-event semantics.
 
 ### Verification
 
