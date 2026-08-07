@@ -93,13 +93,19 @@ Examples:
 
 ## Bumping the openocd pin
 
-`nix/hardware/openocd.nix` pins a specific upstream `openocd` revision. To bump:
+`nix/hardware/openocd.nix` pins a specific upstream `openocd` revision, fetched
+from the canonical SourceForge Git repository
+(<https://git.code.sf.net/p/openocd/code>) with submodules. To bump:
 
-1. Find a newer revision at <https://github.com/openocd-org/openocd> that has
-   the nRF53/nRF54L support you need.
-2. Update `rev` in `nix/hardware/openocd.nix`.
-3. Update `hash` (run `nix build .#openocd-master-unwrapped` — Nix will print
-   the correct `sha256-...` hash for the failed fetch; paste it in).
+1. Inspect the canonical repository at
+   <https://sourceforge.net/p/openocd/code/ci/master/tree/> for a revision
+   with the nRF53/nRF54L support you need.
+2. Resolve SourceForge `master` to its exact commit, then put that immutable
+   SHA in `rev` in `nix/hardware/openocd.nix`. Moving branch names or tags are
+   not Nix pins.
+3. Update `hash` for the fetch *with submodules included* (run
+   `nix build .#openocd-master-unwrapped` — Nix will print the correct
+   `sha256-...` hash for the failed fetch; paste it in).
 4. Run `nix build .#openocd-master-unwrapped -L` and `nix build .#openocd-master -L`.
 5. Verify on hardware that the flash recipes still work (see
    `tests/hardware/` — explicit, manual hardware work on a self-hosted

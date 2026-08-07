@@ -47,7 +47,7 @@ Its canonical `contrib/60-openocd.rules`:
 - applies to `usb`, `tty`, and `hidraw` subsystems.
 
 Exact source:
-<https://raw.githubusercontent.com/openocd-org/openocd/e6752ecbcf72efe4e213e8418e381ff2e0ffdf54/contrib/60-openocd.rules>.
+<https://sourceforge.net/p/openocd/code/ci/e6752ecbcf72efe4e213e8418e381ff2e0ffdf54/tree/contrib/60-openocd.rules?format=raw>.
 
 Built `openocd-master-unwrapped` already contains:
 
