@@ -5,6 +5,7 @@
 {
   backendSelector,
   core,
+  udevModule,
   nrfutil,
   west,
   formatting,
@@ -22,6 +23,7 @@
     probes-tests
     udev-rules
     ;
+  inherit (udevModule) udev-module-eval;
   inherit (nrfutil) bootstrap-tests bootstrap-quoting nrfutil-shell-boundary;
   inherit
     (west)

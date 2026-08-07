@@ -2,8 +2,10 @@
 
 Status: accepted implementation plan. Phase 0 (doctor CMSIS-DAP transport
 preflight, PR #4/#5) is merged. Phase 1 (upstream udev provenance and public
-NixOS API) is accepted and committed on this branch; Phase 2 (udev package,
-`evalModules`, and full-system evaluation) is next and not started.
+NixOS API) is accepted and committed at `f69edeb`. Phase 2 (udev package,
+`evalModules`, and full-system evaluation) is accepted and committed on this
+branch; Phase 3 (NixOS VM clean-room udev activation) is next and not
+started.
 
 Branch: `feat/nixos-safety-and-init`, rebased onto `main` at `a3fedcb`
 (after the CMSIS-DAP transport and hardware-preflight work from PR #4/#5
@@ -312,8 +314,11 @@ Prove executable safety contract at pure evaluation and derivation boundaries.
    without altering file.
 4. **`lib.evalModules` isolation:** declare only
    `services.udev.packages`, evaluate `nixosModules.udevRules`, and require
-   exactly one expected package. Any future definition of another option must
-   fail as undeclared.
+   exactly one expected package. Assert the module's exact public option AND
+   observable config surfaces (only `services.udev.packages` after excluding
+   module-system internals — a self-declared extra option or smuggled config
+   path widens either surface and fails) and prove a synthetic undeclared
+   config definition is rejected by the enabled `_module.check`.
 5. **No-import negative:** same minimal evaluator without module yields empty
    package list.
 6. **Full `nixosSystem`:** named module and direct package configurations

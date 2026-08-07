@@ -88,6 +88,17 @@
         ;
       defaultDevShell = devShells.default;
     };
+    # Isolated module-system gate: proves `nixosModules.udevRules` sets only
+    # the declared `services.udev.packages` boundary via `lib.evalModules`.
+    udevModule = import ./checks/udev-module.nix {
+      inherit
+        pkgs
+        nixpkgs
+        self
+        system
+        nrfUdevRules
+        ;
+    };
     nrfutil = import ./checks/nrfutil.nix {inherit pkgs nrfutil mkNrfShell;};
     west = import ./checks/west.nix {
       inherit
