@@ -10,6 +10,9 @@
   nrfUdevRules,
   openocd-master-unwrapped,
   defaultDevShell,
+  self,
+  nixpkgs,
+  system,
 }: let
   # Public `nix-nrf --help` wording gate: the standalone (nrfutil)
   # facade must keep today's byte-for-byte command descriptions
@@ -147,10 +150,54 @@
       echo "doctor udev-rules wiring check passed: shell doctor reports $expectedUdevRules" >&2
       mkdir -p "$out"
     '';
+
+  # Public NixOS module evaluation gate: evaluates the real
+  # `self.nixosModules.default` through the pinned Nixpkgs
+  # `lib.nixosSystem` (no build, no VM) and asserts the exact packaged
+  # udev-rules derivation appears exactly once in
+  # `config.services.udev.packages`, and that the public
+  # `self.packages.${system}.udev-rules` output path equals the internal
+  # one. Only evaluated booleans/count/store paths cross the derivation
+  # boundary — never a full NixOS system.
+  nixosModuleCheck = let
+    evaluated = nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        self.nixosModules.default
+        {system.stateVersion = "26.11";}
+      ];
+    };
+    matchingUdevRules =
+      builtins.filter (
+        p: p.outPath == nrfUdevRules.outPath
+      )
+      evaluated.config.services.udev.packages;
+    matchingCount = builtins.length matchingUdevRules;
+    publicUdevRules = self.packages.${system}.udev-rules;
+  in
+    pkgs.runCommand "nix-nrf-nixos-module-check"
+    {
+      inherit matchingCount;
+      expectedUdevRules = nrfUdevRules;
+      inherit publicUdevRules;
+    }
+    ''
+      [ "$matchingCount" -eq 1 ] || {
+        echo "nixos-module check: expected exactly 1 matching udev-rules package in services.udev.packages, got $matchingCount" >&2
+        exit 1
+      }
+      [ "$expectedUdevRules" = "$publicUdevRules" ] || {
+        echo "nixos-module check: public udev-rules package ($publicUdevRules) differs from internal package ($expectedUdevRules)" >&2
+        exit 1
+      }
+      echo "nixos-module check passed: public NixOS module contributes exactly one udev-rules package ($expectedUdevRules)" >&2
+      mkdir -p "$out"
+    '';
 in {
   nix-nrf-help = nixNrfHelpCheck;
   doctor-tests = doctorTests;
   probes-tests = probesTests;
   udev-rules = udevRulesCheck;
   doctor-udev-wiring = doctorUdevWiringCheck;
+  nixos-module = nixosModuleCheck;
 }

@@ -82,6 +82,9 @@
         nix-nrf
         nrfUdevRules
         openocd-master-unwrapped
+        self
+        nixpkgs
+        system
         ;
       defaultDevShell = devShells.default;
     };

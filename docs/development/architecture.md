@@ -88,7 +88,8 @@ ownership and construction only.
   (evaluation gate), `nrfutil.nix` (bootstrap tests + quoting + shell
   boundary), `west.nix`
   (bootstrap/versions/metadata/quoting/shell-boundary), `core.nix`
-  (doctor/help/probes/udev wiring). See README for the full 16-check list.
+  (doctor/help/probes/udev wiring + public NixOS module evaluation). See README
+  for the full 17-check list.
 - Unit tests in `tests/unit/` run fake-boundary subprocess suites (sandboxed
   stdlib) wired into the corresponding checks; `tests/fixtures/`
   `west-workspace.py` is the shared fake workspace creator covered by

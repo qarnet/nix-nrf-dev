@@ -16,6 +16,7 @@
     doctor-tests
     doctor-udev-wiring
     nix-nrf-help
+    nixos-module
     probes-tests
     udev-rules
     ;
