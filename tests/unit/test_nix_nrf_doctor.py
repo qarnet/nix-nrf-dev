@@ -114,10 +114,14 @@ class DoctorTestCase(unittest.TestCase):
         busnum=None,
         devnum=None,
         hidraw=(),
+        interfaces=(),
     ):
-        """Create one fake USB sysfs device dir with optional attributes and
-        descendant hidraw dirs (each hidraw is an absolute path to the sysfs
-        hidrawN dir, mirroring <device>/*:*/.../hidraw/hidraw*)."""
+        """Create one fake USB sysfs device dir with optional attributes,
+        optional immediate interface dirs (each entry is a dict with "path"
+        relative to the device plus any interface attributes such as
+        bInterfaceClass or interface), and descendant hidraw dirs (each
+        hidraw is an absolute path to the sysfs hidrawN dir, mirroring
+        <device>/*:*/.../hidraw/hidraw*)."""
         dev = self.sysfs / name
         dev.mkdir(parents=True)
         for key, value in (
@@ -131,6 +135,13 @@ class DoctorTestCase(unittest.TestCase):
         ):
             if value is not None:
                 (dev / key).write_text(str(value))
+        for iface in interfaces:
+            iface_dir = dev / iface["path"]
+            iface_dir.mkdir(parents=True, exist_ok=True)
+            for key, value in iface.items():
+                if key == "path":
+                    continue
+                (iface_dir / key).write_text(str(value))
         for hidraw_dir in hidraw:
             hidraw_dir.mkdir(parents=True)
         return dev
@@ -147,7 +158,9 @@ class DoctorTestCase(unittest.TestCase):
         return {"NIX_NRF_DOCTOR_ACCESS_JSON": json.dumps(mapping)}
 
     def add_xiao(self, accessible=True):
-        """Seeed XIAO nRF54 CMSIS-DAP with one hidraw interface."""
+        """HID-only Seeed XIAO nRF54 CMSIS-DAP: interface 1.0 is the v1 HID
+        transport (class 03) with one hidraw descendant; no v2 bulk
+        interface, so access is decided purely by the hidraw node."""
         self.make_device(
             "1-9",
             product="Seeed Studio XIAO nrf54 CMSIS-DAP",
@@ -157,6 +170,13 @@ class DoctorTestCase(unittest.TestCase):
             pid="0066",
             busnum=1,
             devnum=17,
+            interfaces=[
+                {
+                    "path": "1-9:1.0",
+                    "bInterfaceClass": "03",
+                    "interface": "CMSIS-DAP v1 Adapter",
+                },
+            ],
             hidraw=[
                 self.sysfs
                 / "1-9"
@@ -172,6 +192,56 @@ class DoctorTestCase(unittest.TestCase):
             str(hidraw_node): {"readable": accessible, "writable": accessible},
             str(usb_node): {"readable": True, "writable": True},
         }
+        return override
+
+    def add_xiao_dual(self, hidraw_ok=True, usb_ok=True, with_hidraw=True):
+        """Real dual-transport Seeed XIAO nRF54 CMSIS-DAP: interface 1.0 is
+        the v1 HID transport (class 03) with a hidraw descendant; interface
+        1.1 is the v2 vendor-specific bulk transport (class ff with cmsis-dap
+        interface text, no hidraw)."""
+        self.make_device(
+            "1-9",
+            product="Seeed Studio XIAO nrf54 CMSIS-DAP",
+            manufacturer="Seeed Studio",
+            serial="8EE9B3FF",
+            vid="2886",
+            pid="0066",
+            busnum=1,
+            devnum=17,
+            interfaces=[
+                {
+                    "path": "1-9:1.0",
+                    "bInterfaceClass": "03",
+                    "interface": "CMSIS-DAP v1 Adapter",
+                },
+                {
+                    "path": "1-9:1.1",
+                    "bInterfaceClass": "ff",
+                    "interface": "CMSIS-DAP v2 Adapter",
+                },
+            ],
+            hidraw=(
+                [
+                    self.sysfs
+                    / "1-9"
+                    / "1-9:1.0"
+                    / "0003:2886:0066.000F"
+                    / "hidraw"
+                    / "hidraw0"
+                ]
+                if with_hidraw
+                else []
+            ),
+        )
+        override = {}
+        if with_hidraw:
+            hidraw_node = self.make_dev_node("hidraw0")
+            override[str(hidraw_node)] = {
+                "readable": hidraw_ok,
+                "writable": hidraw_ok,
+            }
+        usb_node = self.make_dev_node("bus/usb/001/017")
+        override[str(usb_node)] = {"readable": usb_ok, "writable": usb_ok}
         return override
 
     def add_pico(self, accessible=True):
@@ -331,6 +401,191 @@ class DoctorTestCase(unittest.TestCase):
         self.assertTrue(by_path["1-9"]["accessible"])
         self.assertFalse(by_path["5-2.4"]["accessible"])
         self.assertTrue(data["remediation"])  # blocked candidate still remediated
+
+    # 6b. Real dual-transport XIAO: hidraw blocked, USB v2 RW -> PASS via USB.
+    def test_dual_xiao_hid_blocked_usb_rw_prefer_v2(self):
+        override = self.add_xiao_dual(hidraw_ok=False, usb_ok=True)
+        proc = self.run_doctor(env_extra=self.access_env(override))
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("[OK] cmsis-dap", proc.stdout)
+        self.assertIn("(via USB)", proc.stdout)
+        self.assertIn(
+            f"hidraw {self.dev / 'hidraw0'}: exists, not readable, not writable",
+            proc.stdout,
+        )
+        self.assertIn(
+            f"usb {self.dev / 'bus/usb/001/017'}: exists, readable, writable",
+            proc.stdout,
+        )
+        # Unused blocked HID transport must not trigger udev remediation.
+        self.assertNotIn("udev", proc.stdout)
+        self.assertNotIn("nix build", proc.stdout)
+        data = self.doctor_json(
+            self.run_doctor("--json", env_extra=self.access_env(override))
+        )
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["hardware"]["status"], "pass")
+        cand = data["hardware"]["candidates"][0]
+        self.assertTrue(cand["accessible"])
+        self.assertEqual(cand["access_method"], "usb")
+        self.assertFalse(cand["fallback"])
+        self.assertFalse(data["remediation"])
+
+    # 6c. Dual-transport XIAO: both transports RW -> prefer USB v2 over HID.
+    def test_dual_xiao_both_rw_prefers_usb_v2(self):
+        override = self.add_xiao_dual(hidraw_ok=True, usb_ok=True)
+        data = self.doctor_json(
+            self.run_doctor("--json", env_extra=self.access_env(override))
+        )
+        self.assertTrue(data["ok"])
+        cand = data["hardware"]["candidates"][0]
+        self.assertTrue(cand["accessible"])
+        self.assertEqual(cand["access_method"], "usb")
+        self.assertFalse(cand["fallback"])
+
+    # 6d. Dual-transport XIAO: USB blocked, hidraw RW -> PASS via hidraw.
+    def test_dual_xiao_usb_blocked_hidraw_rw(self):
+        override = self.add_xiao_dual(hidraw_ok=True, usb_ok=False)
+        proc = self.run_doctor(env_extra=self.access_env(override))
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("(via hidraw)", proc.stdout)
+        data = self.doctor_json(
+            self.run_doctor("--json", env_extra=self.access_env(override))
+        )
+        cand = data["hardware"]["candidates"][0]
+        self.assertTrue(cand["accessible"])
+        self.assertEqual(cand["access_method"], "hidraw")
+        self.assertFalse(cand["fallback"])
+
+    # 6e. HID-only CMSIS-DAP: hidraw blocked + parent USB RW -> FAIL. Proves
+    #     the legacy USB fallback is NOT a naive OR: with any hidraw node
+    #     present, a blocked HID transport blocks the probe.
+    def test_hid_only_cmsis_dap_hidraw_blocked_usb_rw_fails(self):
+        override = self.add_xiao(accessible=False)
+        proc = self.run_doctor(env_extra=self.access_env(override))
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("probe visible but inaccessible", proc.stdout)
+        data = self.doctor_json(
+            self.run_doctor("--json", env_extra=self.access_env(override))
+        )
+        cand = data["hardware"]["candidates"][0]
+        self.assertFalse(cand["accessible"])
+        self.assertEqual(cand["access_method"], "none")
+        self.assertFalse(cand["fallback"])
+        self.assertTrue(data["remediation"])
+
+    # 6f. Explicit v2 bulk interface without any hidraw: USB RW -> PASS via
+    #     USB with fallback false (not the legacy fallback path).
+    def test_v2_bulk_without_hidraw_usb_rw(self):
+        override = self.add_xiao_dual(hidraw_ok=True, usb_ok=True, with_hidraw=False)
+        data = self.doctor_json(
+            self.run_doctor("--json", env_extra=self.access_env(override))
+        )
+        self.assertTrue(data["ok"])
+        cand = data["hardware"]["candidates"][0]
+        self.assertTrue(cand["accessible"])
+        self.assertEqual(cand["access_method"], "usb")
+        self.assertFalse(cand["fallback"])
+
+    # 6g. No hidraw and no interface metadata: USB RW -> legacy USB fallback.
+    def test_no_hidraw_no_interface_metadata_legacy_usb_fallback(self):
+        override = self.add_pico(accessible=True)
+        proc = self.run_doctor(env_extra=self.access_env(override))
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("(via USB fallback)", proc.stdout)
+        data = self.doctor_json(
+            self.run_doctor("--json", env_extra=self.access_env(override))
+        )
+        cand = data["hardware"]["candidates"][0]
+        self.assertTrue(cand["accessible"])
+        self.assertEqual(cand["access_method"], "usb")
+        self.assertTrue(cand["fallback"])
+
+    # 6h. All relevant nodes blocked -> FAIL + remediation.
+    def test_dual_xiao_all_nodes_blocked(self):
+        override = self.add_xiao_dual(hidraw_ok=False, usb_ok=False)
+        proc = self.run_doctor(env_extra=self.access_env(override))
+        self.assertEqual(proc.returncode, 1)
+        self.assertIn("probe visible but inaccessible", proc.stdout)
+        self.assertIn("NixOS:", proc.stdout)
+        data = self.doctor_json(
+            self.run_doctor("--json", env_extra=self.access_env(override))
+        )
+        cand = data["hardware"]["candidates"][0]
+        self.assertFalse(cand["accessible"])
+        self.assertEqual(cand["access_method"], "none")
+        self.assertFalse(cand["fallback"])
+        self.assertTrue(data["remediation"])
+
+    # 6i. Vendor-specific interface (class ff) WITHOUT cmsis-dap text is not
+    #     recognized as v2 bulk: the probe stays HID-only and blocked.
+    def test_vendor_ff_interface_without_cmsis_text_not_v2(self):
+        self.make_device(
+            "1-9",
+            product="Seeed Studio XIAO nrf54 CMSIS-DAP",
+            manufacturer="Seeed Studio",
+            serial="8EE9B3FF",
+            vid="2886",
+            pid="0066",
+            busnum=1,
+            devnum=17,
+            interfaces=[
+                {
+                    "path": "1-9:1.0",
+                    "bInterfaceClass": "03",
+                    "interface": "CMSIS-DAP v1 Adapter",
+                },
+                {"path": "1-9:1.1", "bInterfaceClass": "ff"},
+            ],
+            hidraw=[
+                self.sysfs
+                / "1-9"
+                / "1-9:1.0"
+                / "0003:2886:0066.000F"
+                / "hidraw"
+                / "hidraw0"
+            ],
+        )
+        hidraw_node = self.make_dev_node("hidraw0")
+        usb_node = self.make_dev_node("bus/usb/001/017")
+        override = {
+            str(hidraw_node): {"readable": False, "writable": False},
+            str(usb_node): {"readable": True, "writable": True},
+        }
+        proc = self.run_doctor(env_extra=self.access_env(override))
+        self.assertEqual(proc.returncode, 1)
+        data = self.doctor_json(
+            self.run_doctor("--json", env_extra=self.access_env(override))
+        )
+        cand = data["hardware"]["candidates"][0]
+        self.assertFalse(cand["accessible"])
+        self.assertEqual(cand["access_method"], "none")
+        self.assertFalse(cand["fallback"])
+
+    # 6j. bInterfaceClass normalization: uppercase "FF" recognized as v2 bulk.
+    def test_v2_bulk_uppercase_interface_class(self):
+        self.make_device(
+            "1-9",
+            product="Test CMSIS-DAP",
+            busnum=1,
+            devnum=17,
+            interfaces=[
+                {
+                    "path": "1-9:1.1",
+                    "bInterfaceClass": "FF",
+                    "interface": "cmsis-dap v2 Adapter",
+                },
+            ],
+        )
+        usb_node = self.make_dev_node("bus/usb/001/017")
+        override = {str(usb_node): {"readable": True, "writable": True}}
+        proc = self.run_doctor("--json", env_extra=self.access_env(override))
+        self.assertEqual(proc.returncode, 0)
+        data = self.doctor_json(proc)
+        cand = data["hardware"]["candidates"][0]
+        self.assertTrue(cand["accessible"])
+        self.assertEqual(cand["access_method"], "usb")
+        self.assertFalse(cand["fallback"])
 
     # 7. Missing/unreadable optional attributes do not crash.
     def test_missing_unreadable_attributes_no_crash(self):

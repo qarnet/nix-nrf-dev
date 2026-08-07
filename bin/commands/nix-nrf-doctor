@@ -15,6 +15,14 @@
 #   - at least one accessible candidate;
 #   - mixed accessible/inaccessible candidates.
 #
+# CMSIS-DAP appears over two transports: v1 speaks HID (hidraw nodes under
+# <device>/*:*/ interface dirs), while v2 speaks vendor-specific bulk USB
+# (bInterfaceClass ff plus cmsis-dap interface text). Doctor prefers the
+# explicit v2 bulk USB node when it exists and is readable+writable, falls
+# back to an accessible hidraw node, and only uses the USB node as a legacy
+# fallback for devices with no hidraw node and no interface metadata. A
+# blocked HID transport never blocks a working v2 bulk USB transport.
+#
 # Everything is read-only: doctor never opens probe nodes, never invokes
 # OpenOCD or J-Link tools, never runs a mutating bootstrap (only
 # `bootstrap --check --quiet --print-sdk-path`), never runs sudo, and never
@@ -22,8 +30,12 @@
 # Linux remediation instead.
 #
 # Candidate recognition is descriptor-based (product/manufacturer strings),
-# not a repository VID/PID catalog. Node access uses os.access on the mapped
-# /dev nodes; NIX_NRF_DOCTOR_ACCESS_JSON is a test-only override so fixture
+# not a repository VID/PID catalog. Transport recognition is sysfs-based:
+# explicit CMSIS-DAP v2 bulk interfaces are detected from the immediate
+# interface dirs (bInterfaceClass "ff" + "cmsis-dap" in the interface text),
+# so vendor-specific interfaces are never mistaken for CMSIS-DAP v2. Node
+# access uses os.access on the mapped /dev nodes;
+# NIX_NRF_DOCTOR_ACCESS_JSON is a test-only override so fixture
 # tests do not depend on sandbox permission semantics — the packaged wrapper
 # never sets it, and production always uses os.access.
 #
@@ -152,6 +164,26 @@ def hidraw_sysfs_nodes(dev):
     return nodes
 
 
+def cmsis_dap_v2_bulk_interface(dev):
+    """Explicit CMSIS-DAP v2 bulk transport present?
+
+    True only when an immediate <dev>/*:* interface directory reports
+    bInterfaceClass "ff" (vendor-specific) and its interface text contains
+    "cmsis-dap" (case-insensitive, class normalized to lowercase). This does
+    not identify every vendor-specific interface as CMSIS-DAP, and it ignores
+    the v1 HID interface (class 03) of the same device.
+    """
+    for iface in sorted(dev.glob("*:*")):
+        if not iface.is_dir():
+            continue
+        if (read_attr(iface, "bInterfaceClass") or "").lower() != "ff":
+            continue
+        text = read_attr(iface, "interface")
+        if text is not None and "cmsis-dap" in text.lower():
+            return True
+    return False
+
+
 def load_access_override():
     global _ACCESS_OVERRIDE
     raw = os.environ.get("NIX_NRF_DOCTOR_ACCESS_JSON")
@@ -226,14 +258,23 @@ def build_candidates(sysfs, devroot):
                 accessible, method, fallback = ok(usb), "usb", False
             else:
                 accessible, method, fallback = False, "none", False
-        elif hidraws:
-            # CMSIS-DAP via hidraw; any accessible hidraw node is enough.
-            accessible, method, fallback = any(ok(n) for n in hidraws), "hidraw", False
-        elif usb is not None:
-            # CMSIS-DAP without hidraw: USB-node fallback.
-            accessible, method, fallback = ok(usb), "usb", True
+        elif cmsis_dap_v2_bulk_interface(Path(raw["sysfs_path"])) and ok(usb):
+            # Explicit CMSIS-DAP v2 bulk interface: prefer the USB node over
+            # any HID transport.
+            accessible, method, fallback = True, "usb", False
+        elif any(ok(n) for n in hidraws):
+            # CMSIS-DAP via HID (v1 or unclassified); any accessible hidraw
+            # node is enough.
+            accessible, method, fallback = True, "hidraw", False
+        elif not hidraws and ok(usb):
+            # Legacy fallback: CMSIS-DAP without any hidraw node and without
+            # interface metadata still works over the USB node.
+            accessible, method, fallback = True, "usb", True
         else:
-            accessible, method, fallback = False, "none", True
+            # Blocked. A hidraw node exists but is not accessible, or no
+            # node is accessible at all; never fall back to the USB node
+            # just because the parent USB node is readable+writable.
+            accessible, method, fallback = False, "none", False
 
         result.append(
             {
@@ -403,21 +444,27 @@ def render_human(sdk, user, hardware, remediation_items):
         if c["vid"] and c["pid"]:
             extra.append(f"VID:PID {c['vid']}:{c['pid']}")
         suffix = f" ({', '.join(extra)})" if extra else ""
-        fallback = " (USB fallback)" if c["fallback"] else ""
+        if c["accessible"]:
+            if c["fallback"]:
+                via = " (via USB fallback)"
+            elif c["access_method"] == "usb":
+                via = " (via USB)"
+            elif c["access_method"] == "hidraw":
+                via = " (via hidraw)"
+            else:
+                via = ""
+        else:
+            via = ""
         out.append(
-            f"  [{marker}] {c['type']}  {c['product'] or c['type']}{suffix}{fallback}  {c['sysfs_path']}"
+            f"  [{marker}] {c['type']}  {c['product'] or c['type']}{suffix}{via}  {c['sysfs_path']}"
         )
         for node in c["nodes"]:
-            state = ", ".join(
-                label
-                for label, flag in (
-                    ("exists", node["exists"]),
-                    ("readable", node["readable"]),
-                    ("writable", node["writable"]),
-                )
-                if flag
+            state = (
+                f"{'exists' if node['exists'] else 'missing'}, "
+                f"{'readable' if node['readable'] else 'not readable'}, "
+                f"{'writable' if node['writable'] else 'not writable'}"
             )
-            out.append(f"    {node['kind']} {node['path']}: {state or 'missing'}")
+            out.append(f"    {node['kind']} {node['path']}: {state}")
     out.append("")
 
     if remediation_items:

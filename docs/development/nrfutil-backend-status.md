@@ -38,7 +38,9 @@ backend — see `docs/development/west-backend-status.md`.
   (`$out/libexec/nix-nrf/doctor`): it checks the configured SDK/toolchain via
   the same bootstrap module's read-only `--check --quiet --print-sdk-path`
   path (never a mutating invocation), discovers CMSIS-DAP/J-Link candidates
-  from sysfs descriptors, classifies hidraw/USB node access with `os.access`,
+  from sysfs descriptors, classifies transport access with `os.access` —
+  preferring an explicit CMSIS-DAP v2 bulk USB interface over HID (hidraw),
+  with hidraw and legacy USB-node fallbacks for v1/metadata-less devices —
   and prints exact NixOS/generic-Linux udev remediation without sudo. Fixture
   tests are `checks.doctor-tests`; `packages.udev-rules` +
   `nixosModules.default` provide the remediated OpenOCD udev rules
