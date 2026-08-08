@@ -5,8 +5,21 @@
 # The VM config uses the documented primary path (direct package form, no
 # `nixosModules.udevRules` import) plus the explicit `plugdev` host policy
 # the upstream rule requires and NixOS does not provide. The test asserts
-# activation and a clean system only: no synthetic USB device, no USB-gadget
-# or device-event semantics — those are out of scope for this phase.
+# activation and a clean system only: no hardware passthrough, no project
+# tools, no network dependency, and no real daemon hotplug.
+#
+# Since Phase 9 the check also proves synthetic rule semantics: two
+# hand-constructed umockdev USB fixtures are replayed with the pinned umockdev
+# preload sandbox (0.19.3, referenced by its exact store binary — deliberately
+# not added to systemPackages) against the pinned systemd (261.1)
+# `udevadm test --action=add --json=short` and the activated
+# `/etc/udev/rules.d/60-openocd.rules` tree. The CMSIS-DAP fixture must
+# receive the upstream rule's `GROUP="plugdev"`, `MODE="660"`, and
+# `TAG+="uaccess"` semantics; the otherwise identical nonmatching control must
+# not. JSON is parsed at the NixOS test-driver boundary. `udevadm test` runs
+# the real rule engine but never executes `RUN` keys, so queued builtins prove
+# rule assignment and command queuing, not resulting ACL application; no
+# kernel device enters the VM's device graph.
 #
 # `udevadm verify --resolve-names=early` is deliberately used against the
 # activated rule: with early name resolution the pinned systemd (261.1)
@@ -15,7 +28,55 @@
 {
   pkgs,
   nrfUdevRules,
-}: {
+}: let
+  # One immutable store fixture per product string, built from the same
+  # structure. Format is umockdev-record's: `P:` sysfs path, `N:` device node
+  # with hex contents, `E:` udev property, `A:` ASCII sysfs attribute with
+  # backslash escaping (`\n` decodes to a newline). Values were proven in the
+  # Phase 9 spike (docs/development/archive/udev-umockdev-semantics-handoff.md);
+  # no data is captured from a physical device.
+  mkUsbFixture = name: product:
+    pkgs.writeText name ''
+      P: /devices/virtual/usb/usb1/1-9
+      N: bus/usb/001/009=1201000200000040862866000102030101
+      E: BUSNUM=001
+      E: DEVNAME=/dev/bus/usb/001/009
+      E: DEVNUM=009
+      E: DEVTYPE=usb_device
+      E: MAJOR=189
+      E: MINOR=8
+      E: PRODUCT=2886/66/100
+      E: SUBSYSTEM=usb
+      A: busnum=1\n
+      A: dev=189:8
+      A: devnum=9\n
+      A: idProduct=0066
+      A: idVendor=2886
+      A: manufacturer=Seeed Studio
+      A: product=${product}
+      A: serial=8EE9B3FF
+
+      P: /devices/virtual/usb/usb1/1-9/1-9:1.0
+      E: DEVTYPE=usb_interface
+      E: DRIVER=usbfs
+      E: INTERFACE=255/0/0
+      E: MODALIAS=usb:v2886p0066d0100dc00dsc00dp00icFFisc00ip00in00
+      E: PRODUCT=2886/66/100
+      E: SUBSYSTEM=usb
+      A: bAlternateSetting= 0
+      A: bInterfaceClass=ff
+      A: bInterfaceNumber=00
+      A: bInterfaceProtocol=00
+      A: bInterfaceSubClass=00
+      A: bNumEndpoints=02
+      A: modalias=usb:v2886p0066d0100dc00dsc00dp00icFFisc00ip00in00
+    '';
+
+  # Positive fixture matches the upstream `ATTRS{product}=="*CMSIS-DAP*"` line;
+  # the control differs only in product text and must match nothing.
+  fixtureCmsisDap = mkUsbFixture "xiao-cmsis-dap.umockdev" "Seeed Studio XIAO nrf54 CMSIS-DAP";
+  fixtureControl = mkUsbFixture "xiao-control.umockdev" "Seeed Studio XIAO nrf54 Debug Probe";
+in {
   udev-vm = pkgs.testers.runNixOSTest {
     name = "nix-nrf-udev-vm";
 
@@ -39,7 +100,35 @@
     };
 
     testScript = ''
+      import json
+      import shlex
+
       start_all()
+
+      def synthetic_event_json(fixture, product, label):
+          # Replay one fixture through the pinned umockdev preload sandbox and
+          # the real pinned `udevadm test` rules engine against the activated
+          # rule tree. `umockdev-run` is referenced by its exact store binary,
+          # not added to systemPackages, so the clean-system PATH assertions
+          # stay meaningful. The product string travels via the environment;
+          # diagnostics go to a temporary log and stdout carries only the JSON.
+          script = (
+              "PRODUCT="
+              + shlex.quote(product)
+              + " ${pkgs.umockdev.bin}/bin/umockdev-run --device="
+              + fixture
+              + " -- sh -c 'test \"$(cat /sys/devices/virtual/usb/usb1/1-9/product)\" = \"$PRODUCT\""
+              + " || { echo \"synthetic product mismatch\" >/tmp/udevadm-diag.log; exit 1; };"
+              + " exec udevadm test --action=add --json=short"
+              + " /sys/devices/virtual/usb/usb1/1-9 2>>/tmp/udevadm-diag.log'"
+              + " || { echo \"--- udevadm diagnostics ---\"; cat /tmp/udevadm-diag.log; exit 1; }"
+          )
+          status, out = machine.execute(script)
+          if status != 0:
+              raise RuntimeError(
+                  "udevadm test failed for %s (exit %d):\n%s" % (label, status, out)
+              )
+          return json.loads(out)
 
       with subtest("systemd-udevd is active and reactive"):
           machine.wait_for_unit("systemd-udevd.service")
@@ -64,6 +153,47 @@
 
       with subtest("whole merged rules tree verifies with early name resolution"):
           machine.succeed("udevadm verify --resolve-names=early /etc/udev/rules.d/*.rules")
+
+      with subtest("synthetic CMSIS-DAP device receives upstream rule semantics"):
+          result = synthetic_event_json(
+              "${fixtureCmsisDap}",
+              "Seeed Studio XIAO nrf54 CMSIS-DAP",
+              "CMSIS-DAP fixture",
+          )
+          # fixture identity: the expected synthetic USB device, not another node
+          assert result["path"] == "/devices/virtual/usb/usb1/1-9", result
+          assert result["subsystem"] == "usb", result
+          assert result["type"] == "usb_device", result
+          assert result["node"]["path"] == "/dev/bus/usb/001/009", result
+          # upstream rule outcomes: plugdev group, 0660 mode, uaccess semantics
+          assert result["node"]["owner"]["groupName"] == "plugdev", result
+          assert result["node"]["mode"] == "0660", result
+          assert "uaccess" in result.get("tags", []), result
+          assert "uaccess" in result.get("currentTags", []), result
+          # queued (not executed) uaccess builtin from the merged 73-seat-late rules
+          assert any(
+              c.get("type") == "builtin" and c.get("command") == "uaccess"
+              for c in result.get("queuedCommands", [])
+          ), result
+
+      with subtest("nonmatching control device receives no project rule outcomes"):
+          control = synthetic_event_json(
+              "${fixtureControl}",
+              "Seeed Studio XIAO nrf54 Debug Probe",
+              "control fixture",
+          )
+          assert control["path"] == "/devices/virtual/usb/usb1/1-9", control
+          assert control["subsystem"] == "usb", control
+          assert control["type"] == "usb_device", control
+          node = control.get("node", {})
+          assert node.get("owner", {}).get("groupName") != "plugdev", control
+          assert node.get("mode") != "0660", control
+          assert "uaccess" not in control.get("tags", []), control
+          assert "uaccess" not in control.get("currentTags", []), control
+          assert not any(
+              c.get("type") == "builtin" and c.get("command") == "uaccess"
+              for c in control.get("queuedCommands", [])
+          ), control
 
       with subtest("clean system: no project tools"):
           machine.fail("command -v nix-nrf")

@@ -18,7 +18,9 @@ branch as instrumentation only (per
 `docs/development/archive/clean-room-telemetry-handoff.md`). No real
 measurements are claimed by this phase; the real retained measurement run
 remains separately approved and pending, and the 25 GiB free-space guard is
-unchanged. Phase 9 (umockdev feasibility spike) is next and not started.
+unchanged. Phase 9 (umockdev udev semantics gate) is accepted and committed
+on this branch (per
+`docs/development/archive/udev-umockdev-semantics-handoff.md`).
 
 Branch: `feat/nixos-safety-and-init`, rebased onto `main` at `a3fedcb`
 (after the CMSIS-DAP transport and hardware-preflight work from PR #4/#5
@@ -706,6 +708,29 @@ gadget work.
 
 Doctor classification itself stays on fake sysfs/dev roots; umockdev must test
 new public behavior (rule semantics), not duplicate existing doctor tests.
+
+### Outcome
+
+The spike was deterministic and meaningful, so the semantics gate now lives
+in the existing `udev-vm` check (`nix/flake/checks/udev-vm.nix`) instead of a
+second VM or new flake check key. The check drives the real activated
+`/etc/udev/rules.d/60-openocd.rules` tree with two hand-constructed umockdev
+USB fixtures through pinned `umockdev-run` (0.19.3) and pinned systemd's real
+`udevadm test --action=add --json=short` (261.1), and asserts the parsed JSON
+at the NixOS test-driver boundary. The positive CMSIS-DAP fixture proves
+`GROUP="plugdev"`, `MODE="0660"`, and `uaccess` tag/current-tag plus the
+queued uaccess builtin; the otherwise identical nonmatching control proves
+absence of every project rule outcome. Full record:
+`docs/development/archive/udev-umockdev-semantics-handoff.md`.
+
+This is rule-engine simulation, not real hotplug: `udevadm test` never
+executes `RUN` keys, so queued commands prove rule assignment and command
+queuing, not resulting ACL application. No kernel device is added to the
+VM's device graph, no `dummy_hcd`/configfs/Raw Gadget/USB/IP/gadget work is
+involved, no hardware is touched, and no host/workstation configuration is
+adopted. The `plugdev` gid and baseline node modes are dynamic and are not
+pinned. Phase 10 remains deferred and all existing approval boundaries are
+unchanged.
 
 ## 13. Phase 10 — deferred workstation adoption
 
