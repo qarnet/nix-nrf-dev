@@ -76,18 +76,41 @@ def load_release_json(text):
     return version, diags
 
 
-def current_release_body(text, version):
-    """Content after the exact current heading until the next level-2 heading.
+def _heading_line_starts(text):
+    """Char offsets where level-2 heading lines (`##` followed by whitespace
+    at line start) begin. Level-3 (`### ...`) lines are not headings."""
+    offsets = []
+    pos = 0
+    for line in text.splitlines(keepends=True):
+        if re.match(r"^##\s", line):
+            offsets.append(pos)
+        pos += len(line)
+    return offsets
 
-    A level-2 heading is any line starting with `##` followed by whitespace
-    (e.g. `## [Unreleased]`, `## [0.2.0]`); level-3 (`### ...`) headings do
-    not terminate the body. Returns None when the heading is absent.
-    """
+
+def _heading_start(text, heading):
+    """Char offset of the first line whose content is EXACTLY `heading`
+    (whole line, no suffix), or -1 when absent. A `## [0.1.0] extra` line
+    does not match the `## [0.1.0]` heading."""
+    for offset in _heading_line_starts(text):
+        end = text.find("\n", offset)
+        line = text[offset:end] if end != -1 else text[offset:]
+        if line == heading:
+            return offset
+    return -1
+
+
+def current_release_body(text, version):
+    """Content after the exact current heading line until the next level-2
+    heading line. Level-3 (`### ...`) headings do not terminate the body.
+    Returns None when the exact heading line is absent."""
     heading = "## [{0}]".format(version)
-    idx = text.find(heading)
+    idx = _heading_start(text, heading)
     if idx == -1:
         return None
-    rest = text[idx + len(heading) :]
+    rest = text[idx:]
+    nl = rest.find("\n")
+    rest = rest[nl + 1 :] if nl != -1 else ""
     lines = []
     for line in rest.splitlines(keepends=True):
         if re.match(r"^##\s", line):
@@ -100,8 +123,10 @@ def check_changelog_contract(text, version):
     """Validate every changelog contract element; return a diagnostic list.
 
     Independent rules so a single defect is named precisely: current-version
-    table row, exact current body heading, `## [Unreleased]` heading,
-    Unreleased-before-current ordering, and a nonempty current release body.
+    table row, exact current body heading line, exact `## [Unreleased]`
+    heading line, Unreleased-before-current ordering, and a nonempty current
+    release body. Heading recognition is whole-line: a suffixed
+    `## [0.1.0] extra` line is NOT the `## [0.1.0]` heading.
     """
     diags = []
     heading = "## [{0}]".format(version)
@@ -111,22 +136,24 @@ def check_changelog_contract(text, version):
             "CHANGELOG release table must contain a row starting with "
             "{0!r} for version {1!r}".format(table_row, version)
         )
-    if heading not in text:
+    heading_start = _heading_start(text, heading)
+    unreleased_start = _heading_start(text, UNRELEASED_HEADING)
+    if heading_start == -1:
         diags.append(
             'CHANGELOG body must contain the exact heading "{0}"'.format(heading)
         )
-    if UNRELEASED_HEADING not in text:
+    if unreleased_start == -1:
         diags.append(
             'CHANGELOG body must contain the heading "{0}"'.format(UNRELEASED_HEADING)
         )
-    if heading in text and UNRELEASED_HEADING in text:
-        if text.index(UNRELEASED_HEADING) > text.index(heading):
+    if heading_start != -1 and unreleased_start != -1:
+        if unreleased_start > heading_start:
             diags.append(
                 'the "{0}" heading must appear before the "{1}" heading'.format(
                     UNRELEASED_HEADING, heading
                 )
             )
-    if heading in text:
+    if heading_start != -1:
         body = current_release_body(text, version)
         if body is None or not body.strip():
             diags.append('CHANGELOG body after "{0}" must be nonempty'.format(heading))

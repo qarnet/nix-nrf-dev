@@ -22,10 +22,14 @@ on:
 permissions:
   contents: read
 
-# Cancel in-progress runs on the same ref when a new run is triggered.
+# Cancel in-progress runs on the same ref when a new run is triggered — but
+# ONLY for pull requests, where a new revision supersedes the previous one.
+# Trusted main push runs are non-cancelling: cancel-in-progress there could
+# abort an in-flight run whose gated `release` job is mid-publish, even
+# though the reusable release workflow itself never cancels.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:

@@ -124,7 +124,7 @@ To prepare a new release:
 1. Bump `release.json` to the new version.
 2. Add the matching changelog row to the `CHANGELOG.md` table and a release
    body under the exact `## [<version>]` heading, keeping
-   `## [Unreleased]` directly above the current release.
+   `## [Unreleased]` above the current release.
 3. Run the gates:
    `python3 scripts/release.py check`, `python3 tests/unit/test_release.py`,
    `nix build -L .#checks.x86_64-linux.release-consistency`, and the normal

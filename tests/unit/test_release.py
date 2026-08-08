@@ -30,10 +30,15 @@ _spec = importlib.util.spec_from_file_location("nix_nrf_release", RELEASE_SCRIPT
 release = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(release)
 
-VERSION = "0.1.0"
-HEADING = "## [0.1.0]"
-UNRELEASED = "## [Unreleased]"
-TABLE_ROW = "| [0.1.0](#010) |"
+
+def canonical_version():
+    """The current version parsed from the real release.json — the single
+    release authority. A future release bump updates release.json (and the
+    changelog/docs), never this test source."""
+    version, diags = release.load_release_json(RELEASE_JSON.read_text())
+    assert not diags, diags
+    assert version is not None
+    return version
 
 
 def synthetic_changelog(version="9.9.9"):
@@ -62,19 +67,14 @@ class RealFileContractTest(unittest.TestCase):
         changelog = CHANGELOG.read_text()
         self.assertEqual(release.collect_errors(manifest, changelog), [])
 
-    def test_real_version_is_0_1_0(self):
-        version, diags = release.load_release_json(RELEASE_JSON.read_text())
-        self.assertEqual(diags, [])
-        self.assertEqual(version, VERSION)
-
-    def test_version_command_prints_only_version(self):
+    def test_version_command_prints_canonical_manifest_version(self):
         proc = subprocess.run(
             [sys.executable, str(RELEASE_SCRIPT), "version"],
             capture_output=True,
             text=True,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(proc.stdout, VERSION + "\n")
+        self.assertEqual(proc.stdout, canonical_version() + "\n")
         self.assertEqual(proc.stderr, "")
 
     def test_check_command_passes_on_real_files(self):
@@ -86,7 +86,7 @@ class RealFileContractTest(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
     def test_extracted_release_notes_nonempty_with_first_release_content(self):
-        body = release.current_release_body(CHANGELOG.read_text(), VERSION)
+        body = release.current_release_body(CHANGELOG.read_text(), canonical_version())
         self.assertIsNotNone(body)
         self.assertTrue(body.strip())
         for needle in [
@@ -175,6 +175,20 @@ class ChangelogContractNegativeTest(unittest.TestCase):
             l for l in synthetic_changelog().splitlines() if l != "## [Unreleased]"
         )
         self.assert_single_violation(text, 'heading "## [Unreleased]"')
+
+    def test_rejects_unreleased_heading_with_suffix(self):
+        # A suffixed line is not the exact `## [Unreleased]` heading; the
+        # missing-heading diagnostic must name the Unreleased heading alone
+        # (the current heading, table row, and body remain intact).
+        text = synthetic_changelog().replace("## [Unreleased]", "## [Unreleased] extra")
+        self.assert_single_violation(text, 'heading "## [Unreleased]"')
+
+    def test_rejects_current_heading_with_suffix(self):
+        # A suffixed line is not the exact `## [9.9.9]` heading; only the
+        # missing-current-heading diagnostic may fire (table row, Unreleased
+        # heading, and ordering stay intact).
+        text = synthetic_changelog().replace("## [9.9.9]", "## [9.9.9] extra")
+        self.assert_single_violation(text, 'exact heading "## [9.9.9]"')
 
     def test_rejects_wrong_ordering(self):
         lines = synthetic_changelog().splitlines()

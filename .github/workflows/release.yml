@@ -9,8 +9,10 @@
 # The nix-nrf-dev project version is independent from NCS versions: the
 # canonical `release.json` strict-SemVer manifest is validated, the changelog
 # contract is enforced, and the tag/Release name is `v<version>` at the exact
-# prepared SHA. Re-running an already published version is a no-op; an
-# existing tag is never deleted, force-moved, or reused at a different SHA.
+# prepared SHA. Idempotency: an already published non-draft release is a
+# no-op regardless of the prepared SHA (later main commits keep the same
+# manifest version until the next bump). An existing tag is never deleted,
+# force-moved, or reused at a different SHA.
 #
 # Least privilege split:
 #   prepare — contents: read. Checks out the exact ref (full history), runs
@@ -33,10 +35,11 @@ on:
         description: Project version prepared by the release
         value: ${{ jobs.prepare.outputs.version }}
 
-# Serialize release runs for the same ref; never cancel an in-flight run
-# (a cancelled publish would leave a half-finished draft/tag).
+# Serialize ALL release runs repository-wide so concurrent pushes to
+# different refs/versions cannot race on the same tag; never cancel an
+# in-flight run (a cancelled publish would leave a half-finished draft/tag).
 concurrency:
-  group: release-${{ inputs.ref }}
+  group: release-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
@@ -102,7 +105,7 @@ jobs:
 
       # No checkout, no repository code: only the prepared notes file plus
       # the gh CLI against the GitHub API.
-      - name: Inspect tag and release state
+      - name: Inspect release and tag state
         id: state
         run: |
           set -eu
@@ -110,34 +113,88 @@ jobs:
           [ -s "$notes_path" ] || { echo "::error::release notes artifact is missing or empty" >&2; exit 1; }
           echo "notes_path=$notes_path" >> "$GITHUB_OUTPUT"
 
-          # Tag state first, before any mutation. An annotated (non-commit)
-          # tag, or a lightweight tag at any SHA other than the prepared SHA,
-          # fails closed — a tag is never deleted, force-moved, or reused at
-          # the wrong commit. A lightweight tag at the exact prepared SHA may
-          # be reused as-is.
-          tag_object="$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" 2>/dev/null || true)"
-          if [ -n "$tag_object" ]; then
-            tag_type="$(printf '%s' "$tag_object" | jq -r '.object.type')"
-            tag_sha="$(printf '%s' "$tag_object" | jq -r '.object.sha')"
-            if [ "$tag_type" != "commit" ]; then
-              echo "::error::refs/tags/$TAG exists as a non-commit ($tag_type) tag; refusing to mutate it" >&2
-              exit 1
-            fi
-            if [ "$tag_sha" != "$SHA" ]; then
-              echo "::error::refs/tags/$TAG already exists at $tag_sha, not the prepared SHA $SHA; refusing to move it" >&2
-              exit 1
-            fi
-            echo "tag_at_prepared_sha=true" >> "$GITHUB_OUTPUT"
-          else
+          # One authenticated GraphQL query returns both the release and the
+          # tag for the prepared tag name. Lookups are fail-closed: a gh/jq
+          # error (HTTP, GraphQL, or transport), a missing `.data.repository`
+          # node, or an unexpected field shape aborts the job; only explicit
+          # null nodes mean absence. Query/schema verified against the live
+          # GitHub API: repository.release(tagName:) -> { isDraft } | null,
+          # repository.ref(qualifiedName:) -> { target { oid __typename } } |
+          # null, with __typename "Commit" (lightweight tag at a commit) vs
+          # "Tag" (annotated tag).
+          query="$(cat <<'GQL'
+          query ReleaseState($owner: String!, $name: String!, $tagName: String!, $qualifiedName: String!) {
+            repository(owner: $owner, name: $name) {
+              release(tagName: $tagName) {
+                isDraft
+              }
+              ref(qualifiedName: $qualifiedName) {
+                target {
+                  oid
+                  __typename
+                }
+              }
+            }
+          }
+          GQL
+          )"
+          graphql="$(gh api graphql -f query="$query" \
+            -F owner="${{ github.repository_owner }}" \
+            -F name="${GH_REPO#*/}" \
+            -F tagName="$TAG" \
+            -F qualifiedName="refs/tags/$TAG")"
+
+          repo_ok="$(printf '%s' "$graphql" | jq -r 'if (.data | type) == "object" and .data.repository != null then "ok" else "error" end')"
+          [ "$repo_ok" = "ok" ] || { echo "::error::release state query returned no repository node (API/schema error?)" >&2; printf '%s\n' "$graphql" >&2; exit 1; }
+
+          # Release classification with explicit null/isDraft branches: jq's
+          # `//` fallback is never used, so a boolean false (published) can
+          # not be mistaken for absence.
+          release_class="$(printf '%s' "$graphql" | jq -r '
+            if .data.repository.release == null then "absent"
+            elif .data.repository.release.isDraft == true then "draft"
+            elif .data.repository.release.isDraft == false then "published"
+            else "error" end')"
+          [ "$release_class" != "error" ] || { echo "::error::release state query returned an unexpected release shape" >&2; printf '%s\n' "$graphql" >&2; exit 1; }
+
+          # Ref classification: "Commit" is a lightweight tag at a commit,
+          # "Tag" is an annotated tag, "absent" is no tag; any other shape
+          # fails closed.
+          ref_class="$(printf '%s' "$graphql" | jq -r '
+            if .data.repository.ref == null then "absent"
+            elif (.data.repository.ref.target | type) != "object" then "error"
+            else .data.repository.ref.target.__typename end')"
+          [ "$ref_class" != "error" ] || { echo "::error::release state query returned an unexpected ref shape" >&2; printf '%s\n' "$graphql" >&2; exit 1; }
+          ref_oid="$(printf '%s' "$graphql" | jq -r '.data.repository.ref.target.oid // empty')"
+
+          # Idempotency first: a published non-draft release is a no-op even
+          # when the tag sits at an older SHA (later main commits retain the
+          # current manifest version until the next bump). The tag is never
+          # inspected for mutation in that case.
+          if [ "$release_class" = "published" ]; then
+            echo "state=published" >> "$GITHUB_OUTPUT"
             echo "tag_at_prepared_sha=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-          # Release state: only a published non-draft release counts as
-          # already published; a leftover draft is finished, not skipped.
-          is_draft="$(gh release view "$TAG" --json isDraft -q '.isDraft' 2>/dev/null || true)"
-          if [ "$is_draft" = "false" ]; then
-            echo "state=published" >> "$GITHUB_OUTPUT"
-          elif [ "$is_draft" = "true" ]; then
+          # Only for a draft or absent release is the tag inspected before any
+          # mutation. An annotated (non-commit) tag, or a lightweight tag at
+          # any SHA other than the prepared SHA, fails closed — a tag is never
+          # deleted, force-moved, or reused at the wrong commit. A lightweight
+          # tag at the exact prepared SHA may be reused as-is.
+          if [ "$ref_class" = "absent" ]; then
+            echo "tag_at_prepared_sha=false" >> "$GITHUB_OUTPUT"
+          elif [ "$ref_class" != "Commit" ]; then
+            echo "::error::refs/tags/$TAG exists as a non-commit ($ref_class) tag; refusing to mutate it" >&2
+            exit 1
+          elif [ "$ref_oid" != "$SHA" ]; then
+            echo "::error::refs/tags/$TAG already exists at $ref_oid, not the prepared SHA $SHA; refusing to move it" >&2
+            exit 1
+          else
+            echo "tag_at_prepared_sha=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$release_class" = "draft" ]; then
             echo "state=draft" >> "$GITHUB_OUTPUT"
           else
             echo "state=none" >> "$GITHUB_OUTPUT"
