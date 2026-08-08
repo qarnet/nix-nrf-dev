@@ -1,0 +1,170 @@
+# Release — reusable trusted-main GitHub Release workflow for nix-nrf-dev.
+#
+# `workflow_call` ONLY: this workflow has no push/pull_request/schedule/
+# workflow_dispatch trigger and cannot react to events by itself. The sole
+# caller is the gated `release` job in ci.yml, reachable only from a trusted
+# push to main after all normal CI checks pass — PRs and other refs can never
+# publish.
+#
+# The nix-nrf-dev project version is independent from NCS versions: the
+# canonical `release.json` strict-SemVer manifest is validated, the changelog
+# contract is enforced, and the tag/Release name is `v<version>` at the exact
+# prepared SHA. Re-running an already published version is a no-op; an
+# existing tag is never deleted, force-moved, or reused at a different SHA.
+#
+# Least privilege split:
+#   prepare — contents: read. Checks out the exact ref (full history), runs
+#     the real release consistency check, derives version/tag/SHA, and uploads
+#     only the prepared notes file as a short-retention artifact.
+#   publish — contents: write. Does NOT check out the repository and executes
+#     NO project code: it downloads only the notes artifact and drives the
+#     GitHub API via the `gh` CLI with GH_REPO/tag/SHA from env.
+name: Release
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Resolved trusted SHA to release (from the trusted-main caller)
+        required: true
+        type: string
+    outputs:
+      version:
+        description: Project version prepared by the release
+        value: ${{ jobs.prepare.outputs.version }}
+
+# Serialize release runs for the same ref; never cancel an in-flight run
+# (a cancelled publish would leave a half-finished draft/tag).
+concurrency:
+  group: release-${{ inputs.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.meta.outputs.sha }}
+      version: ${{ steps.version.outputs.value }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Checkout exact ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      # Fail closed before anything else: any manifest/changelog contract
+      # violation stops the release.
+      - name: Validate release and changelog consistency
+        run: python3 scripts/release.py check
+
+      - name: Extract version and tag
+        id: version
+        run: |
+          VER="$(python3 scripts/release.py version)"
+          echo "value=$VER" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve checked-out SHA
+        id: meta
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes
+        run: python3 scripts/release.py notes --output "$RUNNER_TEMP/release-notes.md"
+
+      - name: Upload release notes artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes.md
+          retention-days: 1
+
+  publish:
+    name: Publish GitHub release
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      SHA: ${{ needs.prepare.outputs.sha }}
+    steps:
+      - name: Download release notes artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: release-notes
+          path: notes
+
+      # No checkout, no repository code: only the prepared notes file plus
+      # the gh CLI against the GitHub API.
+      - name: Inspect tag and release state
+        id: state
+        run: |
+          set -eu
+          notes_path="notes/release-notes.md"
+          [ -s "$notes_path" ] || { echo "::error::release notes artifact is missing or empty" >&2; exit 1; }
+          echo "notes_path=$notes_path" >> "$GITHUB_OUTPUT"
+
+          # Tag state first, before any mutation. An annotated (non-commit)
+          # tag, or a lightweight tag at any SHA other than the prepared SHA,
+          # fails closed — a tag is never deleted, force-moved, or reused at
+          # the wrong commit. A lightweight tag at the exact prepared SHA may
+          # be reused as-is.
+          tag_object="$(gh api "repos/$GH_REPO/git/ref/tags/$TAG" 2>/dev/null || true)"
+          if [ -n "$tag_object" ]; then
+            tag_type="$(printf '%s' "$tag_object" | jq -r '.object.type')"
+            tag_sha="$(printf '%s' "$tag_object" | jq -r '.object.sha')"
+            if [ "$tag_type" != "commit" ]; then
+              echo "::error::refs/tags/$TAG exists as a non-commit ($tag_type) tag; refusing to mutate it" >&2
+              exit 1
+            fi
+            if [ "$tag_sha" != "$SHA" ]; then
+              echo "::error::refs/tags/$TAG already exists at $tag_sha, not the prepared SHA $SHA; refusing to move it" >&2
+              exit 1
+            fi
+            echo "tag_at_prepared_sha=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag_at_prepared_sha=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Release state: only a published non-draft release counts as
+          # already published; a leftover draft is finished, not skipped.
+          is_draft="$(gh release view "$TAG" --json isDraft -q '.isDraft' 2>/dev/null || true)"
+          if [ "$is_draft" = "false" ]; then
+            echo "state=published" >> "$GITHUB_OUTPUT"
+          elif [ "$is_draft" = "true" ]; then
+            echo "state=draft" >> "$GITHUB_OUTPUT"
+          else
+            echo "state=none" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: No-op when already published
+        if: steps.state.outputs.state == 'published'
+        run: echo "Release $TAG already published — no-op."
+
+      - name: Publish existing draft
+        if: steps.state.outputs.state == 'draft'
+        run: |
+          gh release edit "$TAG" \
+            --target "$SHA" \
+            --title "$TAG" \
+            --notes-file "${{ steps.state.outputs.notes_path }}" \
+            --draft=false \
+            --latest
+
+      - name: Create published release
+        if: steps.state.outputs.state == 'none'
+        run: |
+          # gh release create also creates the (lightweight) tag at the
+          # exact target SHA; a pre-existing lightweight tag at that SHA is
+          # reused, anything else was rejected above.
+          gh release create "$TAG" \
+            --target "$SHA" \
+            --title "$TAG" \
+            --notes-file "${{ steps.state.outputs.notes_path }}" \
+            --latest

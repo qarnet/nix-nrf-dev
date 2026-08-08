@@ -123,6 +123,9 @@
         westBackendVersions
         ;
     };
+    # Release/changelog consistency gate: real scripts/release.py check plus
+    # the unit contract suite against copied release.json + CHANGELOG.md.
+    release = import ./checks/release.nix {inherit pkgs;};
     formatting = treefmtEval.config.build.check self;
     inherit pre-commit;
   };

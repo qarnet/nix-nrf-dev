@@ -10,6 +10,7 @@
   nrfutil,
   west,
   initProject,
+  release,
   formatting,
   pre-commit,
 }: {
@@ -45,5 +46,6 @@
     west-shell-boundary
     ;
   inherit (initProject) init-project-tests;
+  inherit (release) release-consistency;
   inherit formatting pre-commit;
 }

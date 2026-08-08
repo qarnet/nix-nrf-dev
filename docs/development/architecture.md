@@ -87,6 +87,34 @@ ownership and construction only.
   `nix/backends/nrfutil/bootstrap.nix`; `nix/commands/default.nix` imports
   it unless a west `bootstrapCommand` is injected.
 
+## 4a. Release ownership
+
+- `release.json` (repo root) — the canonical nix-nrf-dev project version
+  manifest: strict stable SemVer (`MAJOR.MINOR.PATCH`, no leading `v`, no
+  prerelease/build metadata), independent from NCS versions. It must be a
+  JSON object with exactly the `version` key so no second release authority
+  can appear silently.
+- `nix/release.nix` — pure loader validating the manifest; its `version` is
+  embedded into every `nix-nrf` dispatcher instance (standalone, nrfutil
+  shell, west shell) and reported via `-V`/`--version` (also
+  `passthru.version` on the `nix-nrf` derivation). No version literal is
+  duplicated in Nix source.
+- `scripts/release.py` + `tests/unit/test_release.py` — the fail-closed
+  release/changelog consistency utility (check/version/notes commands,
+  stdlib only) and its contract regression suite, covering every negative
+  manifest/changelog element. Wired as `checks.<system>.release-consistency`
+  (via `nix/flake/checks/release.nix`) and as the named direct CI gate;
+  `nix/flake/checks/core.nix` proves the packaged `nix-nrf` reports exactly
+  the manifest version.
+- `.github/workflows/release.yml` — the trusted-main reusable release
+  workflow (`workflow_call` only; no event triggers): `prepare` (read-only)
+  validates and stages the notes artifact, `publish` (contents: write, no
+  checkout, no project code) creates the `v<version>` tag/Release at the
+  exact prepared SHA, fails closed on a conflicting/annotated tag, finishes
+  leftover drafts, and no-ops on an already published version. Reachable
+  only from the gated `release` caller job in `.github/workflows/ci.yml`
+  (trusted push to main after the `check` job); PRs can never publish.
+
 ## 5. Script layout under `bin/`
 
 - `bin/backends/nrfutil/nix-nrf-bootstrap`,

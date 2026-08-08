@@ -1,9 +1,10 @@
-# Shared core gates: standalone `nix-nrf --help` wording, fake-boundary
-# doctor tests, XIAO doctor preflight parser tests, udev-rule byte-identity,
-# shell-doctor udev wiring, and fake-OpenOCD flash-recipe semantic tests.
-# `defaultDevShell` is the flake's devShells.default (constructed by
-# dev-shells.nix), passed explicitly; the check pulls the exact packaged
-# nix-nrf from it, same derivation as self.devShells.${system}.default.
+# Shared core gates: standalone `nix-nrf --help` wording and exact
+# `-V`/`--version` output, fake-boundary doctor tests, XIAO doctor preflight
+# parser tests, udev-rule byte-identity, shell-doctor udev wiring, and
+# fake-OpenOCD flash-recipe semantic tests. `defaultDevShell` is the flake's
+# devShells.default (constructed by dev-shells.nix), passed explicitly; the
+# check pulls the exact packaged nix-nrf from it, same derivation as
+# self.devShells.${system}.default.
 {
   pkgs,
   nix-nrf,
@@ -14,26 +15,50 @@
   nixpkgs,
   system,
 }: let
+  # Canonical project version (nix/release.nix reads release.json); the
+  # `-V`/`--version` gate asserts the packaged binary reports exactly this.
+  release = import ../../release.nix;
   # Public `nix-nrf --help` wording gate: the standalone (nrfutil)
   # facade must keep today's byte-for-byte command descriptions
-  # (versions via sdk-manager, bootstrap/doctor on SDK/toolchain).
-  # The west shell's backend-aware descriptions are asserted in
-  # checks.west-shell-boundary.
+  # (versions via sdk-manager, bootstrap/doctor on SDK/toolchain), list
+  # `-V, --version` among its global options, and report exactly the
+  # canonical project version (stdout only, exit 0) for both `-V` and
+  # `--version`, rejecting extra arguments with exit 2 — all through the
+  # real packaged binary. The west shell's backend-aware descriptions are
+  # asserted in checks.west-shell-boundary.
   nixNrfHelpCheck =
     pkgs.runCommand "nix-nrf-help-check"
     {
       # Aliased: a `nix-nrf` env var name (with dash) is not usable
       # from bash.
       nixNrf = nix-nrf;
+      expectedVersion = release.version;
     }
     ''
         "$nixNrf/bin/nix-nrf" --help > help.txt
       grep -F "versions   List NCS releases advertised by Nordic sdk-manager" help.txt >/dev/null || { echo "FAIL: standalone versions wording changed" >&2; cat help.txt >&2; exit 1; }
       grep -F "bootstrap  Ensure the selected NCS SDK source and toolchain exist" help.txt >/dev/null || { echo "FAIL: standalone bootstrap wording changed" >&2; cat help.txt >&2; exit 1; }
       grep -F "doctor     Diagnose SDK/toolchain and probe access (read-only)" help.txt >/dev/null || { echo "FAIL: standalone doctor wording changed" >&2; cat help.txt >&2; exit 1; }
+      grep -F -- "-V, --version" help.txt >/dev/null || { echo "FAIL: -V, --version missing from global options" >&2; cat help.txt >&2; exit 1; }
       "$nixNrf/bin/nix-nrf" help probes > probes-help.txt
       grep -F "Identify chips attached to CMSIS-DAP probes (read-only)" probes-help.txt >/dev/null || { echo "FAIL: `nix-nrf help probes` did not reach the packaged probe command help" >&2; cat probes-help.txt >&2; exit 1; }
-      echo "nix-nrf help wording check passed" >&2
+
+      # Exact version output through the real packaged binary: both global
+      # forms print exactly "nix-nrf <version>" on stdout with empty stderr
+      # and exit 0, and reject extra arguments with exit 2.
+      for flag in -V --version; do
+        "$nixNrf/bin/nix-nrf" "$flag" > "version-''${flag#-}.txt" 2> "version-''${flag#-}.err"
+        [ "$(cat "version-''${flag#-}.txt")" = "nix-nrf $expectedVersion" ] || { echo "FAIL: $flag output is not exactly 'nix-nrf $expectedVersion'" >&2; cat "version-''${flag#-}.txt" >&2; exit 1; }
+        [ ! -s "version-''${flag#-}.err" ] || { echo "FAIL: $flag wrote to stderr" >&2; cat "version-''${flag#-}.err" >&2; exit 1; }
+        set +e
+        "$nixNrf/bin/nix-nrf" "$flag" extra-arg > "version-extra-''${flag#-}.out" 2> "version-extra-''${flag#-}.err"
+        rc=$?
+        set -e
+        [ "$rc" -eq 2 ] || { echo "FAIL: $flag with extra args exited $rc, expected 2" >&2; cat "version-extra-''${flag#-}.err" >&2; exit 1; }
+        grep -F "nix-nrf: unexpected argument(s) after version flag" "version-extra-''${flag#-}.err" >/dev/null || { echo "FAIL: $flag extra-arg stderr diagnostic missing" >&2; cat "version-extra-''${flag#-}.err" >&2; exit 1; }
+      done
+
+      echo "nix-nrf help/version check passed" >&2
       mkdir -p "$out"
     '';
 

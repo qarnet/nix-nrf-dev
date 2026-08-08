@@ -1,9 +1,12 @@
 # CI — the "clone and it works" gate.
-# Builds all packages (cached via Cachix qarnet), runs smoke tests, flake
-# checks, project-init, devshell-enter, real-OpenOCD source-compat gates,
-# and fake-OpenOCD semantic flash-recipe tests. Runs on PRs, pushes to main,
-# and nightly (scheduled regression coverage of the pinned inputs/builds —
-# the openocd rev/hash is a fixed pin and cannot drift).
+# Builds all packages (cached via Cachix qarnet), runs smoke tests, the
+# release/changelog consistency gate, flake checks, project-init,
+# devshell-enter, real-OpenOCD source-compat gates, and fake-OpenOCD semantic
+# flash-recipe tests. Runs on PRs, pushes to main, and nightly (scheduled
+# regression coverage of the pinned inputs/builds — the openocd rev/hash is a
+# fixed pin and cannot drift). A gated `release` caller job invokes the
+# reusable release workflow only on a trusted push to main after `check`
+# passes; PRs and other refs never publish.
 name: CI
 
 on:
@@ -12,6 +15,12 @@ on:
     branches: [main]
   schedule:
     - cron: '0 0 * * *'  # nightly regression coverage of pinned inputs/builds
+
+# Read-only repository access for the whole workflow; only the gated
+# `release` caller job grants contents: write (to the reusable release
+# workflow) and only from a trusted push to main.
+permissions:
+  contents: read
 
 # Cancel in-progress runs on the same ref when a new run is triggered.
 concurrency:
@@ -33,6 +42,16 @@ jobs:
         with:
           name: qarnet
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      # Release contract gate: the canonical strict-SemVer release.json must
+      # match the changelog table row/body (with `## [Unreleased]` above the
+      # current release), and the release regression suite proves every
+      # negative contract element. Runs before the flake gate; the same check
+      # is wired into the flake as checks.<system>.release-consistency.
+      - name: Validate release and changelog consistency
+        run: |
+          python3 scripts/release.py check
+          python3 tests/unit/test_release.py
 
       # A3 — flake eval + checks (fast, sandboxed). First proves every
       # published system output evaluates across all published systems
@@ -64,6 +83,10 @@ jobs:
         run: nix run .#nrfutil -- --version
       - name: Smoke run nix-nrf help
         run: nix run .#nix-nrf -- --help
+      # nix-nrf --version reports the canonical project version (release.json),
+      # independent from the selected NCS version.
+      - name: Smoke run nix-nrf version
+        run: nix run .#nix-nrf -- --version
       # nix-nrf versions delegates to `nrfutil sdk-manager search`; --help only,
       # so normal PR CI never depends on live Nordic index availability.
       - name: Smoke run nix-nrf versions help
@@ -198,3 +221,19 @@ jobs:
           nix flake check -L "path:$dest" --override-input nix-nrf-dev "path:$repo"
           nix develop "path:$dest" --override-input nix-nrf-dev "path:$repo" \
             --command sh -ceu 'command -v openocd; command -v nix-nrf; nix-nrf probes --help >/dev/null; nix-nrf bootstrap --help >/dev/null; ! command -v nrf-probes'
+
+  # Release publication: only a trusted push to main, after the `check` job
+  # above passed, may reach the privileged reusable release workflow. Pull
+  # requests, schedules, and non-main refs skip this job entirely, so
+  # PR-contributed content can never publish. The caller grants only
+  # contents: write (for the tag/Release creation inside the reusable
+  # workflow) and passes the immutable github.sha as the exact ref.
+  release:
+    name: Release
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      ref: ${{ github.sha }}
