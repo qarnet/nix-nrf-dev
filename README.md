@@ -1,5 +1,7 @@
 # nix-nrf-dev
 
+[![Release](https://img.shields.io/github/v/release/qarnet/nix-nrf-dev?sort=semver)](https://github.com/qarnet/nix-nrf-dev/releases)
+
 nRF Connect SDK (NCS) toolchain environments are awkward to compose
 safely with Nix:
 
@@ -10,6 +12,11 @@ safely with Nix:
 This project packages all of that into one ready-to-use,
 project-scoped Nix environment for building and flashing modern Nordic
 firmware.
+
+> The nix-nrf-dev project version is **independent from NCS versions**.
+> `nix-nrf --version` reports the nix-nrf-dev project version (canonical
+> `release.json`, e.g. `0.1.0`), while `ncsVersion` (e.g. `v3.3.0`) is the
+> upstream SDK selection. See [CHANGELOG.md](CHANGELOG.md).
 
 ## What you get
 
@@ -55,6 +62,21 @@ collision, a symlink escape attempt, or an invalid backend/version aborts
 with `init-project: ...` on stderr and leaves no generated output. See
 [docs/backends.md](docs/backends.md) for backend selection and
 `nix run ...#init-project -- --help` for the full CLI.
+
+For reproducible consumer builds pin the project to an immutable release tag:
+
+```bash
+nix run github:qarnet/nix-nrf-dev/v0.1.0#init-project -- ./my-project
+```
+
+```nix
+# flake.nix
+inputs.nix-nrf-dev.url = "github:qarnet/nix-nrf-dev/v0.1.0";
+```
+
+Release tags (`v<version>`, e.g. `v0.1.0`) are created automatically from a
+trusted push to `main` after all CI checks pass; see
+[CONTRIBUTING.md](CONTRIBUTING.md#release-process) for the release process.
 
 direnv itself is documented in the
 [direnv project wiki](https://github.com/direnv/direnv/wiki); without direnv,
@@ -153,6 +175,7 @@ nix-nrf bootstrap    # provision the NCS SDK/toolchain (prompts before multi-GiB
 nix-nrf versions     # list available NCS versions
 nix-nrf probes       # list attached debug probes and targets
 nix-nrf doctor       # read-only environment and probe-access diagnostics
+nix-nrf --version    # print the nix-nrf-dev project version (independent from NCS)
 ```
 
 Start a new project with `nix run ...#init-project -- ./my-project`; see
@@ -184,6 +207,7 @@ whether your probes are visible and accessible. Full instructions are in
 
 ## Documentation
 
+- [CHANGELOG.md](CHANGELOG.md) — release history (project SemVer, independent from NCS versions)
 - [docs/backends.md](docs/backends.md) — backend choice, toolchain selection, bootstrap
 - [docs/hardware.md](docs/hardware.md) — probe access, flashing, recovery safety
 - [CONTRIBUTING.md](CONTRIBUTING.md) — contributing to nix-nrf-dev itself

@@ -36,6 +36,9 @@ Formatting and lint hooks run automatically via `pre-commit` (wired through
 ```bash
 nix fmt                                 # format all files (alejandra for Nix, black for Python)
 python3 tests/unit/test_nix_nrf_init_project.py  # initializer unit suite (raw source mode)
+python3 scripts/release.py check       # release manifest/changelog consistency
+python3 tests/unit/test_release.py     # release contract regression suite
+nix build -L .#checks.x86_64-linux.release-consistency  # sandboxed release gate (same as `nix flake check`)
 nix build -L .#checks.x86_64-linux.init-project-tests  # raw + packaged initializer gate
 nix flake check --all-systems --no-build -L  # evaluate all checks without building (fast pass)
 nix flake check -L                      # build and run all checks (incl. doctor-tests
@@ -52,6 +55,11 @@ nix develop .#clean-env-test --command sh -ceu '
   python3 -c "import json"
 '  # prove Nordic sdk-manager variables do not poison external tools
 ```
+
+The release consistency gate (`scripts/release.py check` plus
+`tests/unit/test_release.py`) runs both as a named CI step and as the
+`checks.<system>.release-consistency` flake check: any manifest bump without
+a matching changelog table row/body fails the gate.
 
 Flake checks cover evaluation gates, fake-boundary unit suites, shell-boundary
 gates, and wiring/byte-identity checks; they do not build the flake's package
@@ -101,6 +109,34 @@ Examples:
 - `fix(tcl): correct nRF5340 UICR address`
 - `docs(readme): document scoped toolchain env`
 - `chore(flake): add treefmt-nix and git-hooks.nix`
+
+## Release process
+
+The nix-nrf-dev project version is **independent from NCS versions**:
+`release.json` holds the one canonical strict stable SemVer
+(`MAJOR.MINOR.PATCH`, no leading `v`, no prerelease/build metadata) of the
+nix-nrf-dev/nix-nrf release, while `ncsVersion` (e.g. `v3.3.0`) is an
+upstream SDK selection and tested baseline. Never align the project release
+with an NCS release.
+
+To prepare a new release:
+
+1. Bump `release.json` to the new version.
+2. Add the matching changelog row to the `CHANGELOG.md` table and a release
+   body under the exact `## [<version>]` heading, keeping
+   `## [Unreleased]` above the current release.
+3. Run the gates:
+   `python3 scripts/release.py check`, `python3 tests/unit/test_release.py`,
+   `nix build -L .#checks.x86_64-linux.release-consistency`, and the normal
+   `nix flake check`.
+4. Open and merge the reviewed PR.
+
+The tag and GitHub Release are created **automatically** by the trusted
+release workflow after a successful push to `main` (the gated `release` job
+in `.github/workflows/ci.yml` calls the reusable `.github/workflows/release.yml`
+with the exact merge SHA). Re-running an already published version is a
+no-op. Never manually create, force, or move release tags: the workflow fails
+closed on a conflicting or annotated existing tag rather than mutating it.
 
 ## Bumping the openocd pin
 

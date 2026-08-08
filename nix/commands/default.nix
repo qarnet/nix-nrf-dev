@@ -30,6 +30,12 @@
 #     read-only `--check --quiet --print-sdk-path` path; the west backend
 #     additionally passes `doctorEnvironmentLabel` for its human messages.
 #
+# Global `-V`/`--version` prints exactly `nix-nrf <version>` where
+# `<version>` is the canonical project version embedded from release.json via
+# nix/release.nix (independent from the selected NCS version). Extra
+# arguments after either version flag are rejected with a `nix-nrf: ...`
+# stderr diagnostic and exit 2.
+#
 # Delegation uses exact Nix store executable paths derived from the selected
 # packages — never ambient PATH lookup — and `exec`, so delegated stdout,
 # stderr, options, and exit status are preserved unchanged. `nix-nrf` owns its
@@ -71,6 +77,12 @@ assert bootstrapCommand
 != null
 || nrfutilPackage != null
 || throw "nix-nrf: bootstrapCommand or nrfutilPackage is required (west backend must pass its exact bootstrap command; the default needs the packaged nrfutil)"; let
+  # Canonical nix-nrf-dev project version (nix/release.nix reads release.json).
+  # The nix-nrf-dev/nix-nrf product/package version is INDEPENDENT from NCS
+  # versions: `ncsVersion` (e.g. "v3.3.0") stays an upstream SDK selection and
+  # tested baseline. Every dispatcher instance (standalone, nrfutil shell, west
+  # shell) embeds this one manifest version and reports it via -V/--version.
+  release = import ../release.nix;
   nrfProbes = import ./probes.nix {
     inherit pkgs openocd;
   };
@@ -132,7 +144,13 @@ in
   pkgs.writeShellApplication {
     name = "nix-nrf";
     runtimeInputs = [pkgs.coreutils];
+    # Immutable project version, embedded from the canonical manifest so the
+    # installed package always reports exactly what release.json declares.
+    passthru = {
+      inherit (release) version;
+    };
     text = ''
+      nix_nrf_version=${release.version}
       ${pkgs.lib.optionalString (nrfutilPackage != null) "nrfutil_exe=${nrfutilPackage}/bin/nrfutil"}
       ${pkgs.lib.optionalString (versionsCommand != null) "nrf_versions_exe=${versionsCommand}"}
       nrf_probes_exe=${nrfProbes}/libexec/nix-nrf/probes
@@ -149,6 +167,9 @@ in
           ${bootstrapDesc}
           ${doctorDesc}
 
+        Global options:
+          -V, --version  Print the nix-nrf project version and exit
+
       Run `nix-nrf help <command>` for command-specific help.
       EOF
       }
@@ -157,6 +178,15 @@ in
       case "$cmd" in
         ""|-h|--help)
           usage
+          exit 0
+          ;;
+        -V|--version)
+          if [ $# -gt 1 ]; then
+            shift
+            echo "nix-nrf: unexpected argument(s) after version flag: $*" >&2
+            exit 2
+          fi
+          echo "nix-nrf $nix_nrf_version"
           exit 0
           ;;
         help)
