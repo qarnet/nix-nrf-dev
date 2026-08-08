@@ -1,0 +1,524 @@
+# Nightly latest-NCS initializer validation.
+#
+# The ONLY place in this repository where a normal automated run performs live
+# Nordic queries. Proves that the latest strict-stable NCS release advertised
+# as remotely installable by the real packaged sdk-manager can be selected by
+# `init-project`, rendered as a concrete consumer flake, evaluated against the
+# current checkout, and entered as a non-mutating dev shell with the expected
+# missing-SDK readiness — without ever downloading/installing an SDK or
+# toolchain. A Nordic service outage must never turn into a repository
+# failure: bounded transport/index outages yield an INCONCLUSIVE warning and a
+# successful exit.
+#
+# Supported PASS claim: "Latest strict-stable NCS release advertised by the
+# real packaged sdk-manager was selected, independently verified, rendered
+# into valid Nix, evaluated, and entered as a non-mutating shell with expected
+# missing-SDK readiness."
+# Explicit limitation: this does not prove SDK/toolchain download, firmware
+# build, or hardware.
+#
+# Design decisions from docs/development/latest-ncs-init-workflow-handoff.md:
+#   - one `resolve` step owns both live operations (initializer, then an
+#     independent `nrfutil sdk-manager search`) with at most three bounded
+#     retries each (10 s sleeps) and a strict Nordic-outage classifier;
+#   - validation steps run only when resolve outputs `result=pass`;
+#   - isolated HOME/NRFUTIL_HOME under a unique runner-temp path; the exact
+#     unique validation root is removed in the final `if: always()` step, and
+#     no fixed shared path is ever deleted;
+#   - normal ci.yml stays deterministic and never contacts Nordic.
+name: Latest NCS initializer
+
+on:
+  schedule:
+    - cron: '37 2 * * *'  # nightly, away from the top of the hour
+  workflow_dispatch:      # manual trigger
+
+# Read-only repository access: this workflow never pushes or mutates policy.
+permissions:
+  contents: read
+
+# Cancel in-progress runs on the same ref when a new run is triggered.
+concurrency:
+  group: latest-ncs-init-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  latest-ncs-init:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: cachix/cachix-action@v17
+        with:
+          name: qarnet
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+
+      # Resolve step: (1) run the initializer with `--ncs-version latest`
+      # through the exact packaged sdk-manager; (2) independently re-query the
+      # same live index with `timeout 90 nix run .#nrfutil -- sdk-manager
+      # search --json --skip-overhead`; (3) validate the required sdk-manager
+      # 1.15.0 schema and recompute the expected release with a fresh Python
+      # stdlib here-doc that never imports the initializer's parser; (4)
+      # require the generated flake to carry exactly one
+      # `backend = "nrfutil"` and one strict-stable `ncsVersion` equal to the
+      # independently computed release, with no `latest` remaining.
+      #
+      # Classification: only Nordic sdk-manager transport/index outages are
+      # retryable/inconclusive (explicit "Failed to download SDK remote
+      # config" / SDK index unavailable, DNS/name resolution, connection
+      # refused/reset/unreachable, TLS/transport/request timeout, HTTP 5xx,
+      # command timeout status 124). Generic Nix evaluation/build/cache/
+      # GitHub failures, malformed JSON/schema, no stable remotely installable
+      # release, usage/package/initializer errors, and generated-output
+      # mismatch are hard failures. After three retryable outages the step
+      # warns, writes the INCONCLUSIVE summary, and exits 0 so no validation
+      # step runs and an external Nordic outage never fails the run.
+      - id: resolve
+        name: Resolve and independently verify latest NCS
+        run: |
+          # Unique per run/attempt validation root; setup actions above ran
+          # with the runner's normal HOME.
+          VALIDATION_ROOT="${{ runner.temp }}/nix-nrf-latest-${{ github.run_id }}-${{ github.run_attempt }}"
+          HOME_DIR="$VALIDATION_ROOT/home"
+          NRFUTIL_HOME_DIR="$VALIDATION_ROOT/nrfutil-home"
+          DEST_ROOT="$VALIDATION_ROOT/projects"
+          mkdir -p "$HOME_DIR" "$NRFUTIL_HOME_DIR" "$DEST_ROOT"
+
+          # Preserve the Cachix substituter configuration cachix-action wrote
+          # into the runner's normal HOME. This is Nix cache configuration —
+          # not Nordic state — and keeps the cached qarnet derivations
+          # available to the isolated HOME below. Nordic SDK/toolchain state
+          # stays fully isolated.
+          if [ -f "$HOME/.config/nix/nix.conf" ]; then
+            mkdir -p "$HOME_DIR/.config/nix"
+            cp "$HOME/.config/nix/nix.conf" "$HOME_DIR/.config/nix/nix.conf"
+          fi
+
+          # Isolate Nordic state for this step's child processes and for
+          # every later validation step.
+          export HOME="$HOME_DIR"
+          export NRFUTIL_HOME="$NRFUTIL_HOME_DIR"
+          {
+            echo "HOME=$HOME_DIR"
+            echo "NRFUTIL_HOME=$NRFUTIL_HOME_DIR"
+            echo "VALIDATION_ROOT=$VALIDATION_ROOT"
+            echo "DEST_ROOT=$DEST_ROOT"
+          } >>"$GITHUB_ENV"
+
+          # Phase marker: lets the if:always() summary name the failing
+          # validation phase without depending on steps-context quirks.
+          echo "resolve" >"$VALIDATION_ROOT/last-phase"
+
+          # Strict Nordic-outage classifier. The initializer's own failure
+          # detail is sdk-manager stderr; the independent search failure is
+          # nrfutil stderr. Generic Nix/GitHub failure text (no Nordic
+          # context) must never be classified as an outage, so the
+          # DNS/connection/TLS/timeout/HTTP-5xx signals below require
+          # sdk-manager or clear Nordic host/vendor context unless they are
+          # an explicit Nordic remote-fetch/index phrase or a GNU `timeout`
+          # status 124. Bare `nrfutil` is deliberately NOT context: a generic
+          # Nix/cache error mentioning the nrfutil derivation must stay a
+          # hard failure.
+          is_nordic_outage() {
+            local rc="$1"
+            local output="$2"
+            if [ "$rc" -eq 124 ]; then
+              return 0
+            fi
+            # Explicit remote fetch/index outages only: failed SDK remote
+            # config/index downloads and an explicit remote SDK index
+            # unavailable. Local-looking `sdk config ... missing` and generic
+            # `missing` text are NOT classified.
+            if printf '%s\n' "$output" | grep -qiE 'failed to download sdk (remote )?(index|config)|(sdk (remote )?index|remote sdk index)( is)? (unavailable|not available)'; then
+              return 0
+            fi
+            if printf '%s\n' "$output" | grep -qiE 'sdk-manager|nordic|nordicsemi|nrfconnect'; then
+              if printf '%s\n' "$output" | grep -qiE 'name resolution|name or service not known|temporary failure in name resolution|getaddrinfo|dns'; then
+                return 0
+              fi
+              if printf '%s\n' "$output" | grep -qiE 'connection (refused|reset|closed)|failed to connect|no route to host|unreachable'; then
+                return 0
+              fi
+              if printf '%s\n' "$output" | grep -qiE 'tls|ssl|transport|timed? ?out|timeout'; then
+                return 0
+              fi
+              if printf '%s\n' "$output" | grep -qiE 'http[^0-9]{0,12}5[0-9]{2}|returned error[^0-9]{0,12}5[0-9]{2}|5[0-9]{2} (internal server error|bad gateway|service unavailable|gateway timeout)'; then
+                return 0
+              fi
+            fi
+            return 1
+          }
+
+          write_hard_failure() {
+            printf '%s\n' "$1" >"$VALIDATION_ROOT/failure-detail.txt"
+            echo "::error::$2"
+            echo "result=failed" >>"$GITHUB_OUTPUT"
+            echo "resolve" >"$VALIDATION_ROOT/last-phase"
+            exit 1
+          }
+
+          write_inconclusive() {
+            local label="$1"
+            local attempts="$2"
+            local last_diag="$3"
+            echo "::warning::Nordic NCS index unavailable after $attempts bounded retries ($label)"
+            {
+              echo "## INCONCLUSIVE - Nordic NCS index unavailable after $attempts bounded retries"
+              echo ""
+              echo "The $label could not complete because the Nordic sdk-manager"
+              echo "index was unreachable for every bounded retry. This is an"
+              echo "external outage, not a repository failure; the workflow exits"
+              echo "successfully and no validation step runs."
+              echo ""
+              echo "Last concise diagnostic:"
+              echo '```text'
+              printf '%s\n' "$last_diag" | head -n 20
+              echo '```'
+            } >>"$GITHUB_STEP_SUMMARY"
+            echo "result=inconclusive" >>"$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          # ── Live operation 1: initializer with `latest` ────────────────
+          attempts=0
+          init_ok=0
+          last_diag=""
+          while [ "$attempts" -lt 3 ]; do
+            attempts=$((attempts + 1))
+            dest="$DEST_ROOT/attempt-$attempts"
+            set +e
+            init_output="$(nix run .#init-project -- "$dest" --backend nrfutil --ncs-version latest --non-interactive 2>&1)"
+            init_rc=$?
+            set -e
+            if [ "$init_rc" -eq 0 ] && [ -f "$dest/flake.nix" ]; then
+              init_ok=1
+              break
+            fi
+            last_diag="$init_output"
+            if ! is_nordic_outage "$init_rc" "$init_output"; then
+              write_hard_failure "$init_output" \
+                "init-project failed and the failure is not a Nordic sdk-manager outage"
+            fi
+            echo "::warning::Nordic sdk-manager outage during init-project attempt $attempts/3 (retrying)"
+            if [ "$attempts" -lt 3 ]; then
+              sleep 10
+            fi
+          done
+          if [ "$init_ok" -ne 1 ]; then
+            write_inconclusive "initializer" "$attempts" "$last_diag"
+          fi
+
+          # ── Live operation 2: independent real search ───────────────────
+          search_attempts=0
+          search_ok=0
+          search_file=""
+          while [ "$search_attempts" -lt 3 ]; do
+            search_attempts=$((search_attempts + 1))
+            candidate="$VALIDATION_ROOT/search-$search_attempts.json"
+            set +e
+            # stdout (the search JSON) goes to the candidate file; stderr is
+            # captured for classification. GNU timeout 90 guards the live
+            # query; status 124 is a retryable command timeout.
+            search_output="$(timeout 90 nix run .#nrfutil -- sdk-manager search --json --skip-overhead 2>&1 >"$candidate")"
+            search_rc=$?
+            set -e
+            if [ "$search_rc" -eq 0 ] && [ -s "$candidate" ]; then
+              search_ok=1
+              search_file="$candidate"
+              break
+            fi
+            last_diag="$search_output"
+            if ! is_nordic_outage "$search_rc" "$search_output"; then
+              write_hard_failure "$search_output" \
+                "independent sdk-manager search failed and the failure is not a Nordic sdk-manager outage"
+            fi
+            echo "::warning::Nordic sdk-manager outage during independent search attempt $search_attempts/3 (retrying)"
+            if [ "$search_attempts" -lt 3 ]; then
+              sleep 10
+            fi
+          done
+          if [ "$search_ok" -ne 1 ]; then
+            write_inconclusive "independent sdk-manager search" "$search_attempts" "$last_diag"
+          fi
+
+          # ── Independent expected-release computation (fresh parser) ────
+          # actionlint/shellcheck constraint: every line of this block sits at
+          # the run-block base indent (the runner strips it), so the heredoc
+          # stays YAML-valid and shellcheck-clean.
+          set +e
+          verify_output="$(
+          python3 - "$search_file" "$dest" 2>&1 <<'PY'
+          import json
+          import os
+          import re
+          import sys
+
+          search_file, dest = sys.argv[1], sys.argv[2]
+
+          with open(search_file, encoding="utf-8") as fh:
+              data = json.load(fh)
+
+
+          def fail(msg):
+              print(f"independent verification failed: {msg}", file=sys.stderr)
+              sys.exit(1)
+
+
+          # Required sdk-manager 1.15.0 search shape (unknown extra fields allowed).
+          if not isinstance(data, dict) or not isinstance(data.get("entries"), list):
+              fail("expected a top-level object with an 'entries' list")
+          entries = data["entries"]
+          for i, entry in enumerate(entries):
+              if not isinstance(entry, dict):
+                  fail(f"entries[{i}] is not an object")
+              if not isinstance(entry.get("sdkType"), str):
+                  fail(f"entries[{i}].sdkType is not a string")
+              if not isinstance(entry.get("sdkVersion"), str):
+                  fail(f"entries[{i}].sdkVersion is not a string")
+              tags = entry.get("tags")
+              if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
+                  fail(f"entries[{i}].tags is not a string list")
+              sdk_status = entry.get("sdkStatus")
+              if not isinstance(sdk_status, dict) or not isinstance(sdk_status.get("remote"), str):
+                  fail(f"entries[{i}].sdkStatus.remote is not a string")
+              toolchains = entry.get("toolchains")
+              if not isinstance(toolchains, list):
+                  fail(f"entries[{i}].toolchains is not a list")
+              for j, tc in enumerate(toolchains):
+                  if not isinstance(tc, dict):
+                      fail(f"entries[{i}].toolchains[{j}] is not an object")
+                  if not isinstance(tc.get("version"), str):
+                      fail(f"entries[{i}].toolchains[{j}].version is not a string")
+                  tc_status = tc.get("status")
+                  if not isinstance(tc_status, dict) or not isinstance(tc_status.get("remote"), str):
+                      fail(f"entries[{i}].toolchains[{j}].status.remote is not a string")
+
+          strict_stable = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
+          blocked_tags = {"unstable", "preview", "rc"}
+
+          # Strict stable nrf candidates, matching the initializer's selection rules:
+          # numeric semantic max, never response order; per-tag exact comparison after
+          # normalization (strip + lower), never substring search.
+          candidates = []
+          for entry in entries:
+              if entry["sdkType"] != "nrf":
+                  continue
+              version = entry["sdkVersion"]
+              if not strict_stable.match(version):
+                  continue
+              if entry["sdkStatus"]["remote"] != "available":
+                  continue
+              if not any(tc["status"]["remote"] == "available" for tc in entry["toolchains"]):
+                  continue
+              if any(tag.strip().lower() in blocked_tags for tag in entry["tags"]):
+                  continue
+              candidates.append(version)
+
+          if not candidates:
+              fail("no stable remotely installable NCS release found in the search results")
+
+
+          def semver_tuple(v):
+              major, minor, patch = v[1:].split(".")
+              return (int(major), int(minor), int(patch))
+
+
+          expected = max(candidates, key=semver_tuple)
+
+          with open(os.path.join(dest, "flake.nix"), encoding="utf-8") as fh:
+              flake = fh.read()
+
+          backend_matches = re.findall(r'^\s*backend\s*=\s*"([^"]*)"\s*;', flake, re.M)
+          if backend_matches != ["nrfutil"]:
+              fail(f"generated flake must contain exactly one backend = \"nrfutil\"; got {backend_matches}")
+
+          version_matches = re.findall(r'^\s*ncsVersion\s*=\s*"([^"]*)"\s*;', flake, re.M)
+          if len(version_matches) != 1:
+              fail(f"generated flake must contain exactly one ncsVersion assignment; got {version_matches}")
+          generated = version_matches[0]
+
+          if "latest" in flake:
+              fail("generated flake still contains 'latest'")
+          if not strict_stable.match(generated):
+              fail(f"generated ncsVersion {generated!r} is not a strict stable release")
+          if generated != expected:
+              fail(f"generated release {generated} does not equal the independently expected release {expected}")
+
+          print(f"RESOLVED={expected}")
+          PY
+          )"
+          verify_rc=$?
+          set -e
+
+          if [ "$verify_rc" -ne 0 ]; then
+            write_hard_failure "$verify_output" \
+              "independent verification of the generated project failed"
+          fi
+
+          resolved="$(printf '%s\n' "$verify_output" | sed -n 's/^RESOLVED=//p' | tail -n 1)"
+          if [ -z "$resolved" ]; then
+            write_hard_failure "$verify_output" \
+              "independent verification did not report a resolved release"
+          fi
+
+          echo "result=pass" >>"$GITHUB_OUTPUT"
+          echo "resolved=$resolved" >>"$GITHUB_OUTPUT"
+          echo "DEST=$dest" >>"$GITHUB_ENV"
+          echo "pass" >"$VALIDATION_ROOT/last-phase"
+          echo "resolved latest NCS release: $resolved (independently verified)"
+
+      # Validation steps run only after resolve reports pass. Any failure
+      # here is a hard repository failure (never inconclusive).
+
+      - name: Evaluate generated project against current checkout
+        if: steps.resolve.outputs.result == 'pass'
+        run: |
+          echo "evaluate" >"$VALIDATION_ROOT/last-phase"
+          nix flake check -L "path:$DEST" \
+            --override-input nix-nrf-dev "path:$GITHUB_WORKSPACE"
+
+      - name: Pre-shell no-mutation check
+        if: steps.resolve.outputs.result == 'pass'
+        run: |
+          echo "pre-mutation" >"$VALIDATION_ROOT/last-phase"
+          if [ -e "$HOME/ncs" ]; then
+            echo "::error::unexpected \$HOME/ncs exists before shell entry"
+            exit 1
+          fi
+          if find "$HOME" -type d -name zephyr -print -quit | grep -q .; then
+            echo "::error::unexpected directory named 'zephyr' under isolated HOME before shell entry"
+            exit 1
+          fi
+
+      # Enter/realize the generated dev shell against the current checkout and
+      # require the four tools plus the exact read-only bootstrap outcome:
+      # exit status 1, the "not ready" diagnostic naming the resolved release,
+      # and "no changes made (--check)". `west` is only located, never run:
+      # its wrapper may bootstrap.
+      - name: Enter generated shell and run read-only bootstrap check
+        if: steps.resolve.outputs.result == 'pass'
+        run: |
+          echo "shell-entry" >"$VALIDATION_ROOT/last-phase"
+          export RESOLVED="${{ steps.resolve.outputs.resolved }}"
+          # shellcheck disable=SC2016  # ${RESOLVED} expands inside the nested sh
+          nix develop "path:$DEST" \
+            --override-input nix-nrf-dev "path:$GITHUB_WORKSPACE" \
+            --command sh -ceu '
+              command -v nrfutil >/dev/null
+              command -v nix-nrf >/dev/null
+              command -v openocd >/dev/null
+              command -v west >/dev/null
+              set +e
+              check_output="$(nix-nrf bootstrap --check 2>&1)"
+              check_rc=$?
+              set -e
+              test "$check_rc" -eq 1
+              printf "%s\n" "$check_output" | grep -F "NCS version ${RESOLVED} not ready; missing:"
+              printf "%s\n" "$check_output" | grep -F "no changes made (--check)"
+              echo "read-only bootstrap check passed (expected missing-SDK readiness)"
+            '
+
+      - name: Post-shell no-mutation check
+        if: steps.resolve.outputs.result == 'pass'
+        run: |
+          echo "post-mutation" >"$VALIDATION_ROOT/last-phase"
+          if [ -e "$HOME/ncs" ]; then
+            echo "::error::unexpected \$HOME/ncs exists after shell entry"
+            exit 1
+          fi
+          if find "$HOME" -type d -name zephyr -print -quit | grep -q .; then
+            echo "::error::unexpected directory named 'zephyr' under isolated HOME after shell entry"
+            exit 1
+          fi
+
+      # Inspect nrfutil logs when present and reject any actual sdk-manager
+      # install invocation. Search/list/toolchain-env/config/cache/log
+      # creation is allowed; SDK source/toolchain installation is not.
+      - name: Inspect nrfutil logs for SDK/toolchain install invocations
+        if: steps.resolve.outputs.result == 'pass'
+        run: |
+          echo "nrfutil-logs" >"$VALIDATION_ROOT/last-phase"
+          scan_failed=0
+          for dir in "$NRFUTIL_HOME" "$HOME/.nrfutil"; do
+            if [ -d "$dir" ]; then
+              if grep -R -I -q -E 'sdk-manager (sdk )?install|toolchain install|installing (sdk|toolchain)' "$dir" 2>/dev/null; then
+                echo "::error::nrfutil logs under $dir show an SDK/toolchain install invocation"
+                scan_failed=1
+              fi
+            fi
+          done
+          if [ "$scan_failed" -ne 0 ]; then
+            exit 1
+          fi
+          echo "no sdk-manager install invocation found in nrfutil logs"
+
+      # Job summary: PASS names the resolved release and the exact claim;
+      # INCONCLUSIVE is a bounded Nordic outage only; FAILED names the failing
+      # phase and points to its log.
+      - name: Summary
+        if: always()
+        env:
+          RESULT: ${{ steps.resolve.outputs.result }}
+          RESOLVED: ${{ steps.resolve.outputs.resolved }}
+        run: |
+          result="${RESULT:-}"
+          resolved="${RESOLVED:-}"
+          if [ "$result" = "pass" ] && [ "${{ job.status }}" = "success" ]; then
+            {
+              echo "## Latest NCS initializer - PASS"
+              echo ""
+              echo "Resolved and independently verified release: **${resolved}**"
+              echo ""
+              echo "Latest strict-stable NCS release advertised by the real"
+              echo "packaged sdk-manager was selected, independently verified,"
+              echo "rendered into valid Nix, evaluated, and entered as a"
+              echo "non-mutating shell with expected missing-SDK readiness."
+              echo ""
+              echo "> **Limitation:** this does not prove SDK/toolchain"
+              echo "> download, firmware build, or hardware."
+            } >>"$GITHUB_STEP_SUMMARY"
+          elif [ "$result" = "inconclusive" ]; then
+            {
+              echo "## Latest NCS initializer - INCONCLUSIVE"
+              echo ""
+              echo "Nordic NCS index unavailable after bounded retries; the"
+              echo "workflow exited successfully so an external Nordic outage"
+              echo "does not block repository work. Attempt count and the last"
+              echo "concise diagnostic are in the resolve step summary above."
+            } >>"$GITHUB_STEP_SUMMARY"
+          else
+            phase="$(cat "${VALIDATION_ROOT:-}/last-phase" 2>/dev/null || printf '%s' unknown)"
+            {
+              echo "## Latest NCS initializer - FAILED"
+              echo ""
+              echo "Failing phase: **${phase}**"
+              echo ""
+              echo "See the failing step's log in this job run for the exact"
+              echo "error; the resolve step wrote a failure detail under the"
+              echo "validation root before cleanup."
+            } >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Final step: remove exactly this run/attempt's unique validation root.
+      # The guard never deletes a fixed shared path.
+      - name: Cleanup validation root
+        if: always()
+        run: |
+          root="${VALIDATION_ROOT:-}"
+          if [ -z "$root" ]; then
+            exit 0
+          fi
+          case "$root" in
+            "${{ runner.temp }}"/nix-nrf-latest-*)
+              rm -rf -- "$root"
+              ;;
+            *)
+              echo "::error::refusing to remove a non-validation path: $root"
+              exit 1
+              ;;
+          esac

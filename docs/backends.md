@@ -106,6 +106,41 @@ nix run github:qarnet/nix-nrf-dev#init-project -- ./my-project \
   no generated output. `nix run ...#init-project -- --help` shows the full
   CLI.
 
+## Nightly latest validation
+
+The only place this repository performs live Nordic queries in a normal
+automated run is the hosted workflow `.github/workflows/latest-ncs-init.yml`
+("Latest NCS initializer"), scheduled nightly at `37 2 * * *` and available on
+manual `workflow_dispatch`. It asks the **real packaged sdk-manager** for the
+latest strict-stable remotely installable NCS release, runs `init-project`
+with `--ncs-version latest`, independently recomputes the expected release
+from a raw `sdk-manager search --json --skip-overhead` query with a fresh
+stdlib parser, requires the generated flake to pin exactly that release, then
+evaluates the generated project against the current checkout and enters its
+dev shell under an isolated HOME/NRFUTIL_HOME.
+
+**PASS claim.** When it passes, it proves that the latest strict-stable NCS
+release advertised by the real packaged sdk-manager was selected,
+independently verified, rendered into valid Nix, evaluated, and entered as a
+non-mutating shell with the expected missing-SDK readiness.
+
+**No-download limitation.** It never downloads or installs an SDK or
+toolchain: only `bootstrap --check` is invoked, the run proves no `$HOME/ncs`
+and no `zephyr` directory appear before or after shell entry, and nrfutil logs
+are inspected to reject any install invocation. It does not prove SDK/toolchain
+download, firmware build, or hardware.
+
+**Inconclusive vs. failure.** Only bounded Nordic sdk-manager transport/index
+outages (explicit SDK-remote-config/index-unavailable messages, DNS/name
+resolution, connection refused/reset/unreachable, TLS/transport/request
+timeout, HTTP 5xx, or command timeout status 124) — after at most three
+retries with short bounded sleeps — produce an `INCONCLUSIVE` warning and a
+successful exit, so an external Nordic outage never fails the repository.
+Malformed search data, no stable remotely installable release, wrong
+selection, generated-Nix drift, evaluation/shell failure, or any mutation
+remains a hard failure. Normal PR/CI checks (`ci.yml`) stay deterministic and
+never contact Nordic; they keep testing the explicit v3.3.0 baseline.
+
 ## Scoped toolchain environment
 
 Nordic's sdk-manager environment script exports `PYTHONHOME`, `PYTHONPATH`,

@@ -141,6 +141,26 @@ ownership and construction only.
   `tests/west-backend/run.sh` (real west workspace), `tests/hardware/run.sh`
   (self-hosted hardware runner). Dry runs are gated by
   `NIX_NRF_CLEAN_DRY_RUN=1` / `NIX_NRF_WEST_DRY_RUN=1`.
+- Hosted workflow ownership: `.github/workflows/latest-ncs-init.yml`
+  ("Latest NCS initializer") is the only normal automated run that queries
+  Nordic live. Its single `resolve` step runs the initializer with
+  `--ncs-version latest` and an independent `timeout 90 nix run .#nrfutil --
+  sdk-manager search --json --skip-overhead`, each with at most three bounded
+  retries, classifies **only** Nordic sdk-manager transport/index outages as
+  retryable/inconclusive (never generic Nix/GitHub failures, malformed data,
+  no-stable-release, wrong selection, or generated-output mismatch), and
+  recomputes the expected release with a standalone Python stdlib parser
+  (never the initializer's parser). Validation steps run only on
+  `result=pass`: generated-flake evaluation against the current checkout,
+  no-mutation checks (no `$HOME/ncs`, no `zephyr` directory) before and after
+  shell entry, the exact read-only `nix-nrf bootstrap --check` outcome
+  (exit 1, "not ready; missing:", "no changes made (--check)"), and an nrfutil
+  log scan rejecting any install invocation. HOME/NRFUTIL_HOME are isolated
+  under a unique runner-temp path per run/attempt; the exact validation root
+  is removed in the final `if: always()` step and no fixed shared path is ever
+  deleted. An `if: always()` summary step reports PASS (resolved release),
+  INCONCLUSIVE (bounded Nordic outage, successful exit), or FAILED (failing
+  phase, from a phase-marker file written by each validation step).
 
 ## 7. Adding/changing
 
@@ -173,9 +193,12 @@ ownership and construction only.
   overwrites a generated-target symlink, uses renameat2 RENAME_NOREPLACE for
   new destinations, and runs no hooks or generated commands.
 - Normal checks never perform mutable NCS workspace `west update`, pip
-  workspace setup, sdk-manager bundle installs, or hardware access (fake
-  boundaries or dry runs only); fixed Nix fetch/build inputs — such as the
-  west backend's exact Zephyr SDK package assets — may still be realized by
-  normal builds and checks.
+  workspace setup, sdk-manager bundle installs, hardware access, or any live
+  Nordic query (fake boundaries or dry runs only); fixed Nix fetch/build
+  inputs — such as the west backend's exact Zephyr SDK package assets — may
+  still be realized by normal builds and checks. Live Nordic index queries
+  exist only in the scheduled/manual `latest-ncs-init.yml` workflow with
+  explicit inconclusive-outage semantics; normal `ci.yml` remains
+  deterministic and tests the explicit v3.3.0 baseline.
 - Hardware and real clean-room runs require explicit user approval and are
   never part of the default gate.
