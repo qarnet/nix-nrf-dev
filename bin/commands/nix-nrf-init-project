@@ -1,0 +1,561 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+#
+# nix-nrf-init-project — public flake app that generates a consumer
+# nix-nrf-dev project with a concrete NCS release (never `latest`).
+#
+# Installed by nix/init-project/default.nix at $out/bin/nix-nrf-init-project
+# and published through `apps.<system>.init-project`. The wrapper pins the
+# internal exact-store configuration:
+#   NIX_NRF_INIT_NRFUTIL             exact packaged nrfutil executable
+#   NIX_NRF_INIT_WEST_VERSIONS_JSON  sorted JSON key list from versions.nix
+#   NIX_NRF_INIT_SKELETON            exact packaged skeleton directory
+# The script source contains no release literals and never resolves nrfutil
+# from PATH.
+#
+# CLI:
+#   nix-nrf-init-project [DESTINATION]
+#     [--backend nrfutil|west]
+#     [--ncs-version VERSION|latest]
+#     [--non-interactive]
+#
+#   DESTINATION defaults to `.`. --backend defaults to nrfutil.
+#   --ncs-version defaults to `latest` for both backends:
+#     - nrfutil resolves latest stable remotely through the packaged
+#       sdk-manager (`sdk-manager search --json --skip-overhead`);
+#     - west resolves latest stable supported by the packaged
+#       versions.nix metadata (never a GitHub query, never global Nordic
+#       latest when local metadata lacks it).
+#   --non-interactive is accepted and has no behavior in this non-prompting
+#   release. `argparse.ArgumentParser(allow_abbrev=False)` owns help and
+#   usage errors; invalid CLI syntax, backend, version syntax, unsupported
+#   explicit west releases, and `--force` exit 2.
+#
+#   No prompts and no overwrite option. Success writes no machine data to
+#   stdout and prints one concise stderr line naming destination, backend,
+#   and the resolved concrete NCS release. Errors use `init-project: ...`
+#   on stderr and leave no generated output.
+#
+# Valid explicit release syntax is vMAJOR.MINOR.PATCH with an optional
+# prerelease suffix beginning with `-` and containing only ASCII
+# alphanumerics, dots, and hyphens. Latest selection accepts only strict
+# stable vMAJOR.MINOR.PATCH values with no suffix. Explicit west values must
+# be exact keys in the packaged versions.nix metadata; explicit nrfutil
+# values stay offline and are not checked against the remote index.
+#
+# Filesystem safety:
+#   1. Every CLI/version/template input is resolved and validated before
+#      anything is created.
+#   2. The destination is converted to an absolute lexical path for checks
+#      while the caller spelling is kept for the success message.
+#   3. Any symlink component in the destination path, a destination symlink,
+#      a non-directory destination, or a missing/non-directory parent for a
+#      new destination is rejected.
+#   4. Both generated names (`flake.nix`, `.envrc`) are collision-checked
+#      with os.path.lexists (dangling symlinks count) before anything is
+#      written.
+#   5. Both complete files are rendered into a temporary sibling directory
+#      on the same filesystem.
+#   6. New destination: the completed temporary directory is atomically
+#      renamed with Linux renameat2(..., RENAME_NOREPLACE) via stdlib
+#      ctypes (no replacing os.rename).
+#   7. Existing directory: unrelated entries are allowed, but each generated
+#      file is installed with os.open(O_CREAT|O_EXCL|O_WRONLY|O_NOFOLLOW,
+#      0o644); only files created by this invocation are tracked, and on
+#      failure only those are removed — every pre-existing entry is
+#      preserved.
+#   8. The temporary sibling is always cleaned; generated target symlinks are
+#      never followed or overwritten; each final target is verified to remain
+#      directly under the resolved destination.
+#
+# No hook or generated command runs during generation.
+
+import argparse
+import ctypes
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+PROG = "init-project"
+
+# vMAJOR.MINOR.PATCH with an optional prerelease suffix starting with `-`
+# containing only ASCII alphanumerics, dots, and hyphens.
+RELEASE_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$")
+# Strict stable: vMAJOR.MINOR.PATCH with no suffix.
+STRICT_STABLE_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+$")
+
+GENERATED_NAMES = ("flake.nix", ".envrc")
+
+# linux/fs.h RENAME_NOREPLACE.
+RENAME_NOREPLACE = 1
+AT_FDCWD = -100
+
+# Candidate tags that mark a release as unstable/preview/RC. Compared per tag
+# after case normalization (exact membership), never as substring search over
+# joined tags: see nrfutil_candidates.
+BLOCKED_TAGS = frozenset({"unstable", "preview", "rc"})
+
+
+class InitError(Exception):
+    """Runtime failure printed as `init-project: ...` on stderr."""
+
+    def __init__(self, message, exit_code=1):
+        super().__init__(message)
+        self.exit_code = exit_code
+
+
+class UsageError(InitError):
+    """Invalid CLI-supplied value; exits 2 like argparse usage errors."""
+
+    def __init__(self, message):
+        super().__init__(message, exit_code=2)
+
+
+def err(message):
+    print(f"{PROG}: {message}", file=sys.stderr)
+
+
+def parse_stable_tuple(value):
+    major, minor, patch = value[1:].split(".")
+    return (int(major), int(minor), int(patch))
+
+
+def validate_search_schema(data):
+    """Validate the required sdk-manager search schema while permitting
+    unknown extra fields. Raises InitError on any malformed required class."""
+    if not isinstance(data, dict) or not isinstance(data.get("entries"), list):
+        raise InitError(
+            "malformed sdk-manager search result: expected a top-level object "
+            "with an 'entries' list"
+        )
+    for i, entry in enumerate(data["entries"]):
+        if not isinstance(entry, dict):
+            raise InitError(
+                f"malformed sdk-manager search result: entries[{i}] is not an object"
+            )
+        if not isinstance(entry.get("sdkType"), str):
+            raise InitError(
+                f"malformed sdk-manager search result: entries[{i}].sdkType is not a string"
+            )
+        if not isinstance(entry.get("sdkVersion"), str):
+            raise InitError(
+                f"malformed sdk-manager search result: entries[{i}].sdkVersion is not a string"
+            )
+        tags = entry.get("tags")
+        if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
+            raise InitError(
+                f"malformed sdk-manager search result: entries[{i}].tags is not a string list"
+            )
+        sdk_status = entry.get("sdkStatus")
+        if not isinstance(sdk_status, dict):
+            raise InitError(
+                f"malformed sdk-manager search result: entries[{i}].sdkStatus is not an object"
+            )
+        if not isinstance(sdk_status.get("remote"), str):
+            raise InitError(
+                f"malformed sdk-manager search result: entries[{i}].sdkStatus.remote is not a string"
+            )
+        toolchains = entry.get("toolchains")
+        if not isinstance(toolchains, list):
+            raise InitError(
+                f"malformed sdk-manager search result: entries[{i}].toolchains is not a list"
+            )
+        for j, toolchain in enumerate(toolchains):
+            if not isinstance(toolchain, dict):
+                raise InitError(
+                    f"malformed sdk-manager search result: entries[{i}].toolchains[{j}] is not an object"
+                )
+            if not isinstance(toolchain.get("version"), str):
+                raise InitError(
+                    f"malformed sdk-manager search result: entries[{i}].toolchains[{j}].version is not a string"
+                )
+            toolchain_status = toolchain.get("status")
+            if not isinstance(toolchain_status, dict):
+                raise InitError(
+                    f"malformed sdk-manager search result: entries[{i}].toolchains[{j}].status is not an object"
+                )
+            if not isinstance(toolchain_status.get("remote"), str):
+                raise InitError(
+                    f"malformed sdk-manager search result: entries[{i}].toolchains[{j}].status.remote is not a string"
+                )
+
+
+def nrfutil_candidates(entries):
+    """Strict stable nrf candidates: sdkType nrf, strict stable version,
+    remote SDK available, at least one remote-available toolchain, and no
+    blocked tag ({unstable, preview, rc}, compared per tag after
+    normalization). Tag blocking is exact — never a substring search over the
+    joined tags — so an unrelated tag that merely contains the letters "rc"
+    (e.g. "source") cannot falsely exclude a strict stable candidate; the
+    strict version regex already rejects RC/preview version suffixes."""
+    candidates = []
+    for entry in entries:
+        if entry["sdkType"] != "nrf":
+            continue
+        version = entry["sdkVersion"]
+        if not STRICT_STABLE_RE.match(version):
+            continue
+        if entry["sdkStatus"]["remote"] != "available":
+            continue
+        if not any(tc["status"]["remote"] == "available" for tc in entry["toolchains"]):
+            continue
+        if any(tag.lower() in BLOCKED_TAGS for tag in entry["tags"]):
+            continue
+        candidates.append(version)
+    return candidates
+
+
+def resolve_nrfutil_latest():
+    """Latest stable through the exact packaged nrfutil sdk-manager search.
+    Any timeout, nonzero exit, malformed JSON, or malformed required schema
+    aborts before any filesystem write; the sdk-manager stderr detail is
+    preserved for a nonzero exit without silently falling back."""
+    nrfutil_exe = os.environ.get("NIX_NRF_INIT_NRFUTIL")
+    if not nrfutil_exe:
+        raise InitError(
+            "NIX_NRF_INIT_NRFUTIL is not set; the packaged initializer must "
+            "wrap the exact nrfutil executable"
+        )
+    try:
+        proc = subprocess.run(
+            [nrfutil_exe, "sdk-manager", "search", "--json", "--skip-overhead"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except FileNotFoundError as exc:
+        raise InitError(f"cannot run packaged nrfutil {nrfutil_exe}: {exc}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise InitError("sdk-manager search timed out after 60 seconds") from exc
+    if proc.returncode != 0:
+        detail = (
+            proc.stderr.strip()
+            or proc.stdout.strip()
+            or f"exit status {proc.returncode}"
+        )
+        raise InitError(f"sdk-manager search failed: {detail}")
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError as exc:
+        raise InitError(f"sdk-manager search returned malformed JSON: {exc}") from exc
+    validate_search_schema(data)
+    candidates = nrfutil_candidates(data["entries"])
+    if not candidates:
+        raise InitError(
+            "no stable remotely installable NCS release found in the "
+            "sdk-manager search results"
+        )
+    # Response order is untrusted: parse numeric semantic tuples and choose max
+    # (v3.4.0 beats a chronologically later v3.3.4; prereleases never win).
+    return max(candidates, key=parse_stable_tuple)
+
+
+def west_versions():
+    """Packaged west metadata key list from the wrapper's JSON (sorted attr
+    names of nix/backends/west/versions.nix)."""
+    raw = os.environ.get("NIX_NRF_INIT_WEST_VERSIONS_JSON", "")
+    if not raw:
+        raise InitError(
+            "NIX_NRF_INIT_WEST_VERSIONS_JSON is not set; the packaged "
+            "initializer must wrap the west metadata key list"
+        )
+    try:
+        versions = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise InitError(f"malformed west versions JSON: {exc}") from exc
+    if not isinstance(versions, list) or not all(isinstance(v, str) for v in versions):
+        raise InitError("west versions JSON must be a string array")
+    return versions
+
+
+def resolve_west_latest(versions):
+    """Semantic maximum among strict stable keys; malformed keys fail and a
+    metadata set without any stable key fails before writing. Never invokes
+    nrfutil or GitHub."""
+    stable = []
+    for version in versions:
+        if not RELEASE_RE.match(version):
+            raise InitError(f"malformed west metadata release key: {version!r}")
+        if STRICT_STABLE_RE.match(version):
+            stable.append(version)
+    if not stable:
+        raise InitError("west metadata has no strict stable release")
+    return max(stable, key=parse_stable_tuple)
+
+
+def resolve_version(backend, selection):
+    """Resolve the concrete NCS release for the selected backend/selection."""
+    if backend == "nrfutil":
+        if selection == "latest":
+            return resolve_nrfutil_latest()
+        return selection
+    versions = west_versions()
+    if selection == "latest":
+        return resolve_west_latest(versions)
+    if selection not in versions:
+        raise UsageError(
+            f"unsupported west release '{selection}'; supported releases: "
+            + ", ".join(versions)
+        )
+    return selection
+
+
+def validate_destination(caller_dest):
+    """Filesystem checks (steps 1-3): absolute lexical path, no symlink
+    component, real directory or creatable-under-real-parent destination."""
+    dest_abs = os.path.abspath(caller_dest)
+    parts = dest_abs.split(os.sep)
+    current = os.sep
+    for part in parts:
+        if not part:
+            continue
+        current = os.path.join(current, part)
+        if os.path.islink(current):
+            raise InitError(
+                f"refusing destination: symlink component in path: {current}"
+            )
+    parent = os.path.dirname(dest_abs)
+    if os.path.lexists(dest_abs):
+        if os.path.islink(dest_abs) or not os.path.isdir(dest_abs):
+            raise InitError(
+                f"destination exists and is not a real directory: {dest_abs}"
+            )
+        dest_exists = True
+    else:
+        if os.path.islink(parent) or not os.path.isdir(parent):
+            raise InitError(f"parent of destination is not a real directory: {parent}")
+        dest_exists = False
+    return dest_abs, parent, dest_exists
+
+
+def check_collisions(dest_abs):
+    """os.path.lexists for both target names so dangling symlinks count as
+    collisions; reject all collisions before creating either generated file."""
+    for name in GENERATED_NAMES:
+        if os.path.lexists(os.path.join(dest_abs, name)):
+            raise InitError(f"refusing to overwrite existing {name} in {dest_abs}")
+
+
+def render(backend, version):
+    """Render both complete generated files from the packaged skeleton.
+    Placeholders are replaced with json.dumps string literals, each must
+    appear exactly once, and unresolved placeholders are rejected."""
+    skeleton = os.environ.get("NIX_NRF_INIT_SKELETON", "")
+    if not skeleton or not os.path.isdir(skeleton):
+        raise InitError(
+            "NIX_NRF_INIT_SKELETON is not set; the packaged initializer must "
+            "wrap the skeleton directory"
+        )
+    template_path = os.path.join(skeleton, "flake.nix.in")
+    envrc_path = os.path.join(skeleton, ".envrc")
+    try:
+        template = Path(template_path).read_text(encoding="utf-8")
+        envrc = Path(envrc_path).read_text(encoding="utf-8")
+    except OSError as exc:
+        raise InitError(f"cannot read skeleton: {exc}") from exc
+    for placeholder in ("@BACKEND@", "@NCS_VERSION@"):
+        if template.count(placeholder) != 1:
+            raise InitError(
+                f"skeleton template must contain exactly one {placeholder} placeholder"
+            )
+    rendered = template.replace("@BACKEND@", json.dumps(backend)).replace(
+        "@NCS_VERSION@", json.dumps(version)
+    )
+    if "@BACKEND@" in rendered or "@NCS_VERSION@" in rendered:
+        raise InitError("unresolved placeholder in rendered flake template")
+    return {"flake.nix": rendered, ".envrc": envrc}
+
+
+def write_all(fd, data):
+    view = memoryview(data)
+    while view:
+        written = os.write(fd, view)
+        view = view[written:]
+
+
+def write_exclusive(path, content):
+    """Create one generated file with O_CREAT|O_EXCL|O_WRONLY|O_NOFOLLOW."""
+    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o644)
+    try:
+        write_all(fd, content.encode("utf-8"))
+    finally:
+        os.close(fd)
+
+
+def verify_target(dest_abs, name, path):
+    """Verify the final target remains a non-symlink directly under the
+    resolved destination (TOCTOU defense; never follows a generated symlink)."""
+    if os.path.islink(path):
+        raise InitError(f"generated target became a symlink: {path}")
+    if os.path.realpath(path) != os.path.join(os.path.realpath(dest_abs), name):
+        raise InitError(f"generated target escaped the destination: {path}")
+
+
+def _rollback_created(created):
+    """Remove only the files this invocation created (never pre-existing
+    entries). Best-effort: a path may already be gone or unlinkable."""
+    for path in created:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def install_into_existing(dest_abs, generated):
+    """Existing directory: install each generated file exclusively, track only
+    files created by this invocation, and on failure remove only those —
+    for both OSError (wrapped as a concise write error) and a post-create
+    InitError from verify_target (preserved unchanged). KeyboardInterrupt and
+    SystemExit are never caught."""
+    created = []
+    try:
+        for name, content in generated.items():
+            path = os.path.join(dest_abs, name)
+            fd = os.open(
+                path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o644
+            )
+            # The file is now exclusively this invocation's; a later failure
+            # must remove it. Appending before the write also covers a
+            # partial-write failure leaving the file behind.
+            created.append(path)
+            try:
+                write_all(fd, content.encode("utf-8"))
+            finally:
+                os.close(fd)
+            verify_target(dest_abs, name, path)
+    except OSError as exc:
+        _rollback_created(created)
+        raise InitError(f"cannot write generated files: {exc}") from exc
+    except InitError:
+        _rollback_created(created)
+        raise
+
+
+def renameat2_noreplace(old_path, new_path):
+    """Atomic rename via Linux renameat2(..., RENAME_NOREPLACE) through
+    stdlib ctypes. Fails without replacing when the destination appears
+    meanwhile (including as a symlink)."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    renameat2 = getattr(libc, "renameat2", None)
+    if renameat2 is None:
+        raise InitError(
+            "renameat2 is unavailable on this system; refusing to create the "
+            "destination"
+        )
+    renameat2.argtypes = [
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    ]
+    renameat2.restype = ctypes.c_int
+    result = renameat2(
+        AT_FDCWD,
+        os.fsencode(old_path),
+        AT_FDCWD,
+        os.fsencode(new_path),
+        RENAME_NOREPLACE,
+    )
+    if result != 0:
+        errnum = ctypes.get_errno()
+        raise InitError(
+            f"cannot create destination {new_path}: {os.strerror(errnum)} (errno {errnum})"
+        )
+
+
+def create_new(dest_abs, parent, generated):
+    """New destination: render into a temporary sibling on the same
+    filesystem, then atomically rename with renameat2 RENAME_NOREPLACE. The
+    temporary sibling is always cleaned."""
+    tmp = tempfile.mkdtemp(prefix=".nix-nrf-init-", dir=parent)
+    try:
+        for name, content in generated.items():
+            write_exclusive(os.path.join(tmp, name), content)
+        renameat2_noreplace(tmp, dest_abs)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def run(args):
+    # Version syntax validation happens before any resolution or write; a
+    # value other than the exact `latest` keyword must be a well-formed
+    # release.
+    if args.ncs_version != "latest" and not RELEASE_RE.match(args.ncs_version):
+        raise UsageError(
+            f"invalid release syntax '{args.ncs_version}': expected "
+            "vMAJOR.MINOR.PATCH with an optional -prerelease suffix"
+        )
+    # Filesystem validation first: local input errors never trigger a remote
+    # lookup, and nothing is created before every input is validated.
+    dest_abs, parent, dest_exists = validate_destination(args.destination)
+    check_collisions(dest_abs)
+    resolved = resolve_version(args.backend, args.ncs_version)
+    generated = render(args.backend, resolved)
+    if dest_exists:
+        install_into_existing(dest_abs, generated)
+    else:
+        create_new(dest_abs, parent, generated)
+    return resolved
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="nix-nrf-init-project",
+        allow_abbrev=False,
+        description=(
+            "Generate a nix-nrf-dev consumer project with a concrete NCS "
+            "release (never 'latest'). No prompts, no overwrite, no hooks."
+        ),
+    )
+    parser.add_argument(
+        "destination",
+        nargs="?",
+        default=".",
+        help="destination directory (default: .)",
+    )
+    parser.add_argument(
+        "--backend",
+        choices=["nrfutil", "west"],
+        default="nrfutil",
+        help="toolchain backend for the generated project (default: nrfutil)",
+    )
+    parser.add_argument(
+        "--ncs-version",
+        default="latest",
+        help=(
+            "concrete NCS release vMAJOR.MINOR.PATCH or 'latest' "
+            "(default: latest; nrfutil resolves through sdk-manager, west "
+            "through the packaged metadata)"
+        ),
+    )
+    parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="accepted for CI clarity; this release never prompts",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        resolved = run(args)
+    except InitError as exc:
+        err(str(exc))
+        return exc.exit_code
+
+    # One concise stderr line naming destination (caller spelling), backend,
+    # and the resolved concrete NCS release. No machine data on stdout.
+    print(
+        f"init-project: created {args.destination} (backend {args.backend}, "
+        f"NCS {resolved})",
+        file=sys.stderr,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

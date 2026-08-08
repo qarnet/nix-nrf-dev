@@ -11,28 +11,35 @@ ownership and construction only.
 
 - Root `flake.nix` — thin flake: inputs, `eachSystem supportedSystems`
   (`supportedSystems = [ "x86_64-linux" ]`) delegating to
-  `nix/flake/per-system.nix`, plus the non-system `templates.default` and
-  `nixosModules.udevRules` outputs.
+  `nix/flake/per-system.nix`, plus the non-system `nixosModules.udevRules`
+  output.
 - `nix/flake/per-system.nix` — per-system construction: configured Nixpkgs
   (allowUnfree + SEGGER acceptance), components, formatter/pre-commit,
-  checks, dev shells.
+  checks, dev shells, and the `apps.init-project` output.
 - `lib.<system>.mkNrfShell` — public dev-shell factory (dispatcher
   `nix/backends/default.nix`), exported via `nix/flake/per-system.nix`
   `lib` output.
 - `packages.<system>.nix-nrf` — standalone CLI facade (`nix run .# -- ...`).
+- `apps.<system>.init-project` — dynamic project initializer app
+  (`nix run .#init-project -- ./my-project`), backed by the
+  `nix/init-project/` module. Generates a consumer flake pinned to a
+  concrete NCS release (never `latest`); see `docs/backends.md`.
 - `nixosModules.udevRules` — convenience module that sets only
   `services.udev.packages = [ self.packages.<system>.udev-rules ]`; it never
   creates the `plugdev` group or modifies users. Direct
   `services.udev.packages` configuration is the primary documented path
   (`docs/hardware.md`).
-- `templates.default` — consumer skeleton flake.
 
 ## 2. Construction flow
 
 - `nix/flake/components.nix` is the single per-system composition root: it
   builds OpenOCD (wrapped/unwrapped), udev rules, the composed nrfutil, the
-  standalone `nix-nrf` dispatcher, west metadata/builders, and the public
-  `mkNrfShell`.
+  standalone `nix-nrf` dispatcher, west metadata/builders, the public
+  `mkNrfShell`, and the `initProject` package.
+- `nix/init-project/default.nix` packages the initializer script with the
+  exact packaged nrfutil store executable, the west metadata key list, and
+  the skeleton under `$out/share/nix-nrf/init-project`; `per-system.nix`
+  publishes only `apps.<system>.init-project` (no `packages.init-project`).
 - `nix/flake/dev-shells.nix` composes `mkNrfShell` into the `default` and
   `clean-env-test` shells.
 - `nix/flake/checks/*.nix` build the check derivations; `checks/default.nix`
@@ -63,6 +70,13 @@ ownership and construction only.
   `doctor.nix`, `probes.nix`. Backend constructors inject exact command
   module store paths (`versionsCommand`, `bootstrapCommand`); the doctor and
   the dispatcher share one identical bootstrap store path per shell.
+- `nix/init-project/` — the public initializer: `default.nix` (packaging and
+  exact-store wrapper wiring), `skeleton/flake.nix.in` (render template with
+  `@BACKEND@`/`@NCS_VERSION@` placeholders replaced by `json.dumps` string
+  literals) and `skeleton/.envrc` (`use flake`). The script owns CLI/version
+  resolution, sdk-manager schema validation, semantic-max selection, and the
+  collision/symlink-safe filesystem algorithm; it never executes hooks or
+  generated commands.
 - `nix/hardware/` — `openocd.nix` (from-source OpenOCD build) and
   `udev-rules.nix` (relocation package for the pinned 60-openocd.rules).
 - `nix/lib/mk-python-command.nix` — narrow packaging helper for the internal
@@ -80,10 +94,13 @@ ownership and construction only.
   `bin/backends/west/nix-nrf-west-versions` — backend command scripts.
 - `bin/commands/nix-nrf-doctor`, `bin/commands/nix-nrf-probes` — shared
   command scripts.
-- Script basenames are stable; each script is packaged by exactly one Nix
-  command module and installed **only** under `$out/libexec/nix-nrf/` (no
-  standalone `$out/bin` commands) so public invocation stays exclusively
-  through the `nix-nrf` facade.
+- `bin/commands/nix-nrf-init-project` — the standalone public initializer
+  script, packaged by `nix/init-project/default.nix` (the only script
+  installed as a public `$out/bin` command).
+- Script basenames are stable; each shared/backend script is packaged by
+  exactly one Nix command module and installed **only** under
+  `$out/libexec/nix-nrf/` (no standalone `$out/bin` commands) so public
+  invocation stays exclusively through the `nix-nrf` facade.
 
 ## 6. Tests
 
@@ -98,17 +115,22 @@ ownership and construction only.
   declared option or smuggled config path widens either asserted tree and
   fails — that a synthetic undeclared config definition is rejected by the
   enabled `_module.check`, and that the module contributes exactly the
-  expected package with an empty list when not imported), and `udev-vm.nix`
+  expected package with an empty list when not imported), `udev-vm.nix`
   (booted NixOS VM clean-room gate: direct `services.udev.packages`
   activation of the packaged rule under real systemd-udevd with explicit
   `plugdev`, proving activation and an otherwise clean system — no project
-  tools, units, or device-event semantics).
+  tools, units, or device-event semantics), and `init-project.nix`
+  (deterministic fake-boundary suite run twice: raw source standalone and
+  the packaged public binary constructed with a fake nrfutil search package
+  as `nrfutilPackage` and the real west metadata).
   `nix/flake/checks/default.nix`
   composes the exact check set.
 - Unit tests in `tests/unit/` run fake-boundary subprocess suites (sandboxed
   stdlib) wired into the corresponding checks; `tests/fixtures/`
   `west-workspace.py` is the shared fake workspace creator covered by
-  `tests/unit/test_west_workspace_fixture.py` inside `checks.west-bootstrap-tests`.
+  `tests/unit/test_west_workspace_fixture.py` inside `checks.west-bootstrap-tests`,
+  and `nrfutil-search.py` is the deterministic sdk-manager-search fake behind
+  `checks.init-project-tests` (also reused by the raw-source unit run).
 - `tests/tcl/test_flash_recipes.tcl` sources the real `tcl/` flash recipes
   under tclsh with fake OpenOCD commands and asserts command order, argument
   preservation (incl. paths with spaces), conditionals, and UICR safety
@@ -124,7 +146,8 @@ ownership and construction only.
 
 - New west metadata release: add an entry to
   `nix/backends/west/versions.nix` (version, Python, SDK assets, hashes,
-  requirements, constraints); no builder or command code changes.
+  requirements, constraints); no builder or command code changes, and the
+  initializer's west `latest` selection picks it up automatically.
 - New backend: add `nix/backends/<name>/` with a constructor, register it in
   the dispatcher's supported list, and keep the no-cross-import rule.
 - New shared command: add `bin/commands/<name>` + a module using
@@ -136,13 +159,19 @@ ownership and construction only.
 
 - `nrfutil` is the default backend; omitted and explicit `backend =
   "nrfutil"` produce identical derivations.
-- `ncsVersion` is required for both backends.
+- `ncsVersion` is required for both backends (`mkNrfShell`); the initializer
+  resolves `latest` to one concrete release, and generated projects never
+  contain `ncsVersion = "latest"`.
 - Shell entry stays non-mutating (read-only `--check` bootstrap path);
   mutation happens only through an explicit `nix-nrf bootstrap` invocation or
   the scoped `west` wrapper, and is approval-gated (interactive confirmation
   unless `NIX_NRF_BOOTSTRAP_YES=1` / `--yes`) when state is missing.
 - No backend silently falls back: unsupported values fail Nix evaluation
-  naming the supported list.
+  naming the supported list, and a failed initializer latest lookup aborts
+  generation instead of substituting a hard-coded version.
+- The initializer never overwrites (`--force` is rejected), never follows or
+  overwrites a generated-target symlink, uses renameat2 RENAME_NOREPLACE for
+  new destinations, and runs no hooks or generated commands.
 - Normal checks never perform mutable NCS workspace `west update`, pip
   workspace setup, sdk-manager bundle installs, or hardware access (fake
   boundaries or dry runs only); fixed Nix fetch/build inputs — such as the

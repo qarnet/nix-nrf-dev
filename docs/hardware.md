@@ -142,5 +142,5 @@ The repository includes two canonical flash recipes:
 
 ## See also
 
-- [README](../README.md) — quick start and template usage
+- [README](../README.md) — quick start and project initialization
 - [backends.md](backends.md) — toolchain backends, selection, bootstrap

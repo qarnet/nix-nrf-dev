@@ -13,14 +13,17 @@ wrapper, and the NCS toolchain (via nrfutil sdk-manager for the configured NCS
 version; lazily bootstrapped by `west` when missing). Probe identification is
 the `nix-nrf probes` subcommand; hardware-access diagnostics is the
 `nix-nrf doctor` subcommand (read-only, never runs `sudo`); there are no
-standalone `nrf-probes`/`nrf-doctor` commands.
+standalone `nrf-probes`/`nrf-doctor` commands. New consumer projects are
+generated with `nix run .#init-project -- ./my-project` (the
+`apps.<system>.init-project` app).
 
 ## Repository architecture
 
 Source ownership and construction flow are documented in
 [docs/development/architecture.md](docs/development/architecture.md):
 `nix/flake/` (per-system construction), `nix/backends/` (nrfutil/west
-dispatchers and modules), `nix/commands/`, `nix/hardware/`,
+dispatchers and modules), `nix/commands/`, `nix/init-project/` (the public
+initializer app, skeleton, and packaging), `nix/hardware/`,
 `nix/lib/mk-python-command.nix`, `bin/`, and the test layout. Historical
 phase handoffs live in `docs/development/archive/` and are not current
 architecture.
@@ -32,6 +35,8 @@ Formatting and lint hooks run automatically via `pre-commit` (wired through
 
 ```bash
 nix fmt                                 # format all files (alejandra for Nix, black for Python)
+python3 tests/unit/test_nix_nrf_init_project.py  # initializer unit suite (raw source mode)
+nix build -L .#checks.x86_64-linux.init-project-tests  # raw + packaged initializer gate
 nix flake check --all-systems --no-build -L  # evaluate all checks without building (fast pass)
 nix flake check -L                      # build and run all checks (incl. doctor-tests
                                         # and the udev-rules byte-for-byte check)

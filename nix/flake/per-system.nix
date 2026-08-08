@@ -36,6 +36,7 @@
     westBootstrapBuilder
     westVersionsCommandBuilder
     mkNrfShell
+    initProject
     ;
 
   treefmtEval = treefmt-nix.lib.evalModule pkgs ../../treefmt.nix;
@@ -44,13 +45,7 @@
     src = ../../.;
     hooks = {
       alejandra.enable = true;
-      deadnix = {
-        enable = true;
-        # templates/default/flake.nix is a consumer skeleton; its
-        # conventional `self`/`nixpkgs` destructuring is idiomatic even
-        # when unused.
-        excludes = ["^templates/"];
-      };
+      deadnix.enable = true;
       statix.enable = true;
       black.enable = true;
       shellcheck = {
@@ -122,10 +117,21 @@
         nrfUdevRules
         ;
     };
+    initProject = import ./checks/init-project.nix {
+      inherit
+        pkgs
+        westBackendVersions
+        ;
+    };
     formatting = treefmtEval.config.build.check self;
     inherit pre-commit;
   };
 in {
+  apps.init-project = {
+    type = "app";
+    program = "${initProject}/bin/nix-nrf-init-project";
+  };
+
   packages = {
     inherit
       openocd-master

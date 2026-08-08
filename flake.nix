@@ -46,11 +46,6 @@
         }
     )
     // {
-      templates.default = {
-        path = ./templates/default;
-        description = "nRF firmware project with NCS toolchain shell and openocd-master flashing";
-      };
-
       # Minimal NixOS module: activate the packaged upstream OpenOCD
       # udev rules (60-openocd.rules) for the current system, so CMSIS-DAP
       # and J-Link nodes get MODE="660", GROUP="plugdev", TAG+="uaccess"

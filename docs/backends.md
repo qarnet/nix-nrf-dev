@@ -4,7 +4,7 @@
 environment is provided, and a `ncsVersion` that is **required** in every
 configuration: each project pins an explicit NCS release — there is no
 `"latest"` alias or default. NCS **v3.3.0** is the tested baseline used by
-this repository's own shells and template.
+this repository's own shells, hardware harnesses, and clean-room tests.
 
 | Backend | Status | Toolchain provision | Supported releases |
 |---------|--------|---------------------|--------------------|
@@ -70,6 +70,42 @@ workspace and venv (`--yes` approves up front, `--check` is a read-only
 readiness check). `nix-nrf versions` lists the west backend's supported
 releases and never invokes nrfutil.
 
+## Project initialization (`init-project`)
+
+`nix run ...#init-project` generates a consumer project with a concrete NCS
+release, so you never hand-write the `mkNrfShell` call or copy a stale
+version. The initializer is a separate public flake app (not a `nix-nrf`
+subcommand) with no prompts and no overwrite option:
+
+```sh
+nix run github:qarnet/nix-nrf-dev#init-project -- ./my-project
+nix run github:qarnet/nix-nrf-dev#init-project -- ./my-project \
+  --backend west --ncs-version v3.3.0
+```
+
+- `--backend` defaults to `nrfutil`; `--ncs-version` defaults to `latest`,
+  which resolves to one concrete release and is written into the generated
+  flake — generated projects never contain `ncsVersion = "latest"`.
+- **nrfutil `latest`** asks the exact packaged sdk-manager
+  (`sdk-manager search --json --skip-overhead`) for the newest stable
+  remotely installable NCS release. sdk-manager is the dynamic authority; a
+  failed or inconclusive lookup aborts generation — there is no silent
+  fallback to a hard-coded version. This is distinct from the repository's
+  **tested baseline** (v3.3.0): latest means "newest stable advertised as
+  remotely installable", not "hardware-tested".
+- **west `latest`** selects the newest release present in the local
+  `nix/backends/west/versions.nix` metadata (numeric semantic maximum over
+  strict stable keys). It never queries GitHub or Nordic's global latest, and
+  never selects a release the local west metadata does not support. An
+  explicit `--ncs-version` must be an exact key in that metadata.
+- An exact `--ncs-version` is a fully offline generation path for both
+  backends; the nrfutil backend does not check explicit values against the
+  remote index.
+- Existing `flake.nix`/`.envrc` collisions, symlink escapes, and invalid
+  backend/version values abort with `init-project: ...` on stderr and leave
+  no generated output. `nix run ...#init-project -- --help` shows the full
+  CLI.
+
 ## Scoped toolchain environment
 
 Nordic's sdk-manager environment script exports `PYTHONHOME`, `PYTHONPATH`,
@@ -122,4 +158,4 @@ composition that avoids J-Link.
 ## See also
 
 - [hardware.md](hardware.md) — probe access, flashing, recovery safety
-- [README](../README.md) — quick start and template usage
+- [README](../README.md) — quick start and project initialization

@@ -6,8 +6,9 @@ NixOS API) is accepted and committed at `f69edeb`. Phase 2 (udev package,
 `evalModules`, and full-system evaluation) is accepted and committed at
 `9175995`. Phase 3 (NixOS VM clean-room udev activation) is accepted and
 committed on this branch. Phase 4 (nrfutil versions command coverage) is
-accepted and committed on this branch; Phase 5 (dynamic `init-project` app)
-is next and not started.
+accepted and committed on this branch. Phase 5 (dynamic `init-project` app)
+is accepted and committed on this branch. Phase 6 (nightly latest-NCS
+initializer workflow) is next and not started.
 
 Branch: `feat/nixos-safety-and-init`, rebased onto `main` at `a3fedcb`
 (after the CMSIS-DAP transport and hardware-preflight work from PR #4/#5

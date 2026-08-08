@@ -9,6 +9,7 @@
   udevVm,
   nrfutil,
   west,
+  initProject,
   formatting,
   pre-commit,
 }: {
@@ -42,5 +43,6 @@
     west-backend-quoting
     west-shell-boundary
     ;
+  inherit (initProject) init-project-tests;
   inherit formatting pre-commit;
 }
