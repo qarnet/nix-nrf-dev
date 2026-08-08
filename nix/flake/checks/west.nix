@@ -1,5 +1,6 @@
-# west-backend regression gates: bootstrap/versions/metadata/quoting tests
-# and the public west shell boundary gate.
+# west-backend regression gates: bootstrap/versions/metadata/quoting tests,
+# the pure target/toolchain consistency gate, and the public west shell
+# boundary gate.
 {
   pkgs,
   mkNrfShell,
@@ -150,6 +151,63 @@
       else ''
         echo "west-backend metadata check FAILED" >&2
         echo "$detail" >&2
+        exit 1
+      ''
+    );
+
+  # Pure Nix bidirectional target/archive consistency gate over the west
+  # backend metadata, using the pinned Nixpkgs `lib.debug.runTests`
+  # (only attrs beginning `test` run; the return value is the list of
+  # failures, each with `name`/`expected`/`result`). For every supported
+  # release each declared `zephyrSdk.targets` entry must have a matching
+  # x86_64-linux toolchain archive target, and each listed toolchain
+  # archive target must be declared — membership semantics, not
+  # list-order equality (metadata order stays meaningful for packaging,
+  # but coverage must not depend on matching order). A nonempty failure
+  # list fails the derivation with the `builtins.toJSON` failure list,
+  # preserving `name`/`expected`/`result` so missing/extra targets and
+  # affected releases stay visible. Pure evaluation: fetches and builds
+  # nothing.
+  westTargetToolchainConsistency = let
+    archiveTargetsOf = entry: map (t: t.target) entry.zephyrSdk.assets."x86_64-linux".toolchains;
+    # Per release: declared targets absent from the archive targets.
+    missingArchives =
+      pkgs.lib.mapAttrs (
+        _: entry: builtins.filter (t: !(builtins.elem t (archiveTargetsOf entry))) entry.zephyrSdk.targets
+      )
+      westBackendVersions;
+    # Per release: archive targets absent from the declared targets.
+    undeclaredArchives =
+      pkgs.lib.mapAttrs (
+        _: entry: builtins.filter (t: !(builtins.elem t entry.zephyrSdk.targets)) (archiveTargetsOf entry)
+      )
+      westBackendVersions;
+    emptyPerRelease = pkgs.lib.mapAttrs (_: _: []) westBackendVersions;
+    failures = pkgs.lib.debug.runTests {
+      testEveryDeclaredTargetHasToolchainArchive = {
+        expr = missingArchives;
+        expected = emptyPerRelease;
+      };
+      testEveryToolchainArchiveTargetIsDeclared = {
+        expr = undeclaredArchives;
+        expected = emptyPerRelease;
+      };
+    };
+  in
+    pkgs.runCommand "west-target-toolchain-consistency"
+    {
+      failuresJson = builtins.toJSON failures;
+    }
+    (
+      if failures == []
+      then ''
+        echo "west target/toolchain consistency: every declared target has a toolchain archive and every archive target is declared" >&2
+        echo "releases covered: ${builtins.concatStringsSep ", " (builtins.attrNames westBackendVersions)}" >&2
+        mkdir -p "$out"
+      ''
+      else ''
+        echo "west target/toolchain consistency FAILED (${builtins.toString (builtins.length failures)} test failure(s))" >&2
+        echo "$failuresJson" >&2
         exit 1
       ''
     );
@@ -527,6 +585,7 @@ in {
   west-bootstrap-tests = westBootstrapTests;
   west-versions-tests = westVersionsTests;
   west-backend-metadata = westBackendMetadataCheck;
+  west-target-toolchain-consistency = westTargetToolchainConsistency;
   west-backend-quoting = westBackendQuotingCheck;
   west-shell-boundary = westShellBoundaryCheck;
 }

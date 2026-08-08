@@ -10,7 +10,10 @@ accepted and committed on this branch. Phase 5 (dynamic `init-project` app)
 is accepted and committed on this branch. Phase 6 (nightly latest-NCS
 initializer workflow) is accepted and committed on this branch (per
 `docs/development/archive/latest-ncs-init-workflow-handoff.md`). Phase 7
-(west metadata `lib.debug.runTests` gate) is next and not started.
+(west metadata `lib.debug.runTests` gate) is accepted and committed on this
+branch (per
+`docs/development/archive/west-target-toolchain-consistency-handoff.md`).
+Phase 8 (clean-room resource telemetry) is next and not started.
 
 Branch: `feat/nixos-safety-and-init`, rebased onto `main` at `a3fedcb`
 (after the CMSIS-DAP transport and hardware-preflight work from PR #4/#5

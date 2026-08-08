@@ -107,7 +107,9 @@ ownership and construction only.
 - Flake checks split by domain: `nix/flake/checks/` — `backend-selector.nix`
   (evaluation gate), `nrfutil.nix` (bootstrap tests + quoting + shell
   boundary), `west.nix`
-  (bootstrap/versions/metadata/quoting/shell-boundary), `core.nix`
+  (bootstrap/versions/metadata/quoting/shell-boundary + pure
+  `lib.debug.runTests` bidirectional declared-target/toolchain-archive
+  consistency per release), `core.nix`
   (doctor/help/probes/udev wiring, fake-OpenOCD flash-recipe semantic tests,
   + public NixOS module evaluation), `udev-module.nix` (isolated
   `lib.evalModules` gate proving `nixosModules.udevRules` exposes exactly the

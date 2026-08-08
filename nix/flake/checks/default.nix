@@ -40,6 +40,7 @@
     west-bootstrap-tests
     west-versions-tests
     west-backend-metadata
+    west-target-toolchain-consistency
     west-backend-quoting
     west-shell-boundary
     ;
