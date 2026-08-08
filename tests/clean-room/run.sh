@@ -18,7 +18,7 @@
 # into an isolated HOME (never the developer's $HOME/ncs), and by default
 # removes script-created temporary state on exit. It never flashes hardware.
 #
-# Resource telemetry (Phase 8): the script records exact integer KiB values
+# Resource telemetry: the script records exact integer KiB values
 # for filesystem free space and mutable-path sizes, bootstrap/build elapsed
 # seconds, and the realized clean-env-test Nix closure. Telemetry always
 # prints to the run logs; when NIX_NRF_CLEAN_TELEMETRY_FILE is set, the

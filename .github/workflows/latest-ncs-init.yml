@@ -17,7 +17,7 @@
 # Explicit limitation: this does not prove SDK/toolchain download, firmware
 # build, or hardware.
 #
-# Design decisions from docs/development/latest-ncs-init-workflow-handoff.md:
+# Key invariants:
 #   - one `resolve` step owns both live operations (initializer, then an
 #     independent `nrfutil sdk-manager search`) with at most three bounded
 #     retries each (10 s sleeps) and a strict Nordic-outage classifier;

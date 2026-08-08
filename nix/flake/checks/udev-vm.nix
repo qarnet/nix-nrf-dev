@@ -8,10 +8,10 @@
 # activation and a clean system only: no hardware passthrough, no project
 # tools, no network dependency, and no real daemon hotplug.
 #
-# Since Phase 9 the check also proves synthetic rule semantics: two
-# hand-constructed umockdev USB fixtures are replayed with the pinned umockdev
-# preload sandbox (0.19.3, referenced by its exact store binary — deliberately
-# not added to systemPackages) against the pinned systemd (261.1)
+# The check also proves synthetic rule semantics: two hand-constructed
+# umockdev USB fixtures are replayed with the pinned umockdev preload sandbox
+# (0.19.3, referenced by its exact store binary — deliberately not added to
+# systemPackages) against the pinned systemd (261.1)
 # `udevadm test --action=add --json=short` and the activated
 # `/etc/udev/rules.d/60-openocd.rules` tree. The CMSIS-DAP fixture must
 # receive the upstream rule's `GROUP="plugdev"`, `MODE="660"`, and
@@ -21,10 +21,12 @@
 # rule assignment and command queuing, not resulting ACL application; no
 # kernel device enters the VM's device graph.
 #
-# `udevadm verify --resolve-names=early` is deliberately used against the
-# activated rule: with early name resolution the pinned systemd (261.1)
-# rejects the rule when `plugdev` does not exist and accepts it once the
-# group does, proving NSS group resolution end-to-end.
+# `udevadm verify --resolve-names=early` runs against the activated rule tree
+# with the declared `plugdev` policy: early name resolution fails on
+# unresolved group names, so a successful verify proves the activated tree
+# resolves the explicit `plugdev` policy end-to-end. This check proves
+# acceptance with the declared group only; it does not exercise a host without
+# the group.
 {
   pkgs,
   nrfUdevRules,
@@ -32,9 +34,11 @@
   # One immutable store fixture per product string, built from the same
   # structure. Format is umockdev-record's: `P:` sysfs path, `N:` device node
   # with hex contents, `E:` udev property, `A:` ASCII sysfs attribute with
-  # backslash escaping (`\n` decodes to a newline). Values were proven in the
-  # Phase 9 spike (docs/development/archive/udev-umockdev-semantics-handoff.md);
-  # no data is captured from a physical device.
+  # backslash escaping (`\n` decodes to a newline). The USB identity is
+  # hand-constructed to be XIAO-compatible (Seeed Studio vendor/product ids
+  # and a CMSIS-DAP-style interface): the upstream rule matches on the generic
+  # `ATTRS{product}=="*CMSIS-DAP*"` semantics, so a synthetic XIAO identity is
+  # required to exercise it. No data is captured from a physical device.
   mkUsbFixture = name: product:
     pkgs.writeText name ''
       P: /devices/virtual/usb/usb1/1-9

@@ -121,7 +121,9 @@ ownership and construction only.
   (booted NixOS VM clean-room gate: direct `services.udev.packages`
   activation of the packaged rule under real systemd-udevd with explicit
   `plugdev`, proving activation and an otherwise clean system — no project
-  tools, units, or device-event semantics), and `init-project.nix`
+  tools or units — plus synthetic positive/negative CMSIS-DAP rule semantics
+  replayed via umockdev against real `udevadm test`, with no real daemon
+  hotplug or hardware), and `init-project.nix`
   (deterministic fake-boundary suite run twice: raw source standalone and
   the packaged public binary constructed with a fake nrfutil search package
   as `nrfutilPackage` and the real west metadata).

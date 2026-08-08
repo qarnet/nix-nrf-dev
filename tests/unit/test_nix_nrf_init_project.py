@@ -567,7 +567,7 @@ class InitProjectTestCase(unittest.TestCase):
         self.assert_in_stderr(proc, "unsupported west release 'v9.9.9'")
         self.assert_no_destination(unsupported)
 
-    # 4a. An unrelated tag that merely contains the letters "rc" (e.g.
+    # An unrelated tag that merely contains the letters "rc" (e.g.
     #     "source") does not exclude a strict stable candidate: blocking is
     #     exact per normalized tag ({unstable, preview, rc}), never a
     #     substring search. The strict version regex separately rejects RC/
