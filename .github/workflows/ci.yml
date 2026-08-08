@@ -1,6 +1,6 @@
 # CI — the "clone and it works" gate.
 # Builds all packages (cached via Cachix qarnet), runs smoke tests, flake
-# checks, template-init, devshell-enter, real-OpenOCD source-compat gates,
+# checks, project-init, devshell-enter, real-OpenOCD source-compat gates,
 # and fake-OpenOCD semantic flash-recipe tests. Runs on PRs, pushes to main,
 # and nightly (scheduled regression coverage of the pinned inputs/builds —
 # the openocd rev/hash is a fixed pin and cannot drift).
@@ -178,18 +178,23 @@ jobs:
           fi
           echo "OK: real OpenOCD sourced the recipe; exit $rc was the expected probe-open failure"
 
-      # A4 — template-init: verify `nix flake init -t` produces a working flake.
-      # Both the template source and the generated flake's nix-nrf-dev input
-      # point at the current checkout (path:$repo), so PR CI validates this
-      # feature before it exists on remote main. The path override is
-      # read-only; nothing is written back to the repository.
-      - name: Template init
+      # A4 — project-init: verify `nix run .#init-project` generates a working
+      # flake with a concrete NCS release into a script-created temporary root
+      # (never a fixed caller path), that the generated project evaluates
+      # against the current checkout (path:$repo, read-only; nothing is
+      # written back to the repository), and that its dev shell provides the
+      # expected tools without the removed nrf-probes. The exact
+      # `--ncs-version v3.3.0` keeps generation offline; the dev shell entry
+      # runs only the read-only bootstrap check, so this step never installs
+      # or downloads SDK/toolchain bundles.
+      - name: Project init and generated-flake check
         run: |
           repo="$(pwd)"
-          rm -rf /tmp/tpltest
-          mkdir -p /tmp/tpltest
-          cd /tmp/tpltest
-          nix flake init -t "path:$repo"
-          nix flake check -L --override-input nix-nrf-dev "path:$repo"
-          nix develop --override-input nix-nrf-dev "path:$repo" --command sh -c "command -v openocd && command -v nix-nrf && ! command -v nrf-probes"
-          nix develop --override-input nix-nrf-dev "path:$repo" --command sh -c "nix-nrf probes --help && nix-nrf bootstrap --help" >/dev/null
+          tmp_root="$(mktemp -d)"
+          trap 'rm -rf -- "$tmp_root"' EXIT
+          dest="$tmp_root/project"
+          nix run .#init-project -- "$dest" \
+            --backend nrfutil --ncs-version v3.3.0 --non-interactive
+          nix flake check -L "path:$dest" --override-input nix-nrf-dev "path:$repo"
+          nix develop "path:$dest" --override-input nix-nrf-dev "path:$repo" \
+            --command sh -ceu 'command -v openocd; command -v nix-nrf; nix-nrf probes --help >/dev/null; nix-nrf bootstrap --help >/dev/null; ! command -v nrf-probes'

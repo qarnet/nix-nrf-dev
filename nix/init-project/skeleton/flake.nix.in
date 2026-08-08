@@ -1,0 +1,19 @@
+{
+  description = "nRF firmware project";
+
+  # Single project-owned input: nix-nrf-dev. The generated flake intentionally
+  # avoids a second Nixpkgs/flake-utils input; nix-nrf-dev pins its own and
+  # consumers can follow it if they want to reuse their own Nixpkgs revision.
+  inputs.nix-nrf-dev.url = "github:qarnet/nix-nrf-dev";
+
+  outputs = {nix-nrf-dev, ...}: {
+    devShells.x86_64-linux.default =
+      nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
+        backend = @BACKEND@;
+        ncsVersion = @NCS_VERSION@;
+        # autoBootstrap = true;
+        # packages = [];
+        # extraShellHook = "";
+      };
+  };
+}

@@ -36,14 +36,20 @@ remains the proven direction in `docs/development/west-backend-status.md`.
 - **nRF54 recovery**: document/install the `nrfutil device recover` J-Link
   fallback; research a TCL-native nRF54L CTRL-AP recovery as a potential
   upstream contribution.
-- **Templates**: additional `templates.*` variants (board preselected, sample
-  `west.yml`, VS Code settings) once the default template experience is
-  proven.
+- **Initializer profiles**: additional `init-project` profiles (board
+  preselected, sample `west.yml`, VS Code settings) once the default
+  initializer experience is proven.
 - **Doctor extras**: `ZEPHYR_BASE`/multilib checks, a shellHook "warn once"
   mode, and a standalone `packages.nrf-doctor` output.
 - **Automation hygiene**: scheduled version-discovery PRs (needs workflow
   permissions and failure-semantics design); parallel-bootstrap locking
   verification for sdk-manager installs.
+- **Stable sdk-nrf tag detection + west metadata PR automation**: a future
+  workflow that detects new stable `sdk-nrf` release tags and opens a PR
+  carrying reviewed west metadata (`nix/backends/west/versions.nix` entries
+  with asset URLs, hashes, and tests) instead of manual metadata updates.
+  Non-binding; runtime GitHub tag lookup is explicitly out of scope for the
+  initializer itself.
 
 Current behavior and proof for what already exists live in
 `docs/development/nrfutil-backend-status.md`,

@@ -394,16 +394,53 @@ def user_info():
     return {"uid": uid, "name": name, "groups": groups}
 
 
-def remediation(candidates, sdk):
-    """Remediation text; udev guidance only when a candidate is blocked."""
+def nix_attr_quote(name):
+    """Quote a username as a Nix double-quoted string (defensive; real
+    usernames are simple, but this keeps the remediation copyable)."""
+    return (
+        '"'
+        + name.replace("\\", "\\\\").replace('"', '\\"').replace("${", "\\${")
+        + '"'
+    )
+
+
+def remediation(candidates, sdk, user):
+    """Remediation text; udev guidance only when a candidate is blocked.
+
+    NixOS guidance is copyable configuration and always makes the explicit
+    `plugdev` group + membership visible before the user rebuilds: the
+    packaged rule is the unmodified upstream OpenOCD 60-openocd.rules,
+    which assigns MODE="660", GROUP="plugdev", TAG+="uaccess", and NixOS
+    does not create `plugdev`. Direct services.udev.packages is the primary
+    path; the named module is a convenience equivalent. Never runs sudo.
+    """
     items = []
     if any(not c["accessible"] for c in candidates):
-        items.append("NixOS:\n  imports = [ nix-nrf-dev.nixosModules.default ];")
+        username = user["name"] or "<username>"
+        quoted = nix_attr_quote(username)
+        items.append(
+            "NixOS (plugdev is required by upstream OpenOCD rules):\n"
+            "  users.groups.plugdev = {};\n"
+            f"  users.users.{quoted}.extraGroups = [ \"plugdev\" ];\n"
+            "\n"
+            "  Direct, least-intrusive integration:\n"
+            "  services.udev.packages = [\n"
+            "    nix-nrf-dev.packages.${pkgs.stdenv.hostPlatform.system}.udev-rules\n"
+            "  ];\n"
+            "\n"
+            "  Module alternative:\n"
+            "  imports = [ nix-nrf-dev.nixosModules.udevRules ];\n"
+            "\n"
+            "  Rebuild, log out/in or reboot, then replug probe."
+        )
         items.append(
             "Other Linux:\n"
+            "  Ensure the `plugdev` group exists and that the current user is a\n"
+            "  member, using your distribution's documented procedure.\n"
             "  nix build .#udev-rules\n"
-            "  Install result/lib/udev/rules.d/60-openocd.rules using your distribution's\n"
-            "  documented udev procedure, reload rules, then replug probe."
+            "  Install result/lib/udev/rules.d/60-openocd.rules using your\n"
+            "  distribution's documented udev procedure; if the group membership\n"
+            "  changed, log out/in or reboot, reload rules, then replug probe."
         )
         rules_pkg = os.environ.get("NIX_NRF_DOCTOR_UDEV_RULES")
         if rules_pkg:
@@ -502,7 +539,7 @@ def main(argv=None):
     candidates = build_candidates(sysfs_root(), dev_root())
     hardware = hardware_status(candidates)
     hardware["candidates"] = candidates
-    items = remediation(candidates, sdk)
+    items = remediation(candidates, sdk, user)
     ok = sdk["status"] in ("pass", "skip") and hardware["status"] == "pass"
 
     result = {

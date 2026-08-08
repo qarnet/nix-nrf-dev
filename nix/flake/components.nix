@@ -82,6 +82,15 @@
     # West backend version metadata attrset (internal module wiring).
     westVersions = westBackendVersions;
   };
+
+  # Public dynamic project initializer app: generates a consumer flake with a
+  # concrete NCS release (never `latest`) from explicit runtime inputs. See
+  # nix/init-project/default.nix; published only as apps.<system>.init-project.
+  initProject = import ../init-project/default.nix {
+    inherit pkgs;
+    nrfutilPackage = nrfutil;
+    westVersions = westBackendVersions;
+  };
 in {
   inherit
     openocd-master
@@ -96,5 +105,6 @@ in {
     westBootstrapBuilder
     westVersionsCommandBuilder
     mkNrfShell
+    initProject
     ;
 }

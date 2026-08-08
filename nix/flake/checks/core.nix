@@ -134,10 +134,13 @@
       mkdir -p "$out"
     '';
 
-  # Udev-rule gate: builds the relocation package, verifies the
-  # destination exists, and proves the installed rule is byte-for-byte
-  # identical to the pinned OpenOCD contrib file. Never builds a whole
-  # NixOS system.
+  # Udev-rule gate: builds the relocation package, verifies the destination
+  # exists, proves the installed rule is byte-for-byte identical to the pinned
+  # OpenOCD contrib file, and pins the package to exactly one payload file:
+  # $out/lib/udev/rules.d/60-openocd.rules. No bin, service, hook, or second
+  # rule can pass. Also proves the rule carries the generic `*CMSIS-DAP*`
+  # match and the explicit `GROUP="plugdev"` contract (NixOS does not create
+  # `plugdev`; consumer host policy must). Never builds a whole NixOS system.
   udevRulesCheck =
     pkgs.runCommand "nix-nrf-udev-rules-check"
     {
@@ -154,7 +157,28 @@
         echo "udev-rules check: installed rule differs byte-for-byte from the pinned OpenOCD contrib rule" >&2
         exit 1
       }
-      echo "udev-rules check passed: installed rule is byte-identical to the pinned OpenOCD contrib rule" >&2
+      # Exactly one payload path (regular files AND symlinks count), and it
+      # must be the single rule file. Directories are not payload.
+      payload_count=$(find "$nrfUdevRules" -not -type d | wc -l)
+      [ "$payload_count" -eq 1 ] || {
+        echo "udev-rules check: expected exactly 1 payload file in $nrfUdevRules, got $payload_count" >&2
+        find "$nrfUdevRules" | sort >&2
+        exit 1
+      }
+      payload=$(find "$nrfUdevRules" -not -type d)
+      [ "$payload" = "$installed" ] || {
+        echo "udev-rules check: unexpected payload path $payload (expected exactly $installed)" >&2
+        exit 1
+      }
+      grep -F 'ATTRS{product}=="*CMSIS-DAP*"' "$installed" >/dev/null || {
+        echo "udev-rules check: generic *CMSIS-DAP* match missing from installed rule" >&2
+        exit 1
+      }
+      grep -F 'GROUP="plugdev"' "$installed" >/dev/null || {
+        echo "udev-rules check: GROUP=\"plugdev\" assignment missing from installed rule" >&2
+        exit 1
+      }
+      echo "udev-rules check passed: one file ($installed) byte-identical to pinned OpenOCD contrib rule with *CMSIS-DAP* and GROUP=\"plugdev\" contract" >&2
       mkdir -p "$out"
     '';
 
@@ -202,37 +226,55 @@
       mkdir -p "$out"
     '';
 
-  # Public NixOS module evaluation gate: evaluates the real
-  # `self.nixosModules.default` through the pinned Nixpkgs
-  # `lib.nixosSystem` (no build, no VM) and asserts the exact packaged
-  # udev-rules derivation appears exactly once in
-  # `config.services.udev.packages`, and that the public
-  # `self.packages.${system}.udev-rules` output path equals the internal
-  # one. Only evaluated booleans/count/store paths cross the derivation
-  # boundary — never a full NixOS system.
+  # Public NixOS module evaluation gate: evaluates two otherwise identical
+  # pinned `lib.nixosSystem` configurations (no build, no VM) — one importing
+  # the real `self.nixosModules.udevRules`, one using the direct
+  # `services.udev.packages` form — and requires the resulting udev package
+  # lists to be exactly equal by outPath. This proves the named module is a
+  # convenience equivalent of the documented least-intrusive direct form. It
+  # also asserts the nix-nrf-owned udev-rules derivation appears exactly once
+  # and that the public `self.packages.${system}.udev-rules` output path
+  # equals the internal one. Only evaluated booleans/count/store paths cross
+  # the derivation boundary — never a full NixOS system. The total list
+  # length is NOT asserted: NixOS contributes its own generated udev/hwdb
+  # packages.
   nixosModuleCheck = let
-    evaluated = nixpkgs.lib.nixosSystem {
+    namedSystem = nixpkgs.lib.nixosSystem {
       inherit system;
       modules = [
-        self.nixosModules.default
+        self.nixosModules.udevRules
         {system.stateVersion = "26.11";}
       ];
     };
+    directSystem = nixpkgs.lib.nixosSystem {
+      inherit system;
+      modules = [
+        {services.udev.packages = [self.packages.${system}.udev-rules];}
+        {system.stateVersion = "26.11";}
+      ];
+    };
+    namedOutPaths = map (p: p.outPath) namedSystem.config.services.udev.packages;
+    directOutPaths = map (p: p.outPath) directSystem.config.services.udev.packages;
+    listsEqual = namedOutPaths == directOutPaths;
     matchingUdevRules =
       builtins.filter (
         p: p.outPath == nrfUdevRules.outPath
       )
-      evaluated.config.services.udev.packages;
+      namedSystem.config.services.udev.packages;
     matchingCount = builtins.length matchingUdevRules;
     publicUdevRules = self.packages.${system}.udev-rules;
   in
     pkgs.runCommand "nix-nrf-nixos-module-check"
     {
-      inherit matchingCount;
+      inherit listsEqual matchingCount;
       expectedUdevRules = nrfUdevRules;
       inherit publicUdevRules;
     }
     ''
+      [ "$listsEqual" = "1" ] || {
+        echo "nixos-module check: named-module services.udev.packages outPaths differ from direct-configuration outPaths" >&2
+        exit 1
+      }
       [ "$matchingCount" -eq 1 ] || {
         echo "nixos-module check: expected exactly 1 matching udev-rules package in services.udev.packages, got $matchingCount" >&2
         exit 1
@@ -241,7 +283,7 @@
         echo "nixos-module check: public udev-rules package ($publicUdevRules) differs from internal package ($expectedUdevRules)" >&2
         exit 1
       }
-      echo "nixos-module check passed: public NixOS module contributes exactly one udev-rules package ($expectedUdevRules)" >&2
+      echo "nixos-module check passed: named module and direct configuration contribute equivalent udev package lists with exactly one $expectedUdevRules" >&2
       mkdir -p "$out"
     '';
 in {

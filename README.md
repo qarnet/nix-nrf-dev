@@ -19,6 +19,8 @@ firmware.
   host udev policy needed for reliable probe access.
 - **`nix-nrf` helper**: `bootstrap`, `versions`, `probes`, and `doctor`
   commands for provisioning and diagnosing the environment.
+- **Project initializer**: `nix run ...#init-project -- ./my-project` generates
+  a consumer flake pinned to a concrete NCS release (never `latest`).
 - **nRF5340 and nRF54L15 verification**: flashing flows proven on real
   hardware for both families.
 
@@ -29,14 +31,34 @@ recommended but optional.
 
 ```bash
 mkdir my-project && cd my-project
-nix flake init -t github:qarnet/nix-nrf-dev
+nix run github:qarnet/nix-nrf-dev#init-project -- .
 direnv allow        # or: nix develop
 ```
 
-The generated `.envrc` contains `use flake`, which enters the flake's
-`devShells.default` when you `cd` into the project. direnv itself is
-documented in the [direnv project wiki](https://github.com/direnv/direnv/wiki);
-without direnv, run `nix develop` in the project directory instead.
+The initializer writes exactly `.envrc` (containing `use flake`) and
+`flake.nix` into the destination (`.` above, or any path), calling
+`mkNrfShell` with the backend and NCS release you choose. By default it
+resolves `latest`: for the `nrfutil` backend that asks the packaged
+sdk-manager for the newest stable remotely installable release, and for the
+`west` backend it selects the newest release supported by the repository's
+west metadata — either way the generated flake contains one concrete pinned
+NCS release, never `latest`. For a fully offline, reproducible generation
+pass an exact release:
+
+```bash
+nix run github:qarnet/nix-nrf-dev#init-project -- ./my-project \
+  --backend nrfutil --ncs-version v3.3.0 --non-interactive
+```
+
+The initializer never overwrites: an existing `flake.nix` or `.envrc`
+collision, a symlink escape attempt, or an invalid backend/version aborts
+with `init-project: ...` on stderr and leaves no generated output. See
+[docs/backends.md](docs/backends.md) for backend selection and
+`nix run ...#init-project -- --help` for the full CLI.
+
+direnv itself is documented in the
+[direnv project wiki](https://github.com/direnv/direnv/wiki); without direnv,
+run `nix develop` in the project directory instead.
 
 On first entry, provision the NCS SDK and toolchain:
 
@@ -133,6 +155,10 @@ nix-nrf probes       # list attached debug probes and targets
 nix-nrf doctor       # read-only environment and probe-access diagnostics
 ```
 
+Start a new project with `nix run ...#init-project -- ./my-project`; see
+[docs/backends.md](docs/backends.md) for backend choice and how `latest`
+resolution works.
+
 Backend-specific behavior and hardware setup live in
 [docs/backends.md](docs/backends.md) and [docs/hardware.md](docs/hardware.md).
 
@@ -146,11 +172,15 @@ Backend-specific behavior and hardware setup live in
 ## Hardware access
 
 A Nix dev shell cannot install host udev policy — probe access is a system
-configuration, not part of the shell. NixOS users can activate the packaged
-rules with the `nixosModules.default` module; other Linux distributions
-install the packaged `60-openocd.rules` with their standard udev procedure.
-`nix-nrf doctor` reports whether your probes are visible and accessible.
-Full instructions are in [docs/hardware.md](docs/hardware.md).
+configuration, not part of the shell. The packaged `60-openocd.rules` is the
+unmodified upstream OpenOCD contrib rule and needs an explicit `plugdev`
+group with your user as a member. On NixOS, activate it with the direct
+`services.udev.packages` form (primary, least intrusive) or import the
+`nixosModules.udevRules` module as a convenience equivalent — both only add
+the rule, never the group or user. Other Linux distributions install the
+packaged rule with their standard udev procedure. `nix-nrf doctor` reports
+whether your probes are visible and accessible. Full instructions are in
+[docs/hardware.md](docs/hardware.md).
 
 ## Documentation
 

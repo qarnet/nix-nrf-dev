@@ -5,8 +5,11 @@
 {
   backendSelector,
   core,
+  udevModule,
+  udevVm,
   nrfutil,
   west,
+  initProject,
   formatting,
   pre-commit,
 }: {
@@ -22,14 +25,25 @@
     probes-tests
     udev-rules
     ;
-  inherit (nrfutil) bootstrap-tests bootstrap-quoting nrfutil-shell-boundary;
+  inherit (udevModule) udev-module-eval;
+  inherit (udevVm) udev-vm;
+  inherit
+    (nrfutil)
+    bootstrap-tests
+    bootstrap-quoting
+    nrfutil-shell-boundary
+    nrfutil-versions-boundary
+    nrfutil-search-offline
+    ;
   inherit
     (west)
     west-bootstrap-tests
     west-versions-tests
     west-backend-metadata
+    west-target-toolchain-consistency
     west-backend-quoting
     west-shell-boundary
     ;
+  inherit (initProject) init-project-tests;
   inherit formatting pre-commit;
 }

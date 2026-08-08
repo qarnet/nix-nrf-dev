@@ -36,6 +36,7 @@
     westBootstrapBuilder
     westVersionsCommandBuilder
     mkNrfShell
+    initProject
     ;
 
   treefmtEval = treefmt-nix.lib.evalModule pkgs ../../treefmt.nix;
@@ -44,13 +45,7 @@
     src = ../../.;
     hooks = {
       alejandra.enable = true;
-      deadnix = {
-        enable = true;
-        # templates/default/flake.nix is a consumer skeleton; its
-        # conventional `self`/`nixpkgs` destructuring is idiomatic even
-        # when unused.
-        excludes = ["^templates/"];
-      };
+      deadnix.enable = true;
       statix.enable = true;
       black.enable = true;
       shellcheck = {
@@ -88,6 +83,25 @@
         ;
       defaultDevShell = devShells.default;
     };
+    # Isolated module-system gate: proves `nixosModules.udevRules` sets only
+    # the declared `services.udev.packages` boundary via `lib.evalModules`.
+    udevModule = import ./checks/udev-module.nix {
+      inherit
+        pkgs
+        nixpkgs
+        self
+        system
+        nrfUdevRules
+        ;
+    };
+    # Booted VM clean-room gate: direct `services.udev.packages` activation
+    # of the packaged rule under real systemd-udevd with explicit plugdev.
+    udevVm = import ./checks/udev-vm.nix {
+      inherit
+        pkgs
+        nrfUdevRules
+        ;
+    };
     nrfutil = import ./checks/nrfutil.nix {inherit pkgs nrfutil mkNrfShell;};
     west = import ./checks/west.nix {
       inherit
@@ -103,10 +117,21 @@
         nrfUdevRules
         ;
     };
+    initProject = import ./checks/init-project.nix {
+      inherit
+        pkgs
+        westBackendVersions
+        ;
+    };
     formatting = treefmtEval.config.build.check self;
     inherit pre-commit;
   };
 in {
+  apps.init-project = {
+    type = "app";
+    program = "${initProject}/bin/nix-nrf-init-project";
+  };
+
   packages = {
     inherit
       openocd-master
@@ -115,8 +140,8 @@ in {
       nix-nrf
       ;
     default = nix-nrf;
-    # Host configuration consumes udev-rules (via nixosModules.default);
-    # keep it separate from nix-nrf.
+    # Host configuration consumes udev-rules (via nixosModules.udevRules or
+    # direct services.udev.packages); keep it separate from nix-nrf.
     udev-rules = nrfUdevRules;
     # West backend SDK package: exact Zephyr SDK from official release
     # assets (packaged output backing `backend = "west"` shells).

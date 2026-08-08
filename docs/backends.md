@@ -4,7 +4,7 @@
 environment is provided, and a `ncsVersion` that is **required** in every
 configuration: each project pins an explicit NCS release — there is no
 `"latest"` alias or default. NCS **v3.3.0** is the tested baseline used by
-this repository's own shells and template.
+this repository's own shells, hardware harnesses, and clean-room tests.
 
 | Backend | Status | Toolchain provision | Supported releases |
 |---------|--------|---------------------|--------------------|
@@ -70,6 +70,77 @@ workspace and venv (`--yes` approves up front, `--check` is a read-only
 readiness check). `nix-nrf versions` lists the west backend's supported
 releases and never invokes nrfutil.
 
+## Project initialization (`init-project`)
+
+`nix run ...#init-project` generates a consumer project with a concrete NCS
+release, so you never hand-write the `mkNrfShell` call or copy a stale
+version. The initializer is a separate public flake app (not a `nix-nrf`
+subcommand) with no prompts and no overwrite option:
+
+```sh
+nix run github:qarnet/nix-nrf-dev#init-project -- ./my-project
+nix run github:qarnet/nix-nrf-dev#init-project -- ./my-project \
+  --backend west --ncs-version v3.3.0
+```
+
+- `--backend` defaults to `nrfutil`; `--ncs-version` defaults to `latest`,
+  which resolves to one concrete release and is written into the generated
+  flake — generated projects never contain `ncsVersion = "latest"`.
+- **nrfutil `latest`** asks the exact packaged sdk-manager
+  (`sdk-manager search --json --skip-overhead`) for the newest stable
+  remotely installable NCS release. sdk-manager is the dynamic authority; a
+  failed or inconclusive lookup aborts generation — there is no silent
+  fallback to a hard-coded version. This is distinct from the repository's
+  **tested baseline** (v3.3.0): latest means "newest stable advertised as
+  remotely installable", not "hardware-tested".
+- **west `latest`** selects the newest release present in the local
+  `nix/backends/west/versions.nix` metadata (numeric semantic maximum over
+  strict stable keys). It never queries GitHub or Nordic's global latest, and
+  never selects a release the local west metadata does not support. An
+  explicit `--ncs-version` must be an exact key in that metadata.
+- An exact `--ncs-version` is a fully offline generation path for both
+  backends; the nrfutil backend does not check explicit values against the
+  remote index.
+- Existing `flake.nix`/`.envrc` collisions, symlink escapes, and invalid
+  backend/version values abort with `init-project: ...` on stderr and leave
+  no generated output. `nix run ...#init-project -- --help` shows the full
+  CLI.
+
+## Nightly latest validation
+
+The only place this repository performs live Nordic queries in a normal
+automated run is the hosted workflow `.github/workflows/latest-ncs-init.yml`
+("Latest NCS initializer"), scheduled nightly at `37 2 * * *` and available on
+manual `workflow_dispatch`. It asks the **real packaged sdk-manager** for the
+latest strict-stable remotely installable NCS release, runs `init-project`
+with `--ncs-version latest`, independently recomputes the expected release
+from a raw `sdk-manager search --json --skip-overhead` query with a fresh
+stdlib parser, requires the generated flake to pin exactly that release, then
+evaluates the generated project against the current checkout and enters its
+dev shell under an isolated HOME/NRFUTIL_HOME.
+
+**PASS claim.** When it passes, it proves that the latest strict-stable NCS
+release advertised by the real packaged sdk-manager was selected,
+independently verified, rendered into valid Nix, evaluated, and entered as a
+non-mutating shell with the expected missing-SDK readiness.
+
+**No-download limitation.** It never downloads or installs an SDK or
+toolchain: only `bootstrap --check` is invoked, the run proves no `$HOME/ncs`
+and no `zephyr` directory appear before or after shell entry, and nrfutil logs
+are inspected to reject any install invocation. It does not prove SDK/toolchain
+download, firmware build, or hardware.
+
+**Inconclusive vs. failure.** Only bounded Nordic sdk-manager transport/index
+outages (explicit SDK-remote-config/index-unavailable messages, DNS/name
+resolution, connection refused/reset/unreachable, TLS/transport/request
+timeout, HTTP 5xx, or command timeout status 124) — after at most three
+retries with short bounded sleeps — produce an `INCONCLUSIVE` warning and a
+successful exit, so an external Nordic outage never fails the repository.
+Malformed search data, no stable remotely installable release, wrong
+selection, generated-Nix drift, evaluation/shell failure, or any mutation
+remains a hard failure. Normal PR/CI checks (`ci.yml`) stay deterministic and
+never contact Nordic; they keep testing the explicit v3.3.0 baseline.
+
 ## Scoped toolchain environment
 
 Nordic's sdk-manager environment script exports `PYTHONHOME`, `PYTHONPATH`,
@@ -122,4 +193,4 @@ composition that avoids J-Link.
 ## See also
 
 - [hardware.md](hardware.md) — probe access, flashing, recovery safety
-- [README](../README.md) — quick start and template usage
+- [README](../README.md) — quick start and project initialization

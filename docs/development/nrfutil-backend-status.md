@@ -43,7 +43,7 @@ backend — see `docs/development/west-backend-status.md`.
   with hidraw and legacy USB-node fallbacks for v1/metadata-less devices —
   and prints exact NixOS/generic-Linux udev remediation without sudo. Fixture
   tests are `checks.doctor-tests`; `packages.udev-rules` +
-  `nixosModules.default` provide the remediated OpenOCD udev rules
+  `nixosModules.udevRules` provide the remediated OpenOCD udev rules
   (`checks.udev-rules` proves the installed rule is byte-identical to the
   pinned OpenOCD contrib file).
 - The packaged nrfutil derivation unconditionally depends on
