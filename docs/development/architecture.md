@@ -143,6 +143,14 @@ ownership and construction only.
   `tests/west-backend/run.sh` (real west workspace), `tests/hardware/run.sh`
   (self-hosted hardware runner). Dry runs are gated by
   `NIX_NRF_CLEAN_DRY_RUN=1` / `NIX_NRF_WEST_DRY_RUN=1`.
+- Clean-room telemetry ownership: `tests/clean-room/run.sh` measures exact
+  free KiB, mutable-path sizes, bootstrap/build elapsed seconds (inner
+  lifecycle shells write epoch-second integers under
+  `$CLEAN_HOME/.nix-nrf-clean-metrics/`), and the separately realized
+  `clean-env-test` Nix closure. It writes at most one Markdown report, only
+  via its telemetry functions, to the exact `NIX_NRF_CLEAN_TELEMETRY_FILE`
+  path (absolute, existing parent, no overwrite, outside the clean home); the
+  workflow summary retains the report while the mutable home remains cleaned.
 - Hosted workflow ownership: `.github/workflows/latest-ncs-init.yml`
   ("Latest NCS initializer") is the only normal automated run that queries
   Nordic live. Its single `resolve` step runs the initializer with

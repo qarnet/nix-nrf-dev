@@ -1,16 +1,29 @@
 # Clean room — manual-only proof that a fresh isolated HOME can bootstrap
-# NCS v3.3.0 + toolchain and build the XIAO nRF54L15 sysbuild blinky.
+# NCS v3.3.0 + toolchain and build the XIAO nRF54L15 sysbuild blinky, with
+# resource telemetry recorded to the run logs and job summary.
 #
 # Deliberately NOT part of normal PR CI: a cold multi-gigabyte SDK/toolchain
 # bootstrap is too large and slow for `.github/workflows/ci.yml`. Dispatch
 # manually on the known self-hosted runner when a full cold-bootstrap proof
 # is wanted. Manual-only: no schedule, no hardware/probe/flashing step.
 #
-# See tests/clean-room/README.md for the test's behavior and safety controls.
+# Each dispatch writes a unique telemetry report under runner.temp (run ID +
+# attempt), appends it to the job summary in an always-run step, then removes
+# only that exact path so a persistent self-hosted runner does not accumulate
+# reports. Logs plus the workflow summary are the retained evidence; there is
+# no artifact upload and no Nordic state cache.
+#
+# See tests/clean-room/README.md for the test's behavior, telemetry contract,
+# and safety controls.
 name: Clean room
 
 on:
   workflow_dispatch:        # manual trigger only
+
+# Read-only repository access: the workflow only runs the clean-room script
+# and never writes repository contents.
+permissions:
+  contents: read
 
 # Cancel in-progress runs on the same ref.
 concurrency:
@@ -35,8 +48,27 @@ jobs:
 
       # Real cold bootstrap + blinky build under an isolated, script-created
       # HOME. No NIX_NRF_CLEAN_KEEP, so the script-created home cleans on
-      # completion or failure.
+      # completion or failure. The unique telemetry path keeps reports from
+      # colliding across runs/attempts on the persistent self-hosted runner.
       - name: Run clean-room bootstrap and build
         env:
           NIX_NRF_CLEAN_MIN_FREE_GIB: '25'
+          NIX_NRF_CLEAN_TELEMETRY_FILE: ${{ runner.temp }}/nix-nrf-clean-room-${{ github.run_id }}-${{ github.run_attempt }}.md
         run: bash tests/clean-room/run.sh
+
+      # Always summarize: append the report to the job summary when present
+      # and nonempty, otherwise append an explicit note, then remove only the
+      # exact runner-temp report path.
+      - name: Summarize clean-room telemetry
+        if: always()
+        env:
+          NIX_NRF_CLEAN_TELEMETRY_FILE: ${{ runner.temp }}/nix-nrf-clean-room-${{ github.run_id }}-${{ github.run_attempt }}.md
+        run: |
+          if [ -s "$NIX_NRF_CLEAN_TELEMETRY_FILE" ]; then
+            cat "$NIX_NRF_CLEAN_TELEMETRY_FILE" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "telemetry unavailable; inspect run logs" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -n "$NIX_NRF_CLEAN_TELEMETRY_FILE" ] && [ -f "$NIX_NRF_CLEAN_TELEMETRY_FILE" ]; then
+            rm -f -- "$NIX_NRF_CLEAN_TELEMETRY_FILE"
+          fi

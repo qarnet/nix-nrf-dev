@@ -42,6 +42,10 @@ Clean-room proof:
 
 - `clean-room-build-handoff.md` — clean-room bootstrap/build proof handoff
   (implemented; see `tests/clean-room/run.sh`).
+- `clean-room-telemetry-handoff.md` — clean-room resource telemetry handoff
+  (Phase 8; implemented and accepted as instrumentation only — no real
+  measurements claimed; the real retained measurement run remains separately
+  approved and pending, 25 GiB guard unchanged).
 
 West prototype / public integration:
 

@@ -13,7 +13,12 @@ initializer workflow) is accepted and committed on this branch (per
 (west metadata `lib.debug.runTests` gate) is accepted and committed on this
 branch (per
 `docs/development/archive/west-target-toolchain-consistency-handoff.md`).
-Phase 8 (clean-room resource telemetry) is next and not started.
+Phase 8 (clean-room resource telemetry) is accepted and committed on this
+branch as instrumentation only (per
+`docs/development/archive/clean-room-telemetry-handoff.md`). No real
+measurements are claimed by this phase; the real retained measurement run
+remains separately approved and pending, and the 25 GiB free-space guard is
+unchanged. Phase 9 (umockdev feasibility spike) is next and not started.
 
 Branch: `feat/nixos-safety-and-init`, rebased onto `main` at `a3fedcb`
 (after the CMSIS-DAP transport and hardware-preflight work from PR #4/#5
