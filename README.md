@@ -108,7 +108,7 @@ a system configuration. The packaged `60-openocd.rules` is the
 unmodified upstream OpenOCD contrib rule and needs an explicit `plugdev`
 group with your user as a member. On NixOS, activate it with the direct
 `services.udev.packages` form (primary, least intrusive) or import the
-`nixosModules.udevRules` module as a convenience equivalent — both only add
+`nixosModules.udevRules` module as a convenience equivalent. Both only add
 the rule, never the group or user. Other Linux distributions install the
 packaged rule with their standard udev procedure. `nix-nrf doctor` reports
 whether your probes are visible and accessible. Full instructions are in
