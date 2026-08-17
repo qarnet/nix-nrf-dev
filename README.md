@@ -36,137 +36,50 @@ firmware.
 Prerequisites: Nix with flake support on `x86_64-linux`. [direnv] is
 recommended but optional.
 
+### Method A — Automated (recommended)
+
 ```bash
 mkdir my-project && cd my-project
 nix run github:qarnet/nix-nrf-dev#init-project -- .
 direnv allow        # or: nix develop
+nix-nrf bootstrap   # installs NCS SDK + toolchain (several GiB; prompts first)
+nix-nrf doctor      # verify environment and probe access
 ```
 
-The initializer writes exactly `.envrc` (containing `use flake`) and
-`flake.nix` into the destination (`.` above, or any path), calling
-`mkNrfShell` with the backend and NCS release you choose. By default it
-resolves `latest`: for the `nrfutil` backend that asks the packaged
-sdk-manager for the newest stable remotely installable release, and for the
-`west` backend it selects the newest release supported by the repository's
-west metadata — either way the generated flake contains one concrete pinned
-NCS release, never `latest`. For a fully offline, reproducible generation
-pass an exact release:
+The initializer writes exactly `.envrc` and `flake.nix`, pinned to a
+concrete NCS release (never `latest`), and never overwrites existing files.
+First use builds openocd-master from source (~10 min) unless Cachix is
+enabled (`cachix use qarnet`).
 
-```bash
-nix run github:qarnet/nix-nrf-dev#init-project -- ./my-project \
-  --backend nrfutil --ncs-version v3.3.0 --non-interactive
-```
+### Method B — Manual (existing project)
 
-The initializer never overwrites: an existing `flake.nix` or `.envrc`
-collision, a symlink escape attempt, or an invalid backend/version aborts
-with `init-project: ...` on stderr and leaves no generated output. See
-[docs/backends.md](docs/backends.md) for backend selection and
-`nix run ...#init-project -- --help` for the full CLI.
-
-For reproducible consumer builds pin the project to an immutable release tag:
-
-```bash
-nix run github:qarnet/nix-nrf-dev/v0.1.0#init-project -- ./my-project
-```
+Add nix-nrf-dev to your project's `flake.nix`:
 
 ```nix
-# flake.nix
-inputs.nix-nrf-dev.url = "github:qarnet/nix-nrf-dev/v0.1.0";
+{
+  inputs.nix-nrf-dev.url = "github:qarnet/nix-nrf-dev";
+
+  outputs = { nix-nrf-dev, ... }: {
+    devShells.x86_64-linux.default =
+      nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
+        backend = "nrfutil";   # default; "west" is experimental
+        ncsVersion = "v3.3.0"; # required — exact release, never "latest"
+      };
+  };
+}
 ```
-
-Release tags (`v<version>`, e.g. `v0.1.0`) are created automatically from a
-trusted push to `main` after all CI checks pass; see
-[CONTRIBUTING.md](CONTRIBUTING.md#release-process) for the release process.
-
-direnv itself is documented in the
-[direnv project wiki](https://github.com/direnv/direnv/wiki); without direnv,
-run `nix develop` in the project directory instead.
-
-On first entry, provision the NCS SDK and toolchain:
 
 ```bash
+nix develop         # or: direnv allow
 nix-nrf bootstrap
+nix-nrf doctor
 ```
 
-It asks for confirmation before downloading several GiB.
+For the full step-by-step guide — prerequisites, what gets installed and
+where, release-tag pinning, backend choice — see
+[docs/install.md](docs/install.md).
 
 [direnv]: https://direnv.net
-
-## Choose a backend
-
-`mkNrfShell` selects how the NCS toolchain is provided. The **nrfutil**
-backend (the default and recommended choice) uses Nordic's sdk-manager to
-manage a mutable SDK and toolchain under your home directory, and accepts
-releases advertised by sdk-manager through `ncsVersion`.
-
-The **west** backend (experimental) instead lets Nix own the exact Zephyr SDK,
-host tools, and Python interpreter while a mutable west workspace holds the
-NCS source.
-
-A pure Nix-native `sdk-nrf` backend is not implemented and has no configuration.
-Full backend behavior and bootstrap details are in
-[docs/backends.md](docs/backends.md).
-
-<details>
-<summary>nrfutil (recommended)</summary>
-
-```nix
-# flake.nix
-{
-  inputs.nix-nrf-dev.url = "github:qarnet/nix-nrf-dev";
-
-  outputs = { nix-nrf-dev, ... }: {
-    devShells.x86_64-linux.default =
-      nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
-        backend = "nrfutil";
-        ncsVersion = "v3.3.0";
-      };
-  };
-}
-```
-
-</details>
-
-<details>
-<summary>nrfutil with an exact toolchain bundle</summary>
-
-```nix
-# flake.nix
-{
-  inputs.nix-nrf-dev.url = "github:qarnet/nix-nrf-dev";
-
-  outputs = { nix-nrf-dev, ... }: {
-    devShells.x86_64-linux.default =
-      nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
-        backend = "nrfutil";
-        ncsVersion = "v3.3.0";
-        toolchainBundleId = "<bundle-id>";
-      };
-  };
-}
-```
-
-</details>
-
-<details>
-<summary>west (experimental)</summary>
-
-```nix
-# flake.nix
-{
-  inputs.nix-nrf-dev.url = "github:qarnet/nix-nrf-dev";
-
-  outputs = { nix-nrf-dev, ... }: {
-    devShells.x86_64-linux.default =
-      nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
-        backend = "west";
-        ncsVersion = "v3.3.0";
-      };
-  };
-}
-```
-
-</details>
 
 ## Everyday commands
 
@@ -177,10 +90,6 @@ nix-nrf probes       # list attached debug probes and targets
 nix-nrf doctor       # read-only environment and probe-access diagnostics
 nix-nrf --version    # print the nix-nrf-dev project version (independent from NCS)
 ```
-
-Start a new project with `nix run ...#init-project -- ./my-project`; see
-[docs/backends.md](docs/backends.md) for backend choice and how `latest`
-resolution works.
 
 Backend-specific behavior and hardware setup live in
 [docs/backends.md](docs/backends.md) and [docs/hardware.md](docs/hardware.md).
@@ -207,6 +116,7 @@ whether your probes are visible and accessible. Full instructions are in
 
 ## Documentation
 
+- [docs/install.md](docs/install.md) — step-by-step install guide (prereqs, what gets installed, pinning, backends)
 - [CHANGELOG.md](CHANGELOG.md) — release history (project SemVer, independent from NCS versions)
 - [docs/backends.md](docs/backends.md) — backend choice, toolchain selection, bootstrap
 - [docs/hardware.md](docs/hardware.md) — probe access, flashing, recovery safety
