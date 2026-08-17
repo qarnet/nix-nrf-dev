@@ -26,7 +26,7 @@
   # `true` (so a required argument reads `false`).
   backendSelectorCheck = let
     evaluates = expr: (builtins.tryEval (builtins.seq expr true)).success;
-    ncsVersionRequired = (builtins.functionArgs mkNrfShell).ncsVersion == false;
+    ncsVersionRequired = !(builtins.functionArgs mkNrfShell).ncsVersion;
     omittedEqualsNrfutil = let
       s1 = mkNrfShell {
         name = "backend-check-eq";

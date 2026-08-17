@@ -1,8 +1,7 @@
 # Repository Architecture
 
 Current maintainer reference for the nix-nrf-dev repository after the
-repository refactor (see `docs/development/archive/` for the phased plan
-history). Backend-specific proof and behavior details live in
+repository refactor. Backend-specific proof and behavior details live in
 `docs/development/west-backend-status.md` and
 `docs/development/nrfutil-backend-status.md`; this document describes
 ownership and construction only.

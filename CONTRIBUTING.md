@@ -24,9 +24,7 @@ Source ownership and construction flow are documented in
 `nix/flake/` (per-system construction), `nix/backends/` (nrfutil/west
 dispatchers and modules), `nix/commands/`, `nix/init-project/` (the public
 initializer app, skeleton, and packaging), `nix/hardware/`,
-`nix/lib/mk-python-command.nix`, `bin/`, and the test layout. Historical
-phase handoffs live in `docs/development/archive/` and are not current
-architecture.
+`nix/lib/mk-python-command.nix`, `bin/`, and the test layout.
 
 ## Before committing
 
@@ -165,7 +163,7 @@ Flash recipes live in `tcl/`. Each recipe is a standalone TCL file sourced by
 openocd. To add one:
 
 1. Add `tcl/<chip>_flash.tcl` with the flashing procs.
-2. Document it in `README.md` under "Flash recipes (`tcl/`)".
+2. Document it in `docs/hardware.md` under "Flash recipes".
 3. If the chip needs probe identification, ensure
    `bin/commands/nix-nrf-probes` knows its family signature (DPIDR → AP IDR
    map → FICR PART/VARIANT).

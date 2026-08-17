@@ -9,9 +9,22 @@ All notable changes to the nix-nrf-dev project (and its `nix-nrf` CLI).
 
 | Version | Date | Highlights |
 |---|---|---|
+| [0.1.1](#011) | 2026-08-17 | Documentation: install section split into automated (`init-project`) and manual (hand-written `flake.nix`) quick start methods; new detailed install guide (`docs/install.md`) |
 | [0.1.0](#010) | 2026-08-08 | First release: reusable x86_64-linux flake and public `mkNrfShell` (default nrfutil/sdk-manager backend, experimental west backend); `nix-nrf` CLI (`versions`, `probes`, `bootstrap`, `doctor`, `--version`); dynamic concrete-version `init-project` app; pinned OpenOCD, udev package, narrow NixOS module with explicit plugdev policy; NCS v3.3.0 tested baseline with nRF5340/nRF54L15 flash and probe verification; deterministic flake/unit/VM/metadata checks, scheduled latest-NCS validation, manual hardware/clean-room workflows, clean-room telemetry; release automation (consistency gate, trusted-main GitHub Release workflow) |
 
 ## [Unreleased]
+
+## [0.1.1]
+
+### Documentation
+
+- README install section restructured into two concise methods: **A —
+  Automated** (recommended, via the `init-project` flake app) and **B —
+  Manual** (existing project, hand-written `flake.nix` calling
+  `mkNrfShell`). The standalone "Choose a backend" section was removed.
+- New `docs/install.md`: detailed step-by-step install guide covering
+  prerequisites, what gets installed and where, release-tag pinning,
+  backend choice, and verification.
 
 ## [0.1.0]
 
