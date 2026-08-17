@@ -27,6 +27,8 @@ RELEASE_JSON = REPO_ROOT / "release.json"
 CHANGELOG = REPO_ROOT / "CHANGELOG.md"
 
 _spec = importlib.util.spec_from_file_location("nix_nrf_release", RELEASE_SCRIPT)
+if _spec is None or _spec.loader is None:
+    raise RuntimeError("cannot create import spec for {0}".format(RELEASE_SCRIPT))
 release = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(release)
 
@@ -85,22 +87,18 @@ class RealFileContractTest(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
-    def test_extracted_release_notes_nonempty_with_first_release_content(self):
+    def test_extracted_release_notes_nonempty_with_current_release_content(self):
         body = release.current_release_body(CHANGELOG.read_text(), canonical_version())
         self.assertIsNotNone(body)
         self.assertTrue(body.strip())
         for needle in [
-            "mkNrfShell",
-            "x86_64-linux",
-            "nrfutil",
-            "west",
             "init-project",
-            "OpenOCD",
-            "plugdev",
-            "v3.3.0",
+            "mkNrfShell",
+            "flake.nix",
+            "docs/install.md",
+            "README",
         ]:
             self.assertIn(needle, body)
-        self.assertIn("Key limitations", body)
 
 
 class ManifestNegativeTest(unittest.TestCase):
