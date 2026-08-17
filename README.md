@@ -103,7 +103,7 @@ Backend-specific behavior and hardware setup live in
 
 ## Hardware access
 
-A Nix dev shell cannot install host udev policy, because probe access is 
+A Nix dev shell cannot install host udev policy, because probe access is
 a system configuration. The packaged `60-openocd.rules` is the
 unmodified upstream OpenOCD contrib rule and needs an explicit `plugdev`
 group with your user as a member. On NixOS, activate it with the direct

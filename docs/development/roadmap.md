@@ -15,8 +15,8 @@ remains the proven direction in `docs/development/west-backend-status.md`.
 - **Flash recipe packaging and CLI**: package `tcl/*.tcl` as a first-class
   artifact (e.g. `NRF_TCL_DIR` in the shell) and consider a single `nrf-flash`
   command composing `nix-nrf probes` + the recipes + wrapped openocd.
-- **Release, cache, and update automation**: tagged releases and a changelog;
-  `nixConfig` Cachix hints for consumers; automated `flake.lock` refresh
+- **Release, cache, and update automation**: `nixConfig` Cachix hints for
+  consumers; automated `flake.lock` refresh
   (openocd source pin stays manual per CONTRIBUTING); version-keyed
   SDK/toolchain CI caching so repeated clean-room work is not fully
   cold-download.

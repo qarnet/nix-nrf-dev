@@ -63,11 +63,9 @@
       #
       # Consumer:
       #   imports = [ nix-nrf-dev.nixosModules.udevRules ];
-      nixosModules.udevRules = {pkgs, ...}: let
-        system = pkgs.stdenv.hostPlatform.system;
-      in {
+      nixosModules.udevRules = {pkgs, ...}: {
         services.udev.packages = [
-          self.packages.${system}.udev-rules
+          self.packages.${pkgs.stdenv.hostPlatform.system}.udev-rules
         ];
       };
     };
