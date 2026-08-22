@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# tests/unit/test_nix_nrf_bootstrap.py — fake-boundary unit tests for the
+# Fake-boundary unit tests for
 # `nix-nrf bootstrap` command module (bin/backends/nrfutil/nix-nrf-bootstrap).
 #
 # Exercises the command as a subprocess through public-style args and
@@ -91,7 +91,7 @@ if cmd == "list":
     if has("fail_list"):
         print("fake nrfutil: forced list failure", file=sys.stderr)
         sys.exit(1)
-    # The override models real sdk-manager output for the current state;
+    # The override models sdk-manager output before an install;
     # once an install has happened the installed state is authoritative
     # (real sdk-manager's list reflects the install).
     if has("list_override") and not has("sdk_ok"):

@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# tests/unit/test_preflight_xiao.py — public-boundary tests for the
+# Public-boundary tests for
 # hardware harness doctor preflight parser
 # (tests/hardware/preflight_xiao.py).
 #
 # The parser is a pure stdin-to-result boundary: it consumes exactly one
 # `nix-nrf doctor --json` document and asserts the hardware harness's own
-# consumer contract (exactly one candidate with the requested serial,
-# explicit CMSIS-DAP v2 bulk USB, accessible USB node — no devnum, no
-# /dev/bus/usb or hidraw path, no hidraw permissions). These tests run it
+# consumer contract: exactly one candidate with the requested serial, explicit
+# CMSIS-DAP v2 bulk USB, and an accessible USB node. It ignores devnum,
+# /dev/bus/usb and hidraw paths, and hidraw permissions. These tests run it
 # as a subprocess against canned JSON documents and assert only the public
 # boundary: exit classes and stdout/stderr output. No hardware, no real
 # /sys or /dev, no doctor or OpenOCD invocation, no network.

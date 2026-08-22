@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# tests/hardware/preflight_xiao.py — hardware harness consumer contract for
+# Hardware harness consumer contract for
 # `nix-nrf doctor --json`.
 #
 # Before any OpenOCD probe session, NCS build, flash, or mutation, the
 # hardware harness must prove the real XIAO probe (serial 8EE9B3FF) is
 # usable through the explicit CMSIS-DAP v2 bulk USB transport. This script
-# is that proof: a pure stdin-to-result boundary that consumes exactly one
-# JSON document (the `nix-nrf doctor --json` output) and asserts the exact
-# consumer contract:
+# consumes one JSON document from stdin, the `nix-nrf doctor --json` output,
+# and asserts this consumer contract:
 #
 #   - exactly one candidate with the requested serial (duplicate = failure);
 #   - type == "cmsis-dap";
@@ -20,13 +19,13 @@
 #     and writable are all exactly true.
 #
 # It never invokes doctor or OpenOCD itself, never opens probe nodes, and
-# never mutates anything — it only validates the JSON contract. Devnum,
+# never mutates anything. It only validates JSON contract. Devnum,
 # /dev/bus/usb paths, hidraw paths, and hidraw permissions are deliberately
 # NOT asserted: those change across machines and may become more permissive.
 #
 # Usage: python3 preflight_xiao.py <serial>   (JSON document on stdin)
 # Exit codes:
-#   0  contract satisfied — XIAO usable via explicit CMSIS-DAP v2 bulk USB
+#   0  contract satisfied. XIAO is usable through explicit CMSIS-DAP v2 bulk USB
 #   1  valid JSON but contract failure (probe missing, duplicate, blocked,
 #      wrong transport, fallback, or no accessible USB node)
 #   2  usage error, malformed JSON, or malformed schema
@@ -54,7 +53,7 @@ def fail(msg, remediation=(), code=1):
 
 
 def parse_document(raw):
-    """(document, error) — malformed input yields (None, message)."""
+    """Return (document, error). Malformed input yields (None, message)."""
     if not raw.strip():
         return None, "empty JSON document on stdin"
     try:
@@ -72,7 +71,7 @@ def remediation_strings(doc):
 
 
 def check_schema(doc):
-    """Structural validation; returns (error_message, remediation) — error is
+    """Structural validation returns (error_message, remediation). Error is
     None when the document shape is usable. Broken shape is exit 2, not a
     hardware verdict."""
     if not isinstance(doc, dict):

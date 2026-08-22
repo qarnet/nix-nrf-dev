@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 #
-# tests/west-backend/run.sh — clean-room proof for the public west backend
+# Clean-room test for public west backend
 # (mutable west workspace + version-local venv, Nix Zephyr SDK), entered
 # through the public API: `mkNrfShell { backend = "west"; ncsVersion =
 # "v3.3.0"; }`.
@@ -263,4 +263,4 @@ nix develop --impure --expr "$WEST_SHELL_EXPR" \
 step "Summary before cleanup"
 du -sh "$CLEAN_HOME/ncs"
 echo ""
-echo "ALL WEST-BACKEND CLEAN-ROOM TESTS PASSED"
+echo "West backend clean-room test passed."

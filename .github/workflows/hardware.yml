@@ -1,4 +1,4 @@
-# Hardware integration tests — runs on a self-hosted runner with CMSIS-DAP
+# Hardware integration tests run on self-hosted runner with CMSIS-DAP
 # probes and nRF target boards attached. run.sh builds four NCS artifacts at
 # runtime (nRF5340 CPUAPP/CPUNET, nRF54L15 blinky + FLPR bundle), validates
 # their Intel HEX layouts, and byte-verifies every flash through the TCL

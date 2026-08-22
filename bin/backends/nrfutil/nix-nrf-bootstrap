@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# nix-nrf bootstrap — ensure the configured NCS SDK source and selected
+# `nix-nrf bootstrap` ensures the configured NCS SDK source and selected
 # toolchain exist before Nordic's scoped toolchain environment is loaded.
 #
 # Internal command module for the `nix-nrf` facade: installed by
@@ -278,7 +278,7 @@ def main(argv=None):
 
     nrfutil_exe = os.environ.get("NIX_NRF_NRFUTIL")
     if not nrfutil_exe:
-        fail("NIX_NRF_NRFUTIL is not set — run through `nix-nrf bootstrap`")
+        fail("NIX_NRF_NRFUTIL is not set. Run through `nix-nrf bootstrap`.")
 
     ncs_version = args.ncs_version or os.environ.get("NIX_NRF_NCS_VERSION")
     if not ncs_version:

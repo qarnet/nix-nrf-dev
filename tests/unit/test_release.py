@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# tests/unit/test_release.py — regression suite for the release consistency
+# Regression suite for release consistency
 # contract (release.json + CHANGELOG.md) and the scripts/release.py utility.
 #
 # The real repository files must pass; every contract element has an
-# independent negative proof; notes no-overwrite is proven through a
+# independent negative case; notes no-overwrite is checked in a
 # temporary directory. The real manifest/changelog are only ever read.
 #
 # Run standalone from the repo:  python3 tests/unit/test_release.py
@@ -34,7 +34,7 @@ _spec.loader.exec_module(release)
 
 
 def canonical_version():
-    """The current version parsed from the real release.json — the single
+    """Current version parsed from real release.json. It is the single
     release authority. A future release bump updates release.json (and the
     changelog/docs), never this test source."""
     version, diags = release.load_release_json(RELEASE_JSON.read_text())

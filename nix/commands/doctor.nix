@@ -1,4 +1,4 @@
-# nix/commands/doctor.nix — internal read-only environment/probe-access
+# nix/commands/doctor.nix. Internal read-only environment/probe-access
 # diagnostics module for the `nix-nrf doctor` subcommand. Not a public
 # package: no `$out/bin` binary is installed. `nix/commands/default.nix`
 # resolves the exact store path of the wrapped command below and execs it.
@@ -9,7 +9,7 @@
 #   - the configured NCS version in NIX_NRF_DOCTOR_NCS_VERSION when non-null;
 #   - the human environment label in NIX_NRF_DOCTOR_ENVIRONMENT_LABEL
 #     (default "SDK/toolchain"; the west backend passes "west
-#     workspace/Zephyr SDK"). Only human message strings use the label — JSON
+#     workspace/Zephyr SDK"). Only human message strings use the label. JSON
 #     field names/schema and exit semantics never change.
 #   - the exact udev-rules package store path in NIX_NRF_DOCTOR_UDEV_RULES
 #     when provided (doctor then names the exact packaged rule file in its

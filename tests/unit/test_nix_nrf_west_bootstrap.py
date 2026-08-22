@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# tests/unit/test_nix_nrf_west_bootstrap.py — fake-boundary unit tests for the
+# Fake-boundary unit tests for
 # west backend bootstrap command (bin/backends/west/nix-nrf-west-bootstrap).
 #
 # Exercises the command as a subprocess through public-style args and
@@ -11,8 +11,8 @@
 # materializes the workspace files west init would create, and markers force
 # failures. Two logs separate read-only probes from mutations so "no
 # mutation" assertions stay exact:
-#   probes.log     — venv import checks and west --version (read-only)
-#   mutations.log  — venv creation, pip installs, west init/update
+#   probes.log: venv import checks and west --version (read-only)
+#   mutations.log: venv creation, pip installs, west init/update
 #
 # Run standalone from the repo:  python3 tests/unit/test_nix_nrf_west_bootstrap.py
 # Wired as checks.west-bootstrap-tests in nix/flake/checks/west.nix

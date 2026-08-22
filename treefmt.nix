@@ -1,4 +1,4 @@
-# treefmt.nix — project-wide formatter config (used by `nix fmt` and CI checks).
+# Project formatter configuration used by `nix fmt` and CI checks.
 # See https://github.com/numtide/treefmt-nix for the full option list.
 {
   programs = {

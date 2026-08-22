@@ -16,7 +16,7 @@
   # Thin relocation package exposing OpenOCD's canonical
   # 60-openocd.rules under the udev layout NixOS imports
   # ($out/lib/udev/rules.d). Copied byte-for-byte from the pinned
-  # openocd-master-unwrapped build — no repository VID/PID catalog.
+  # openocd-master-unwrapped build, with no repository VID/PID catalog.
   # Consumed by the NixOS module (host configuration) and reported by
   # `nix-nrf doctor` remediation.
   nrfUdevRules = import ../hardware/udev-rules.nix {

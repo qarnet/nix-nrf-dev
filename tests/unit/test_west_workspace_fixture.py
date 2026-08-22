@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# tests/unit/test_west_workspace_fixture.py — safety/behavior unit tests for
+# Safety and behavior unit tests for
 # the shared fake-west-workspace fixture (tests/fixtures/west-workspace.py)
 # used by the west quoting and shell-boundary gates.
 #

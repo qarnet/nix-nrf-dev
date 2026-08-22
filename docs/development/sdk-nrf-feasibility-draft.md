@@ -1,151 +1,106 @@
-# Fully Nix-Native `sdk-nrf` Backend — Feasibility Draft
+# sdk-nrf backend feasibility
 
-Status: rough, non-binding draft. This document records a feasible direction
-and staged decision gates. It does not approve implementation, downloads,
-public API changes, CI/cache publication, or hardware operations.
+Research draft. This document does not approve implementation, downloads,
+public API changes, CI publication, cache publication, or hardware work.
 
-## Feasibility verdict
+## Assessment
 
-A fully Nix-managed NCS **build environment** appears technically feasible.
-No current evidence shows a fundamental blocker for fixed NCS sources, a fixed
-Python build environment, and reproducible firmware builds.
+Fixed NCS sources, fixed Python build environment, and reproducible firmware
+builds appear feasible in Nix. No evidence shows a fundamental blocker.
 
-A universal replacement for every Nordic development tool is a different and
-less realistic target. Optional workflows may depend on proprietary binaries,
-J-Link integrations, vendor blobs, platform-specific wheels, or licenses that
-should remain outside the core build backend.
+Replacing every Nordic development tool is not target. Proprietary binaries,
+J-Link integration, vendor blobs, platform-specific wheels, and licenses may
+remain outside build backend.
 
-Practical target:
+Target build environment:
 
-- fixed NCS/Zephyr/module source revisions in the Nix store;
-- fixed Zephyr SDK and compiler targets (already proven);
-- fixed Python build dependencies, with no runtime pip;
+- fixed NCS, Zephyr, and module source revisions in Nix store;
+- fixed Zephyr SDK and compiler targets;
+- fixed Python build dependencies with no runtime pip;
 - writable consumer application and build output;
-- reproducible `west build`/sysbuild firmware artifacts;
+- reproducible `west build` and sysbuild artifacts;
 - no nrfutil, sdk-manager, Nordic toolchain bundle, `$HOME/ncs`, or network
-  access during a build.
+  access while building.
 
-This target is sensible when reproducible CI, branch-local SDK selection, and
-removal of mutable developer setup justify the maintenance cost. It is not
-necessary for users satisfied with the proven hybrid `backend = "west"`.
+Build backend is worth cost only when reproducible CI, branch-local SDK
+selection, and removing mutable setup outweigh maintenance. Existing hybrid
+`backend = "west"` remains right choice for users who do not need this.
 
-## Evidence supporting feasibility
+## Evidence
 
-Already proven in this repository:
+Repository already assembles Zephyr SDK `0.17.0` from fixed assets, runs ARM
+and RISC-V compilers from Nix store, and builds NCS `v3.3.0` with Nix host
+tools and Python `3.12`. Real west clean-room test builds XIAO nRF54L15
+sysbuild blinky without nrfutil or Nordic toolchain bundle.
 
-- Zephyr SDK 0.17.0 assembled from fixed official assets in Nix.
-- ARM and RISC-V compilers execute from the Nix store.
-- Nix host tools and Python 3.12 work for NCS v3.3.0.
-- Standard west workspace + Python requirements build nRF54L15 sysbuild
-  blinky without nrfutil or Nordic's opaque toolchain bundle.
-- Public hybrid `backend = "west"` clean-room proof passes from an isolated
-  HOME (`docs/development/west-backend-status.md`).
-- NCS manifests expose repository URLs, paths, revisions, imports, groups,
-  submodules, and west command declarations needed to construct a lock.
-- NCS v3.3.0 supplies a generated `requirements-fixed.txt` with exact Python
-  versions for Python 3.12.
+NCS manifests expose repository URLs, paths, revisions, imports, groups,
+submodules, and west commands. NCS `v3.3.0` also has
+`requirements-fixed.txt` with Python `3.12` versions.
 
-Known work, not unknown science:
+## Limits found
 
-- Fetching Git repositories at fixed SHAs is standard Nix behavior.
-- Assembling source trees at west workspace paths is straightforward.
-- Python wheels/sources can be fixed by URL and hash and installed offline in
-  a Nix derivation.
-- Zephyr build directories already live outside source trees and can remain
-  writable while sources stay read-only in the Nix store.
+### Workspace and manifest
 
-## Important limits discovered
+NCS `v3.3.0` has 56 visible projects after manifest imports and 49 enabled by
+default group filtering. A resolver must handle the imported bsim manifest,
+mutable branch or tag refs converted to final commit SHAs, nested imports,
+group filters, path prefixes, submodules, and `west-commands`.
 
-### Workspace size and manifest behavior
-
-NCS v3.3.0 is not a five-repository general workspace:
-
-- 56 visible project entries after manifest imports;
-- 49 enabled by default group filtering;
-- additional `bsim` imported-manifest resolution must be handled;
-- some revisions are branches/tags and must be locked to final commit SHAs;
-- project imports, nested imports, group filters, path prefixes, submodules,
-  and `west-commands` affect the resolved workspace.
-
-A five-project workspace may prove blinky, but cannot justify a public general
-backend. General support needs a real manifest resolver/lock, not a manually
-copied source list.
+Five-project workspace can build blinky. It cannot support general backend.
+General backend needs manifest resolver and lock file, not hand-copied source
+list.
 
 ### Python closure
 
-NCS v3.3.0 `nrf/scripts/requirements-fixed.txt` contains 189 pinned packages,
-roughly 183 applicable to Linux/Python 3.12. It is a superset of normal NCS,
-Zephyr, MCUboot, CI, and extra requirements.
+`nrf/scripts/requirements-fixed.txt` contains 189 pinned packages. About 183
+apply to Linux and Python `3.12`. It covers normal NCS, Zephyr, MCUboot, CI,
+and extra requirements.
 
-Hard cases include:
+Hard cases include Nordic-index packages such as `nrf-regtool`, `svada`, and
+`nrfcredstore`; native packages such as NumPy, lxml, grpcio, cryptography, and
+pygit2; wheel-heavy packages such as wasmtime and opencv-python; and optional
+packages such as `pynrfjprog` that bring J-Link or proprietary tool concerns.
 
-- Nordic-index-only packages (`nrf-regtool`, `svada`, `nrfcredstore`, and
-  others);
-- native packages such as NumPy, lxml, grpcio, cryptography, and pygit2;
-- wheel-heavy packages such as wasmtime and opencv-python;
-- optional packages that introduce J-Link/proprietary-tool concerns, such as
-  pynrfjprog.
+First implementation should package fixed firmware-build profile. Add more
+profiles only for supported workflow.
 
-First implementation should package a fixed **firmware-build profile**, not
-blindly reproduce every CI/compliance/debug package. Additional profiles can
-be added only when a supported workflow needs them.
+### Read-only source behavior
 
-### Read-only source UX
+Nix store sources are immutable. Builds work with this model, but west may
+expect workspace metadata and Git information near sources. Prototype must
+show manifest and module discovery from synthetic fixed workspace, no mutable
+`.git` requirement, writable application and build output, and no source
+modification during configure or build.
 
-Nix store sources are immutable. Builds are compatible with this model, but
-west sometimes expects workspace metadata and Git information near sources.
-Prototype must prove:
-
-- west manifest/module discovery works from a synthetic fixed workspace;
-- generated version logic does not require mutable `.git` directories;
-- application and build output can stay outside the store;
-- no source file is modified during configure/build.
-
-If a command needs writable source state, copy only required metadata into a
-temporary build workspace; never copy the full SDK into `$HOME` as a hidden
-fallback.
+If command needs writable source state, copy only needed metadata into
+temporary workspace. Do not copy SDK to `$HOME` as hidden fallback.
 
 ### Licensing and binary caches
 
-Building locally and redistributing cached closures are different decisions.
-Nordic 5-Clause sources, vendor blobs, J-Link components, and wheel licenses
-must be classified before enabling Cachix or normal CI uploads. Prototype
-build can remain local and uncached while this is reviewed.
+Local builds and cached closure redistribution are separate decisions. Nordic
+5-Clause sources, vendor blobs, J-Link components, and wheel licenses need
+classification before Cachix or normal CI upload. Prototype can stay local and
+uncached during review.
 
-## Rough staged plan
+## Staged work
 
-Each stage ends with a stop/go decision. Later stages are not implied by
-starting an earlier one.
+Every stage ends with stop or go decision. Starting one stage does not approve
+later stages.
 
-### Stage 0 — Feasibility inventory (read-only)
+### Stage 0: feasibility inventory
 
-Goal: remove remaining unknowns without implementing backend.
+Do read-only research. Resolve full `v3.3.0` manifest including bsim. Classify
+projects, submodules, refs, and licenses. Derive Python packages used by
+blinky configuration and build. Record build-time Git reads.
 
-Work:
+Write `docs/development/sdk-nrf-feasibility-status.md`. Report exact project
+count, final SHAs, Python inventory, license categories, and open blockers.
+Continue only if sources and build-only Python environment can be packaged
+without prohibited redistribution or proprietary runtime dependency.
 
-- resolve complete v3.3.0 west manifest, including bsim import;
-- classify enabled/disabled projects, submodules, mutable refs, and licenses;
-- derive minimal Python package set observed by blinky configure/build;
-- classify Python packages by Nixpkgs/source/wheel/vendor/license status;
-- identify build-time Git metadata reads.
+### Stage 1: lock format and generator
 
-Likely files:
-
-```text
-docs/development/sdk-nrf-feasibility-status.md
-```
-
-Verification: report contains exact project count, final SHAs, Python package
-inventory, licensing categories, and unresolved blockers. No production code.
-
-Go only if fixed sources and a build-only Python environment look packageable
-without prohibited redistribution or proprietary runtime dependencies.
-
-### Stage 1 — Lock format and generator
-
-Goal: produce reviewable, deterministic NCS workspace metadata.
-
-Likely files:
+Create:
 
 ```text
 tools/lock-ncs-workspace.py
@@ -155,46 +110,29 @@ tests/unit/test_lock_ncs_workspace.py
 ```
 
 Lock records final SHA, URL, path, groups, import origin, submodules,
-west-commands, and license metadata. Lock generation may use network when run
-explicitly; consuming lock in Nix must not.
+west commands, and license metadata. Generator may use network when explicitly
+run. Nix build consumes lock without network.
 
-Verification:
+Verify deterministic output, no branch or tag fetch ref, one record per enabled
+imported project, and offline schema and fixture tests. Stop if imports or
+submodules cannot resolve deterministically.
 
-- deterministic output from same manifest state;
-- no branch/tag remains as fetch revision;
-- every enabled imported project represented exactly once;
-- schema and fixture tests pass without network.
+### Stage 2: fixed workspace derivation
 
-Stop if imports/submodules cannot be resolved deterministically.
-
-### Stage 2 — Fixed workspace derivation
-
-Goal: materialize locked NCS workspace in Nix store.
-
-Likely files:
-
-```text
-nix/sdk-nrf/workspace.nix
-nix/sdk-nrf/manifest.nix
-```
-
-Verification:
+Create `nix/sdk-nrf/workspace.nix` and `nix/sdk-nrf/manifest.nix`. Build:
 
 ```bash
 nix build -L .#sdk-nrf-v3_3_0-workspace
 ```
 
-Assert exact projects/SHAs/paths, no network during build, no developer paths,
-and no source mutation. Run read-only west manifest/list checks.
+Check project SHAs and paths, no build-time network, no developer paths, no
+source mutation, and read-only west manifest/list behavior. Stop if west or
+NCS needs mutable Git repositories and no small deterministic metadata copy
+works.
 
-Stop if west or NCS requires mutable Git repositories and no small,
-deterministic metadata substitute works.
+### Stage 3: fixed Python build profile
 
-### Stage 3 — Fixed Python build profile
-
-Goal: build only Python closure required for normal firmware builds.
-
-Likely files:
+Create:
 
 ```text
 tools/lock-ncs-python.py
@@ -203,29 +141,16 @@ nix/sdk-nrf/python-env.nix
 tests/sdk-nrf/python-env.nix
 ```
 
-Prefer exact offline wheel/source inputs with committed hashes. Use Nixpkgs
-packages where versions and behavior match; package Nordic-only or exact
-version exceptions explicitly. No network or runtime pip.
+Use exact offline wheel or source inputs with committed hashes. Use Nixpkgs
+when version and behavior match. Package Nordic-only and version exceptions
+explicitly. Test imports and CLIs needed by builds, including `west`, `zcbor`,
+`nrfregtool`, and `svada`. Stop if required packages have incompatible licenses,
+unavailable artifacts, or unpatchable native binaries.
 
-Verification includes imports and CLIs actually needed by NCS build, including
-`west`, `zcbor`, `nrfregtool`, and `svada`.
+### Stage 4: firmware build
 
-Stop if required build packages have incompatible licenses, unavailable
-artifacts, or unpatchable native binaries.
-
-### Stage 4 — Pure firmware build proof
-
-Goal: build one firmware package entirely from fixed Nix inputs.
-
-Likely files:
-
-```text
-nix/sdk-nrf/build.nix
-nix/sdk-nrf/blinky.nix
-docs/development/sdk-nrf-proof-status.md
-```
-
-Initial proof:
+Create `nix/sdk-nrf/build.nix`, `nix/sdk-nrf/blinky.nix`, and
+`docs/development/sdk-nrf-build-status.md`. Start with:
 
 ```text
 application: zephyr/samples/basic/blinky
@@ -233,76 +158,45 @@ board: xiao_nrf54l15/nrf54l15/cpuapp
 mode: sysbuild
 ```
 
-Verification:
+Verify with:
 
 ```bash
 nix build -L .#sdk-nrf-v3_3_0-blinky
 nix build --rebuild -L .#sdk-nrf-v3_3_0-blinky
 ```
 
-Assert non-empty ELF/HEX/domains.yaml/devicetree/config, identical rebuild
-output, no nrfutil/J-Link/developer paths, and no network after fixed inputs
-exist.
+Check nonempty ELF, HEX, `domains.yaml`, devicetree, and configuration; equal
+rebuild output; no nrfutil, J-Link, developer paths, or network after fixed
+inputs exist. Keep public `backend = "sdk-nrf"` rejected.
 
-Public `backend = "sdk-nrf"` remains rejected after this stage.
+### Stage 5: consumer shell
 
-### Stage 5 — Consumer development shell
+Support writable external application and build directories. Provide fixed west
+and workspace context through wrapper. Make bootstrap unnecessary or read-only.
+Integrate backend-aware versions and doctor commands. Preserve nrfutil and west
+backends. Keep selector experimental.
 
-Goal: make fixed environment useful for applications outside SDK tree.
+### Stage 6: general support
 
-Work:
-
-- support writable external application and build directories;
-- provide fixed west/workspace context through wrapper;
-- make bootstrap unnecessary/read-only;
-- integrate backend-aware versions/doctor commands;
-- preserve existing nrfutil and hybrid west backends.
-
-Likely files:
-
-```text
-nix/backends/default.nix
-nix/sdk-nrf/environment.nix
-nix/commands/default.nix
-flake.nix
-```
-
-Public selector stays experimental. No default change.
-
-### Stage 6 — Generality proof
-
-Before describing backend as general:
-
-- add second NCS release;
-- build at least one application requiring MCUboot/TF-M or another module set;
-- prove clean consumer shell lifecycle;
-- run hardware parity when explicitly approved;
-- review cache/redistribution policy.
-
-Only then consider promoting `sdk-nrf` beyond experimental.
+Before calling backend general, add second NCS release, build application using
+MCUboot, TF-M, or another module set, test clean consumer shell lifecycle, run
+hardware parity only with approval, and review cache redistribution policy.
 
 ## Stop conditions
 
-Stop and reassess rather than expanding scope when:
+Stop and reassess if immutable source cannot be fetched, imports cannot resolve
+deterministically, a build needs proprietary toolchain runtime, a required
+Python dependency cannot be packaged legally or technically, or a successful
+build depends on developer `$HOME/ncs`, an ambient venv, or network access.
+Also stop if fixed source must become broadly writable or the prototype closure
+contains nrfutil, sdk-manager, SEGGER/J-Link, or the Nordic toolchain bundle.
 
-- required source cannot be fetched at immutable revision;
-- manifest import cannot be resolved deterministically;
-- build requires proprietary toolchain runtime rather than public Zephyr SDK;
-- required Python build dependency cannot be packaged legally or technically;
-- successful build depends on developer `$HOME/ncs`, ambient venv, or network;
-- fixed source must be made broadly writable;
-- two materially different attempts fail at same architecture boundary;
-- prototype closure unexpectedly includes nrfutil, sdk-manager, SEGGER/J-Link,
-  or Nordic opaque toolchain bundle.
+One failed condition does not invalidate hybrid west backend. It remains
+supported fallback.
 
-Failure at one stop condition does not invalidate the existing hybrid west
-backend. That backend remains useful fallback and current supported path.
+## Commitment limit
 
-## Sensible commitment boundary
-
-No commitment beyond Stage 0 is needed now. Stage 0 is documentation/research
-only and should answer whether source locking, Python build profile, and
-licensing are tractable enough to justify implementation.
-
-If Stage 0 is favorable, Stages 1–4 form one technical prototype. Stages 5–6
-are separate productization decisions.
+No work past Stage 0 is approved. Stage 0 must establish whether source
+locking, a Python build profile, and licensing are tractable. Stages 1 through
+4 form a technical prototype only. Stages 5 and 6 are separate product
+decisions.

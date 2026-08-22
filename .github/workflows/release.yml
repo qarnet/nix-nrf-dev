@@ -1,13 +1,13 @@
-# Release — reusable trusted-main GitHub Release workflow for nix-nrf-dev.
+# Reusable trusted-main GitHub Release workflow for nix-nrf-dev.
 #
 # `workflow_call` ONLY: this workflow has no push/pull_request/schedule/
 # workflow_dispatch trigger and cannot react to events by itself. The sole
 # caller is the gated `release` job in ci.yml, reachable only from a trusted
-# push to main after all normal CI checks pass — PRs and other refs can never
-# publish.
+# push to main after all normal CI checks pass. Pull requests and other refs
+# cannot publish.
 #
 # The nix-nrf-dev project version is independent from NCS versions: the
-# canonical `release.json` strict-SemVer manifest is validated, the changelog
+# `release.json` strict-SemVer manifest is validated, the changelog
 # contract is enforced, and the tag/Release name is `v<version>` at the exact
 # prepared SHA. Idempotency: an already published non-draft release is a
 # no-op regardless of the prepared SHA (later main commits keep the same
@@ -15,11 +15,11 @@
 # force-moved, or reused at a different SHA.
 #
 # Least privilege split:
-#   prepare — contents: read. Checks out the exact ref (full history), runs
+#   prepare has contents: read. It checks out exact ref, runs
 #     the real release consistency check, derives version/tag/SHA, and uploads
 #     only the prepared notes file as a short-retention artifact.
-#   publish — contents: write. Does NOT check out the repository and executes
-#     NO project code: it downloads only the notes artifact and drives the
+#   publish has contents: write. It does not check out the repository or run
+#     project code. It downloads only the notes artifact and drives the
 #     GitHub API via the `gh` CLI with GH_REPO/tag/SHA from env.
 name: Release
 
@@ -179,7 +179,7 @@ jobs:
 
           # Only for a draft or absent release is the tag inspected before any
           # mutation. An annotated (non-commit) tag, or a lightweight tag at
-          # any SHA other than the prepared SHA, fails closed — a tag is never
+          # any SHA other than the prepared SHA fails. A tag is never
           # deleted, force-moved, or reused at the wrong commit. A lightweight
           # tag at the exact prepared SHA may be reused as-is.
           if [ "$ref_class" = "absent" ]; then
@@ -202,7 +202,7 @@ jobs:
 
       - name: No-op when already published
         if: steps.state.outputs.state == 'published'
-        run: echo "Release $TAG already published — no-op."
+        run: echo "Release $TAG already published. No action taken."
 
       - name: Publish existing draft
         if: steps.state.outputs.state == 'draft'

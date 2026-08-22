@@ -1,4 +1,4 @@
-# nix/backends/west/default.nix — west backend construction. Receives the
+# nix/backends/west/default.nix builds west backend objects. It receives the
 # west version metadata and internal builders (validated/selected by the
 # public dispatcher) and owns all current west branch construction: the
 # metadata-selected Python package, the exact Zephyr SDK package, the west

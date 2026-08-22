@@ -1,15 +1,15 @@
-# nix-nrf — the project CLI facade for the nix-nrf-dev tools.
+# nix-nrf command dispatcher for nix-nrf-dev tools.
 #
 # Fixed dispatcher with four subcommands:
-#   nix-nrf versions   — by default delegates to `nrfutil sdk-manager search`
+#   nix-nrf versions: by default delegates to `nrfutil sdk-manager search`
 #     (NCS version list; sdk-manager remains the runtime authority for
 #     available versions). The west backend supplies an exact `versionsCommand`
 #     store path instead, which lists repository-supported west backend
 #     metadata versions and never invokes nrfutil.
-#   nix-nrf probes     — delegate to the internal probe command module
+#   nix-nrf probes: delegate to the internal probe command module
 #     (`./probes.nix`, installed at $out/libexec/nix-nrf/probes; read-only
 #     CMSIS-DAP probe/target identification).
-#   nix-nrf bootstrap  — by default delegates to the internal nrfutil-backed
+#   nix-nrf bootstrap: by default delegates to the internal nrfutil-backed
 #     bootstrap command module (`../backends/nrfutil/bootstrap.nix`, installed at
 #     $out/libexec/nix-nrf/bootstrap; ensures the configured NCS SDK source
 #     and selected toolchain exist). The west backend supplies an exact
@@ -19,7 +19,7 @@
 #     bootstrap --ncs-version v3.3.0 --check` works; `mkNrfShell` passes its
 #     selected values so the shell's `nix-nrf bootstrap` works with no
 #     arguments.
-#   nix-nrf doctor     — delegate to the internal doctor command module
+#   nix-nrf doctor: delegate to the internal doctor command module
 #     (`./doctor.nix`, installed at $out/libexec/nix-nrf/doctor;
 #     read-only SDK/toolchain and probe-access diagnostics). The base
 #     `packages.nix-nrf` has no NCS default, so its doctor skips the SDK
@@ -37,7 +37,7 @@
 # stderr diagnostic and exit 2.
 #
 # Delegation uses exact Nix store executable paths derived from the selected
-# packages — never ambient PATH lookup — and `exec`, so delegated stdout,
+# packages, never ambient PATH lookup, and uses `exec`, so delegated stdout,
 # stderr, options, and exit status are preserved unchanged. `nix-nrf` owns its
 # project command modules; there is no standalone `nrf-bootstrap`/`nrf-probes`/
 # `nrf-doctor` binary or package. No dynamic plugin discovery.

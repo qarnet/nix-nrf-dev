@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 #
-# tests/clean-room/run.sh — clean-room bootstrap and blinky build for
+# Clean-room bootstrap and blinky build for
 # nix-nrf-dev.
 #
 # Proves end-to-end behavior from an empty, isolated Linux home directory:
@@ -23,7 +23,7 @@
 # seconds, and the realized clean-env-test Nix closure. Telemetry always
 # prints to the run logs; when NIX_NRF_CLEAN_TELEMETRY_FILE is set, the
 # script writes one Markdown report (absolute path, existing real parent,
-# target must not exist in any form — symlinks rejected — and must remain
+# target must not exist in any form. Symlinks are rejected. It must remain
 # outside the clean home). The target is exclusively reserved with Bash
 # noclobber during validation, so a caller file is never overwritten; the
 # emitter later populates exactly that reserved file. Fields that a
@@ -44,7 +44,7 @@
 #                                 covering SDK source, toolchain, nrfutil
 #                                 state, extraction/temp overhead, build
 #                                 tree, possible same-filesystem Nix closure
-#                                 realization, and safety margin — not a
+#                                 realization, and safety margin. It is not a
 #                                 measured SDK-only size. It is not lowered
 #                                 until at least one complete retained run
 #                                 establishes observed peak plus margin.
@@ -184,8 +184,8 @@ report_kib_line() {
   fi
 }
 
-# Populate the single Markdown telemetry report — the exact target reserved
-# during validation — from the recorded globals. Only telemetry functions
+# Populate single Markdown telemetry report at target reserved during
+# validation from recorded globals. Only telemetry functions
 # write the report; nothing else touches the target path.
 emit_telemetry_report() {
   [ -n "$TELEMETRY_FILE" ] && [ "$TELEMETRY_VALID" = "1" ] || return 0
@@ -222,9 +222,9 @@ emit_telemetry_report() {
 }
 
 # Exit-time telemetry: the COMPLETE measurement schema is printed to the run
-# logs on every exit — result, release/home/mount/guard, all free-space
+# logs on every exit: result, release/home/mount/guard, all free-space
 # checkpoint and derived values, all mutable sizes, elapsed seconds, and the
-# closure path/line — including "not available" for dry-run/future stages so
+# closure path/line, including "not available" for dry-run/future stages so
 # no field is silently omitted even without a telemetry file. Then the
 # optional Markdown report populates the exact reserved target. Runs before
 # cleanup.
@@ -478,8 +478,8 @@ if [ "${NIX_NRF_CLEAN_DRY_RUN:-}" = "1" ]; then
   echo ""
   echo "expanded telemetry plan (checkpoints recorded on a real run):"
   echo "  checkpoint 1: filesystem free KiB before bootstrap, mount point, minimum free-space guard"
-  echo "  checkpoint 2: after bootstrap — free KiB, NCS and nrfutil path sizes, bootstrap elapsed seconds"
-  echo "  checkpoint 3: after build — free KiB, final NCS/nrfutil/build-tree/total-home sizes"
+  echo "  checkpoint 2: after bootstrap. Free KiB, NCS and nrfutil path sizes, bootstrap elapsed seconds"
+  echo "  checkpoint 3: after build. Final NCS, nrfutil, build-tree, and total-home sizes"
   echo "  checkpoint 4: realized clean-env-test Nix closure path and nix path-info -Sh size (Nix store only)"
   echo "  derived: minimum observed free KiB and consumed free KiB from recorded checkpoints"
   echo "dry run OK"
@@ -642,4 +642,4 @@ RESULT="passed"
 step "Summary before cleanup"
 du -sh "$CLEAN_HOME/ncs"
 echo ""
-echo "ALL CLEAN-ROOM TESTS PASSED"
+echo "Clean-room test passed."

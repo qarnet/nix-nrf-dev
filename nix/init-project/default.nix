@@ -1,4 +1,4 @@
-# nix/init-project/default.nix — public `nix-nrf-init-project` package.
+# nix/init-project/default.nix. Public `nix-nrf-init-project` package.
 #
 # Builds a public standalone binary at $out/bin/nix-nrf-init-project, installs
 # the render skeleton under $out/share/nix-nrf/init-project, patches the
@@ -12,7 +12,7 @@
 #
 # The initializer is a separate public flake app (`apps.<system>.init-project`),
 # not a `nix-nrf` subcommand; it is not packaged under $out/libexec/nix-nrf/.
-# Production never resolves nrfutil from PATH — the wrapper pins the exact
+# Production never resolves nrfutil from PATH. The wrapper pins the exact
 # store executable. Tests substitute `nrfutilPackage` at Nix construction time
 # (nix/flake/checks/init-project.nix) so the deterministic fake search script
 # is the packaged nrfutil.

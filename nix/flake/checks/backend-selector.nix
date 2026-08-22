@@ -19,9 +19,9 @@
   # - omitted/explicit autoBootstrap (true/false) values evaluate for
   #   both backends,
   # - exact toolchainBundleId evaluates in either bootstrap mode.
-  # Pure Nix evaluation via builtins.tryEval — builds no SDK, runs no
+  # Pure Nix evaluation via builtins.tryEval builds no SDK and runs no
   # network bootstrap. Note: builtins.tryEval cannot catch "called
-  # without required argument" errors, so required-ness is proven with
+  # without required argument" errors, so required-ness is checked with
   # builtins.functionArgs, which marks arguments *with* a default
   # `true` (so a required argument reads `false`).
   backendSelectorCheck = let

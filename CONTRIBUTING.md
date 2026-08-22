@@ -6,25 +6,16 @@
 direnv allow     # or: nix develop
 ```
 
-The shell provides `openocd` (master build), `nrfutil`, the
-`nix-nrf` CLI facade (`nix-nrf versions`, `nix-nrf probes`,
-`nix-nrf bootstrap`, `nix-nrf doctor`), the scoped `west`
-wrapper, and the NCS toolchain (via nrfutil sdk-manager for the configured NCS
-version; lazily bootstrapped by `west` when missing). Probe identification is
-the `nix-nrf probes` subcommand; hardware-access diagnostics is the
-`nix-nrf doctor` subcommand (read-only, never runs `sudo`); there are no
-standalone `nrf-probes`/`nrf-doctor` commands. New consumer projects are
-generated with `nix run .#init-project -- ./my-project` (the
-`apps.<system>.init-project` app).
+Shell provides `openocd`, `nrfutil`, `nix-nrf`, scoped `west` wrapper, and
+NCS toolchain. `nix-nrf probes` identifies probes. `nix-nrf doctor` reports
+hardware access without running `sudo`. There are no standalone
+`nrf-probes` or `nrf-doctor` commands. Create consumer project with
+`nix run .#init-project -- ./my-project`.
 
 ## Repository architecture
 
-Source ownership and construction flow are documented in
-[docs/development/architecture.md](docs/development/architecture.md):
-`nix/flake/` (per-system construction), `nix/backends/` (nrfutil/west
-dispatchers and modules), `nix/commands/`, `nix/init-project/` (the public
-initializer app, skeleton, and packaging), `nix/hardware/`,
-`nix/lib/mk-python-command.nix`, `bin/`, and the test layout.
+See [docs/development/architecture.md](docs/development/architecture.md) for
+source ownership and construction flow.
 
 ## Before committing
 
@@ -54,40 +45,36 @@ nix develop .#clean-env-test --command sh -ceu '
 '  # prove Nordic sdk-manager variables do not poison external tools
 ```
 
-The release consistency gate (`scripts/release.py check` plus
-`tests/unit/test_release.py`) runs both as a named CI step and as the
-`checks.<system>.release-consistency` flake check: any manifest bump without
-a matching changelog table row/body fails the gate.
+`scripts/release.py check` and `tests/unit/test_release.py` run in CI and as
+`checks.<system>.release-consistency`. A manifest bump without matching
+changelog table row and body fails.
 
-Flake checks cover evaluation gates, fake-boundary unit suites, shell-boundary
-gates, and wiring/byte-identity checks; they do not build the flake's package
-outputs (`packages.*`) — CI has a separate package-build step, so run
-`nix build` for a package locally when you changed its derivation.
+Flake checks cover evaluation, fake-boundary units, shell boundaries, and
+wiring checks. They do not build `packages.*`. CI builds packages separately.
+Run `nix build` after changing package derivation.
 
 ## Clean-room bootstrap test
 
-`tests/clean-room/run.sh` proves the project works from an empty, isolated
-home directory: it bootstraps NCS v3.3.0 and the selected toolchain with
-`nix-nrf bootstrap --yes` inside an isolated `HOME`, re-enters the shell,
-derives `ZEPHYR_BASE` from the isolated installation, and builds the XIAO
-nRF54L15 sysbuild blinky with a real `west build`. It never flashes hardware.
+`tests/clean-room/run.sh` uses an empty, isolated home. It bootstraps NCS
+`v3.3.0` and selected toolchain with `nix-nrf bootstrap --yes`, re-enters
+shell, derives `ZEPHYR_BASE`, and builds XIAO nRF54L15 sysbuild blinky with
+real `west build`. It never flashes hardware.
 
 ```bash
 bash tests/clean-room/run.sh
 ```
 
-**This downloads several GiB from Nordic and requires at least 25 GiB free**
-on the filesystem hosting the isolated home (configurable via
-`NIX_NRF_CLEAN_MIN_FREE_GIB`). The isolated home defaults to a
+This downloads several GiB from Nordic and requires at least 25 GiB free on
+the filesystem hosting the isolated home. Configure the limit with
+`NIX_NRF_CLEAN_MIN_FREE_GIB`. The isolated home defaults to a
 script-created temporary directory that is removed on exit unless
 `NIX_NRF_CLEAN_KEEP=1`; a caller-provided `NIX_NRF_CLEAN_HOME` is never
 removed. See `tests/clean-room/README.md` for the full safety contract.
 
-The clean-room test is **not** part of the normal pre-commit/flake-check
-gate, and normal PR CI never downloads SDK/toolchain bundles. It runs
-manually via `.github/workflows/clean-room.yml` (`workflow_dispatch`, no
-schedule) on the `nrf-hardware` self-hosted runner. Use `nix-nrf bootstrap`
-locally when you need the SDK/toolchain in your own home.
+Clean-room test is not in normal pre-commit or flake checks. Normal PR CI
+never downloads SDK or toolchain bundles. Run it manually through
+`.github/workflows/clean-room.yml` on `nrf-hardware` runner. Use
+`nix-nrf bootstrap` locally for SDK and toolchain in home directory.
 
 ## Commit messages
 
@@ -110,8 +97,8 @@ Examples:
 
 ## Release process
 
-The nix-nrf-dev project version is **independent from NCS versions**:
-`release.json` holds the one canonical strict stable SemVer
+Project version is independent from NCS versions. `release.json` holds the
+strict stable SemVer
 (`MAJOR.MINOR.PATCH`, no leading `v`, no prerelease/build metadata) of the
 nix-nrf-dev/nix-nrf release, while `ncsVersion` (e.g. `v3.3.0`) is an
 upstream SDK selection and tested baseline. Never align the project release
@@ -129,33 +116,31 @@ To prepare a new release:
    `nix flake check`.
 4. Open and merge the reviewed PR.
 
-The tag and GitHub Release are created **automatically** by the trusted
-release workflow after a successful push to `main` (the gated `release` job
-in `.github/workflows/ci.yml` calls the reusable `.github/workflows/release.yml`
-with the exact merge SHA). Re-running an already published version is a
-no-op. Never manually create, force, or move release tags: the workflow fails
-closed on a conflicting or annotated existing tag rather than mutating it.
+Trusted release workflow creates tag and GitHub Release after successful push
+to `main`. `.github/workflows/ci.yml` calls reusable
+`.github/workflows/release.yml` with merge SHA. Re-running published version
+does nothing. Do not manually create, force, or move release tags. Workflow
+fails on conflicting or annotated tags rather than changing them.
 
 ## Bumping the openocd pin
 
 `nix/hardware/openocd.nix` pins a specific upstream `openocd` revision, fetched
-from the canonical SourceForge Git repository
+from the SourceForge Git repository
 (<https://git.code.sf.net/p/openocd/code>) with submodules. To bump:
 
-1. Inspect the canonical repository at
+1. Inspect the repository at
    <https://sourceforge.net/p/openocd/code/ci/master/tree/> for a revision
    with the nRF53/nRF54L support you need.
 2. Resolve SourceForge `master` to its exact commit, then put that immutable
    SHA in `rev` in `nix/hardware/openocd.nix`. Moving branch names or tags are
    not Nix pins.
-3. Update `hash` for the fetch *with submodules included* (run
-   `nix build .#openocd-master-unwrapped` — Nix will print the correct
-   `sha256-...` hash for the failed fetch; paste it in).
+3. Update `hash` for fetch *with submodules included*. Run
+   `nix build .#openocd-master-unwrapped`. Nix prints the correct
+   `sha256-...` hash for the failed fetch. Paste it into `hash`.
 4. Run `nix build .#openocd-master-unwrapped -L` and `nix build .#openocd-master -L`.
-5. Run the normal flake gate: `nix flake check --all-systems -L`.
-6. Verify on hardware that the flash recipes still work (see
-   `tests/hardware/` — explicit, manual hardware work on a self-hosted
-   runner; never part of the default gate).
+5. Run normal flake check: `nix flake check --all-systems -L`.
+6. Verify flash recipes on hardware. `tests/hardware/` requires explicit,
+   manual work on self-hosted runner and is not part of default check.
 
 ## Adding a flash recipe
 
@@ -164,8 +149,8 @@ openocd. To add one:
 
 1. Add `tcl/<chip>_flash.tcl` with the flashing procs.
 2. Document it in `docs/hardware.md` under "Flash recipes".
-3. If the chip needs probe identification, ensure
-   `bin/commands/nix-nrf-probes` knows its family signature (DPIDR → AP IDR
+3. If the chip needs probe identification, add its family signature to
+   `bin/commands/nix-nrf-probes` (DPIDR → AP IDR
    map → FICR PART/VARIANT).
 
 ## CI and the openocd-master build

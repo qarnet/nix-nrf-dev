@@ -1,4 +1,4 @@
-# nix/backends/west/bootstrap.nix — west backend west-workspace/venv bootstrap
+# nix/backends/west/bootstrap.nix packages the west workspace and venv bootstrap
 # module. Installs bin/backends/west/nix-nrf-west-bootstrap at
 # $out/libexec/nix-nrf/bootstrap and exposes no standalone $out/bin command:
 # public invocation is only `nix-nrf bootstrap` (via the shell-specific
@@ -7,7 +7,7 @@
 # The wrapper pins the exact Nix Python interpreter (selected by the
 # release-specific `pythonPackage` metadata name from
 # nix/backends/west/versions.nix) and the metadata defaults as environment
-# variables — never ambient PATH lookup — and unsets PYTHONHOME/PYTHONPATH
+# variables. It never uses ambient PATH lookup and unsets PYTHONHOME/PYTHONPATH
 # like the other command modules, because NCS toolchain shells export them
 # for their own python.
 #

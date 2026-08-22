@@ -1,12 +1,6 @@
-# CI — the "clone and it works" gate.
-# Builds all packages (cached via Cachix qarnet), runs smoke tests, the
-# release/changelog consistency gate, flake checks, project-init,
-# devshell-enter, real-OpenOCD source-compat gates, and fake-OpenOCD semantic
-# flash-recipe tests. Runs on PRs, pushes to main, and nightly (scheduled
-# regression coverage of the pinned inputs/builds — the openocd rev/hash is a
-# fixed pin and cannot drift). A gated `release` caller job invokes the
-# reusable release workflow only on a trusted push to main after `check`
-# passes; PRs and other refs never publish.
+# Builds packages and runs release, flake, CLI, shell, initializer, and recipe
+# checks. Runs for pull requests, pushes to main, and nightly. A release job can
+# call reusable workflow only after trusted main push passes `check`.
 name: CI
 
 on:
@@ -22,11 +16,8 @@ on:
 permissions:
   contents: read
 
-# Cancel in-progress runs on the same ref when a new run is triggered — but
-# ONLY for pull requests, where a new revision supersedes the previous one.
-# Trusted main push runs are non-cancelling: cancel-in-progress there could
-# abort an in-flight run whose gated `release` job is mid-publish, even
-# though the reusable release workflow itself never cancels.
+# Cancel in-progress pull request runs when a new revision arrives. Do not
+# cancel main runs because a release job could be publishing.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -47,7 +38,7 @@ jobs:
           name: qarnet
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
-      # Release contract gate: the canonical strict-SemVer release.json must
+      # Release contract check: strict-SemVer release.json must
       # match the changelog table row/body (with `## [Unreleased]` above the
       # current release), and the release regression suite proves every
       # negative contract element. Runs before the flake gate; the same check
@@ -57,18 +48,16 @@ jobs:
           python3 scripts/release.py check
           python3 tests/unit/test_release.py
 
-      # A3 — flake eval + checks (fast, sandboxed). First proves every
-      # published system output evaluates across all published systems
-      # (no build — unsupported platforms cannot silently return); second
-      # realizes normal checks. Runs treefmt check + pre-commit check +
-      # fake-boundary bootstrap unit tests (no network, no real SDK/toolchain
-      # install).
+      # Evaluate flake outputs and checks. First verify that every published
+      # system output evaluates without building. Then realize normal checks,
+      # including treefmt, pre-commit, and fake-boundary bootstrap tests. No
+      # test downloads an SDK or toolchain.
       - name: Flake check
         run: |
           nix flake check --all-systems --no-build -L
           nix flake check -L
 
-      # A1 — build all packages. Cached after first run via Cachix.
+      # Build all packages. Cachix caches later runs.
       # openocd-master is ~10 min from source on first run; subsequent runs pull from cache.
       # nrfutil pulls segger-jlink-headless (SEGGER license accepted in the flake config).
       # nrf-probes is not a package: probe identification is the internal
@@ -80,14 +69,14 @@ jobs:
       - name: Build packages
         run: nix build -L .#openocd-master-unwrapped .#openocd-master .#nrfutil .#nix-nrf .#udev-rules .#west-zephyr-sdk-v3_3_0
 
-      # A2 — smoke-run: verify the built binaries actually execute.
+      # Smoke-run built binaries.
       - name: Smoke run openocd
         run: nix run .#openocd-master -- --version
       - name: Smoke run nrfutil
         run: nix run .#nrfutil -- --version
       - name: Smoke run nix-nrf help
         run: nix run .#nix-nrf -- --help
-      # nix-nrf --version reports the canonical project version (release.json),
+      # nix-nrf --version reports the project version from release.json,
       # independent from the selected NCS version.
       - name: Smoke run nix-nrf version
         run: nix run .#nix-nrf -- --version
@@ -99,13 +88,13 @@ jobs:
         run: nix run .#nix-nrf -- probes --help
       # nix-nrf bootstrap delegates to the internal bootstrap module; --help
       # only, so normal PR CI never installs or downloads SDK/toolchain
-      # bundles. All missing/install paths are proven by the fake-boundary
-      # bootstrap-tests check.
+      # bundles. Fake-boundary tests cover missing and install paths in the
+      # `bootstrap-tests` check.
       - name: Smoke run nix-nrf bootstrap help
         run: nix run .#nix-nrf -- bootstrap --help
       # nix-nrf doctor delegates to the internal doctor module; --help only,
       # so normal PR CI never depends on the hosted runner's USB state. All
-      # classification/remediation paths are proven by the fake-boundary
+      # classification and remediation paths are covered by fake-boundary
       # doctor-tests check.
       - name: Smoke run nix-nrf doctor help
         run: nix run .#nix-nrf -- doctor --help
@@ -118,16 +107,15 @@ jobs:
           set -e
           test "$rc" -eq 2
 
-      # A5 — devshell-enter: verify the dogfood shell provides the tools and
-      # the removed nrf-probes/nrf-sdk-versions are absent. Fresh CI has no
-      # stale environment, so `! command -v` is reliable here. Only
-      # `nix-nrf bootstrap --help` / `nix-nrf doctor --help` are invoked —
-      # never a bare bootstrap, install, or doctor run against missing state
-      # or hosted USB.
+      # Enter repository shell and verify it provides tools. The removed
+      # nrf-probes/nrf-sdk-versions commands must be absent. Fresh CI has no
+      # stale environment, so `! command -v` is reliable. This runs only
+      # `nix-nrf bootstrap --help` and `nix-nrf doctor --help`, never a bare
+      # bootstrap, installation, or doctor run against missing state or USB.
       - name: Devshell provides tools
         run: nix develop --command sh -ceu 'command -v nrfutil; command -v nix-nrf; command -v openocd; command -v west; nix-nrf bootstrap --help >/dev/null; nix-nrf doctor --help >/dev/null; ! command -v nrf-probes; ! command -v nrf-sdk-versions'
 
-      # A8 — clean-env regression gate: prove Nordic sdk-manager variables
+      # Check that Nordic sdk-manager variables
       # do not poison non-toolchain tools (Node, Git, Python).
       # Uses the dedicated clean-env-test shell to exercise actual
       # shell-hook behavior and dynamic linking.
@@ -145,12 +133,12 @@ jobs:
             python3 -c "import json"
           '
 
-      # A6 — real-OpenOCD source-compat gate: real OpenOCD sources+parses the
+      # Real OpenOCD source-compat gate. OpenOCD sources and parses the
       # recipe Tcl before trying to open a probe, so syntax errors surface
       # distinctly from "no probe" errors. The impossible `adapter serial`
-      # value guarantees the adapter-open stage fails after the scripts parse
-      # — deterministic regardless of whether the host has a probe attached
-      # (the hosted runner's USB state is irrelevant). An unexpected exit 0
+      # value guarantees the adapter-open stage fails after the scripts parse.
+      # This is deterministic even when the hosted runner has a probe attached.
+      # An unexpected exit 0
       # would mean the gate did not exercise the expected probe-open
       # boundary. Recipe proc semantics (command order, args, conditionals)
       # are owned by the checks.flash-recipe-tests flake check, not this gate.
@@ -205,7 +193,7 @@ jobs:
           fi
           echo "OK: real OpenOCD sourced the recipe; exit $rc was the expected probe-open failure"
 
-      # A4 — project-init: verify `nix run .#init-project` generates a working
+      # Verify `nix run .#init-project` generates a working
       # flake with a concrete NCS release into a script-created temporary root
       # (never a fixed caller path), that the generated project evaluates
       # against the current checkout (path:$repo, read-only; nothing is

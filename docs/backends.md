@@ -1,19 +1,16 @@
 # Backends
 
-`mkNrfShell` takes a `backend` argument that selects how the NCS toolchain
-environment is provided, and a `ncsVersion` that is **required** in every
-configuration: each project pins an explicit NCS release — there is no
-`"latest"` alias or default. NCS **v3.3.0** is the tested baseline used by
-this repository's own shells, hardware harnesses, and clean-room tests.
+`mkNrfShell` requires `ncsVersion`. Each project pins one NCS release. The
+shell configuration has no `"latest"` alias or default. This repository tests
+NCS `v3.3.0` in its shells, hardware harness, and clean-room tests.
 
 | Backend | Status | Toolchain provision | Supported releases |
 |---------|--------|---------------------|--------------------|
-| `nrfutil` | default, recommended | Nordic sdk-manager manages a mutable SDK/toolchain under your home directory | releases advertised by sdk-manager through `ncsVersion` |
-| `west` | experimental | Nix owns the Zephyr SDK, host tools, and Python; a mutable west workspace + venv own the NCS source | v3.3.0 on x86_64-linux only |
-| `sdk-nrf` | not implemented | — | none; fails at Nix evaluation |
+| `nrfutil` | default | Nordic sdk-manager manages mutable SDK and toolchain under your home directory | releases sdk-manager advertises through `ncsVersion` |
+| `west` | experimental | Nix provides the Zephyr SDK, host tools, and Python. A mutable west workspace and venv hold the NCS source | `v3.3.0` on `x86_64-linux` only |
+| `sdk-nrf` | not implemented | n/a | none; fails at Nix evaluation |
 
-An unknown `backend` value fails at Nix evaluation listing the supported
-backends — there is no silent fallback.
+Unknown `backend` values fail at Nix evaluation and list supported backends.
 
 ## nrfutil backend (default)
 
@@ -22,60 +19,56 @@ backend uses Nordic's sdk-manager to install and manage the NCS SDK source and
 toolchain bundle under your home directory (for example
 `$HOME/ncs/v3.3.0`).
 
-Toolchain selection:
+### Toolchain selection
 
-- Omit `toolchainBundleId` (the normal case) — the west wrapper runs
+- Omit `toolchainBundleId`. The west wrapper runs
   `nrfutil sdk-manager toolchain env --ncs-version <ncsVersion>`, selecting
   the newest compatible patched toolchain for the release.
-- Set `toolchainBundleId = "<bundle-id>"` — the wrapper runs
+- Set `toolchainBundleId = "<bundle-id>"`. The wrapper runs
   `nrfutil sdk-manager toolchain env --toolchain-bundle-id <bundle-id>`,
   selecting that exact bundle. If it fails, the error names the exact bundle
   rather than falling back to the newest compatible one.
 
-Bootstrap:
+### Bootstrap
 
-- `nix-nrf bootstrap` — explicit provisioning; prompts before downloading.
-- `nix-nrf bootstrap --yes` — approves the required downloads up front.
-- `nix-nrf bootstrap --check` — read-only readiness check; exits 1 when
+- `nix-nrf bootstrap` provisions explicitly and prompts before download.
+- `nix-nrf bootstrap --yes` approves required downloads up front.
+- `nix-nrf bootstrap --check` checks readiness without writing. It exits 1 when
   something is missing and never installs.
-- `nix-nrf bootstrap --print-sdk-path` — prints the absolute SDK root on
+- `nix-nrf bootstrap --print-sdk-path` prints absolute SDK root on
   success.
 
-`autoBootstrap` (default `true`) makes the west wrapper check on every
-invocation and install only when something is missing and approved. With
-`autoBootstrap = false` the wrapper only checks and prints the exact
-`nix-nrf bootstrap` remediation when something is missing — it never mutates.
+`autoBootstrap` defaults to `true`. The west wrapper checks on each invocation
+and installs only missing, approved components. With `autoBootstrap = false`,
+the wrapper only checks and prints `nix-nrf bootstrap` when something is missing.
 
-Shell entry is always non-mutating: the shell hook runs the read-only
-`--check` path and exports `ZEPHYR_BASE` only when the installed SDK is found.
-Without a terminal, an unapproved bootstrap fails with the exact re-run
-command and exit 2 instead of mutating state.
+The shell hook runs read-only `--check` and exports `ZEPHYR_BASE` only when the
+SDK is installed. Without a terminal, unapproved bootstrap exits 2 and prints
+the re-run command.
 
 ## west backend (experimental)
 
-`backend = "west"` is the hybrid model: Nix supplies the exact Zephyr SDK,
-host tools, and Python interpreter, while the official mutable west workspace
-and a version-local venv own the NCS source, west, and workspace Python
-requirements — no nrfutil, no sdk-manager, and no Nordic toolchain bundle.
+`backend = "west"` uses Nix for the Zephyr SDK, host tools, and Python. An
+official west workspace and version-local venv hold NCS source, west, and
+workspace Python requirements. It does not use nrfutil, sdk-manager, or the
+Nordic toolchain bundle.
 
-Constraints:
+### Constraints
 
-- Only NCS v3.3.0 on `x86_64-linux` is supported. An unknown release fails
+- Only NCS `v3.3.0` on `x86_64-linux` is supported. Unknown release fails
   evaluation naming the supported west releases.
 - `toolchainBundleId` and non-default `nrfutilPackage` overrides are rejected
   (no nrfutil participates in this backend).
 
-Bootstrap is explicit: `nix-nrf bootstrap` creates or updates the west
-workspace and venv (`--yes` approves up front, `--check` is a read-only
-readiness check). `nix-nrf versions` lists the west backend's supported
-releases and never invokes nrfutil.
+`nix-nrf bootstrap` creates or updates the west workspace and venv. `--yes`
+approves up front. `--check` only checks readiness. `nix-nrf versions` lists
+west backend releases and never invokes nrfutil.
 
 ## Project initialization (`init-project`)
 
-`nix run ...#init-project` generates a consumer project with a concrete NCS
-release, so you never hand-write the `mkNrfShell` call or copy a stale
-version. The initializer is a separate public flake app (not a `nix-nrf`
-subcommand) with no prompts and no overwrite option:
+`nix run ...#init-project` writes a consumer project with a concrete NCS
+release. It is a separate public flake app, not a `nix-nrf` subcommand. It has
+no prompts or overwrite option.
 
 ```sh
 nix run github:qarnet/nix-nrf-dev#init-project -- ./my-project
@@ -83,77 +76,73 @@ nix run github:qarnet/nix-nrf-dev#init-project -- ./my-project \
   --backend west --ncs-version v3.3.0
 ```
 
-- `--backend` defaults to `nrfutil`; `--ncs-version` defaults to `latest`,
+- `--backend` defaults to `nrfutil`. `--ncs-version` defaults to `latest`,
   which resolves to one concrete release and is written into the generated
-  flake — generated projects never contain `ncsVersion = "latest"`.
-- **nrfutil `latest`** asks the exact packaged sdk-manager
+  flake. Generated projects never contain `ncsVersion = "latest"`.
+- nrfutil `latest` asks packaged sdk-manager
   (`sdk-manager search --json --skip-overhead`) for the newest stable
-  remotely installable NCS release. sdk-manager is the dynamic authority; a
-  failed or inconclusive lookup aborts generation — there is no silent
-  fallback to a hard-coded version. This is distinct from the repository's
-  **tested baseline** (v3.3.0): latest means "newest stable advertised as
-  remotely installable", not "hardware-tested".
-- **west `latest`** selects the newest release present in the local
+  remotely installable NCS release. Failed or inconclusive lookup aborts
+  generation. It does not fall back to hard-coded version. This differs from
+  tested `v3.3.0`: latest means newest stable remotely installable release,
+  not hardware-tested release.
+- west `latest` selects newest release in local
   `nix/backends/west/versions.nix` metadata (numeric semantic maximum over
   strict stable keys). It never queries GitHub or Nordic's global latest, and
   never selects a release the local west metadata does not support. An
   explicit `--ncs-version` must be an exact key in that metadata.
-- An exact `--ncs-version` is a fully offline generation path for both
+- Exact `--ncs-version` generates offline for both
   backends; the nrfutil backend does not check explicit values against the
   remote index.
-- Existing `flake.nix`/`.envrc` collisions, symlink escapes, and invalid
+- Existing `flake.nix` or `.envrc`, symlink escapes, and invalid
   backend/version values abort with `init-project: ...` on stderr and leave
   no generated output. `nix run ...#init-project -- --help` shows the full
   CLI.
 
 ## Nightly latest validation
 
-The only place this repository performs live Nordic queries in a normal
-automated run is the hosted workflow `.github/workflows/latest-ncs-init.yml`
-("Latest NCS initializer"), scheduled nightly at `37 2 * * *` and available on
-manual `workflow_dispatch`. It asks the **real packaged sdk-manager** for the
-latest strict-stable remotely installable NCS release, runs `init-project`
-with `--ncs-version latest`, independently recomputes the expected release
-from a raw `sdk-manager search --json --skip-overhead` query with a fresh
-stdlib parser, requires the generated flake to pin exactly that release, then
-evaluates the generated project against the current checkout and enters its
-dev shell under an isolated HOME/NRFUTIL_HOME.
+Only `.github/workflows/latest-ncs-init.yml` runs live Nordic queries in normal
+automation. It runs nightly at `37 2 * * *` and through manual
+`workflow_dispatch`. It asks packaged sdk-manager for latest strict-stable,
+remotely installable NCS release. It then runs `init-project --ncs-version
+latest`, recomputes expected release from raw `sdk-manager search --json
+--skip-overhead` output with separate stdlib parser, checks generated flake,
+evaluates it against current checkout, and enters dev shell under isolated
+`HOME` and `NRFUTIL_HOME`.
 
-**PASS claim.** When it passes, it proves that the latest strict-stable NCS
-release advertised by the real packaged sdk-manager was selected,
-independently verified, rendered into valid Nix, evaluated, and entered as a
-non-mutating shell with the expected missing-SDK readiness.
+### What a passing run verifies
 
-**No-download limitation.** It never downloads or installs an SDK or
-toolchain: only `bootstrap --check` is invoked, the run proves no `$HOME/ncs`
-and no `zephyr` directory appear before or after shell entry, and nrfutil logs
-are inspected to reject any install invocation. It does not prove SDK/toolchain
-download, firmware build, or hardware.
+A passing run selects the latest strict-stable NCS release advertised by the
+packaged sdk-manager, independently checks it, writes valid Nix, evaluates it,
+and enters a non-mutating shell with expected missing-SDK readiness.
 
-**Inconclusive vs. failure.** Only bounded Nordic sdk-manager transport/index
-outages (explicit SDK-remote-config/index-unavailable messages, DNS/name
-resolution, connection refused/reset/unreachable, TLS/transport/request
-timeout, HTTP 5xx, or command timeout status 124) — after at most three
-retries with short bounded sleeps — produce an `INCONCLUSIVE` warning and a
-successful exit, so an external Nordic outage never fails the repository.
+### What it does not verify
+
+The workflow never downloads or installs an SDK or toolchain. It invokes only
+`bootstrap --check`, checks that `$HOME/ncs` and a `zephyr` directory do not
+appear, and rejects nrfutil install invocations in logs. It does not test SDK
+or toolchain download, firmware build, or hardware.
+
+### Inconclusive runs
+
+Only bounded Nordic sdk-manager transport or index outages produce
+`INCONCLUSIVE` after up to three retries. Cases include explicit remote-config
+or index-unavailable messages, DNS failure, refused or reset connection,
+TLS/transport/request timeout, HTTP 5xx, and command timeout status 124.
 Malformed search data, no stable remotely installable release, wrong
 selection, generated-Nix drift, evaluation/shell failure, or any mutation
-remains a hard failure. Normal PR/CI checks (`ci.yml`) stay deterministic and
-never contact Nordic; they keep testing the explicit v3.3.0 baseline.
+fails workflow. Normal PR and CI checks stay deterministic, never contact
+Nordic, and test explicit `v3.3.0`.
 
 ## Scoped toolchain environment
 
-Nordic's sdk-manager environment script exports `PYTHONHOME`, `PYTHONPATH`,
-`LD_LIBRARY_PATH`, and `GIT_EXEC_PATH` — variables that break any
-non-toolchain tool run from the same shell (including Nix itself). The shell
-does **not** eval that script globally; the `west` wrapper loads it only
-inside west's process tree. The shell stays clean, so `nix`, agents, and
-editors launched from it work normally.
+Nordic sdk-manager environment script exports `PYTHONHOME`, `PYTHONPATH`,
+`LD_LIBRARY_PATH`, and `GIT_EXEC_PATH`. These variables break non-toolchain
+tools, including Nix. The shell does not evaluate the script globally. The
+`west` wrapper loads it only for the west process tree.
 
 ## Should I use `inputs.nixpkgs.follows`?
 
-Not required — nix-nrf-dev works out of the box with the nixpkgs revision it
-pins in its own `flake.lock`.
+No. nix-nrf-dev works with the nixpkgs revision pinned in its `flake.lock`.
 
 If your project already pins its own nixpkgs, adding `inputs.nixpkgs.follows`
 makes nix-nrf-dev reuse that revision, reducing duplicate nixpkgs inputs and
@@ -178,19 +167,18 @@ how `follows` propagates input revisions.
 ## SEGGER / J-Link caveat
 
 The packaged nrfutil derivation in Nixpkgs unconditionally depends on
-`segger-jlink-headless` and sets `NRF_JLINK_DLL_PATH` — including when only
+`segger-jlink-headless` and sets `NRF_JLINK_DLL_PATH`, including when only
 the sdk-manager extension is composed. The default flake therefore imports
 Nixpkgs with `allowUnfree = true` and `segger-jlink.acceptLicense = true`,
-so most users need no action — even when they only use a CMSIS-DAP probe.
+so most users need no action, even when they only use a CMSIS-DAP probe.
 CMSIS-DAP use does **not** remove the packaged J-Link dependency.
 
-Consumers who construct or override nrfutil from their own `pkgs` — a
-`nrfutilPackage` override, or their own `pkgs.nrfutil.withExtensions
-["nrfutil-sdk-manager"]` — must configure the same license handling
-themselves, or that package will fail to build. There is no sdk-manager-only
-composition that avoids J-Link.
+Consumers who construct or override nrfutil from their own `pkgs`, such as a
+`nrfutilPackage` override or `pkgs.nrfutil.withExtensions
+["nrfutil-sdk-manager"]`, must configure the same license handling. No
+sdk-manager-only composition avoids J-Link.
 
 ## See also
 
-- [hardware.md](hardware.md) — probe access, flashing, recovery safety
-- [README](../README.md) — quick start and project initialization
+- [hardware.md](hardware.md) covers probes, flashing, and recovery.
+- [README](../README.md) has quick start and project initialization.

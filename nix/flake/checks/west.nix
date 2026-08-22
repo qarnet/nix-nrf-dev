@@ -20,7 +20,7 @@
   # NIX_NRF_WEST_SETUP_YES ignored), command order, requirement order,
   # re-run behavior, incompatible-workspace rejection, failure
   # propagation, --check non-mutation, --print-sdk-path stdout, and
-  # the public `nix-nrf bootstrap` program prefix — no network, no real
+  # the public `nix-nrf bootstrap` program prefix. No network or real
   # venv, no real west workspace. Also builds the packaged bootstrap
   # module and asserts it installs only $out/libexec/nix-nrf/bootstrap
   # (no standalone $out/bin/nix-nrf-west-* command), and runs the
@@ -72,7 +72,7 @@
   # Proves text (one supported release per line), --json (parseable
   # sorted string array), --help (exit 0), unknown-option/too-many exit
   # 2, and that the packaged command reports exactly the metadata
-  # release — no nrfutil, no network.
+  # release. No nrfutil or network.
   westVersionsTests =
     pkgs.runCommand "nix-nrf-west-versions-tests"
     {
@@ -95,7 +95,7 @@
   # key, testedWestVersion/python/pythonPackage/requirements strings,
   # zephyrSdk version/targets/assets with x86_64-linux URLs + fixed
   # hashes, sorted attr names so the versions command output is
-  # deterministic). Pure Nix evaluation — fetches and builds nothing.
+  # deterministic). Pure Nix evaluation fetches and builds nothing.
   westBackendMetadataCheck = let
     isString = x: builtins.isString x;
     isStringList = xs: builtins.isList xs && builtins.all isString xs;
@@ -161,7 +161,7 @@
   # failures, each with `name`/`expected`/`result`). For every supported
   # release each declared `zephyrSdk.targets` entry must have a matching
   # x86_64-linux toolchain archive target, and each listed toolchain
-  # archive target must be declared — membership semantics, not
+  # archive target must be declared. This checks membership, not
   # list-order equality (metadata order stays meaningful for packaging,
   # but coverage must not depend on matching order). A nonempty failure
   # list fails the derivation with the `builtins.toJSON` failure list,
@@ -216,7 +216,7 @@
   # metadata values may contain shell metacharacters, so the shell hook
   # and the scoped west wrapper must assign escaped values to variables
   # OUTSIDE double quotes and compose paths/messages from those
-  # variables — never interpolate an escapeShellArg output directly
+  # variables. Never interpolate an escapeShellArg output directly
   # inside double quotes (which would embed literal quote characters
   # into the value, e.g. `$HOME/ncs/'v3.3.0'`).
   #
@@ -349,8 +349,8 @@
   # = "west"; ncsVersion = "v3.3.0"; }` (the public API) with caller
   # name/packages/extraShellHook/withMultilib/inputsFrom and runs its
   # public `nix-nrf` and scoped `west` against a fake-ready workspace
-  # plus fake venv executables — no network, no west update/pip/workspace
-  # downloads (the fake boundaries absorb the bootstrap's mutating
+  # plus fake venv executables. It runs no network, west update, pip, or workspace
+  # downloads because fake boundaries absorb the bootstrap's mutating
   # steps). Proves: the shell hook is read-only and free of quote
   # artifacts; `nix-nrf versions` reports v3.3.0 (text + parseable
   # JSON); `nix-nrf bootstrap --check --print-sdk-path` returns the
@@ -448,8 +448,24 @@
       ws="$HOME/ncs/v3.3.0"
       python3 "$fixture" --workspace "$ws" --mode log
 
-      # ── Shell hook: read-only, exact workspace, caller options ──────
+      # Shell hook: read-only, exact workspace, and caller options.
       printf '%s\n' "$shellHook" > hook.sh
+      missing_hook_home="$PWD/home-hook-missing"
+      mkdir -p "$missing_hook_home"
+      missing_hook_out="$(HOME="$missing_hook_home" bash -c '
+      set -eu
+      source "$1"
+      [ -z "''${ZEPHYR_BASE:-}" ] || { echo "FAIL: missing workspace exported ZEPHYR_BASE" >&2; exit 1; }
+      ' bash hook.sh 2>&1)"
+      printf '%s\n' "$missing_hook_out" | grep -F "setup: not ready. Run nix-nrf bootstrap." >/dev/null || {
+      echo "FAIL: missing-workspace shell hook remediation changed" >&2
+      printf '%s\n' "$missing_hook_out" >&2
+      exit 1
+      }
+      [ ! -e "$missing_hook_home/ncs" ] || {
+      echo "FAIL: missing-workspace shell hook mutated state" >&2
+      exit 1
+      }
       hook_out="$(HOME="$HOME" bash -c '
       set -eu
       source "$1"

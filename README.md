@@ -2,41 +2,32 @@
 
 [![Release](https://img.shields.io/github/v/release/qarnet/nix-nrf-dev?sort=semver)](https://github.com/qarnet/nix-nrf-dev/releases)
 
-nRF Connect SDK (NCS) toolchain environments are awkward to compose
-safely with Nix:
+NCS SDKs and toolchains live outside the Nix store. Their environment scripts
+can affect host tools. CMSIS-DAP probes need host udev rules before they can
+flash nRF5340 and nRF54L15 boards.
 
-- SDKs and toolchains live outside the Nix store
-- their environment scripts can interfere with unrelated tools
-- CMSIS-DAP probes need extra setup for reliable flashing and probe access on nRF5340 and nRF54L15
-
-This project packages all of that into one ready-to-use,
-project-scoped Nix environment for building and flashing modern Nordic
-firmware.
+nix-nrf-dev provides a project-scoped Nix shell for NCS builds and OpenOCD
+flashing.
 
 > The nix-nrf-dev project version is **independent from NCS versions**.
-> `nix-nrf --version` reports the nix-nrf-dev project version (canonical
-> `release.json`, e.g. `0.1.0`), while `ncsVersion` (e.g. `v3.3.0`) is the
+> `nix-nrf --version` reports the nix-nrf-dev project version from
+> `release.json`, e.g. `0.1.0`, while `ncsVersion` (e.g. `v3.3.0`) is the
 > upstream SDK selection. See [CHANGELOG.md](CHANGELOG.md).
 
-## What you get
+## What it provides
 
-- **NCS shell**: project-scoped `nix develop` environment with `west`, the
-  Zephyr toolchain, and `ZEPHYR_BASE` pointing to the correct SDK, without contaminating your host tools.
-- **CMSIS-DAP / OpenOCD support**: a pinned openocd-master build plus the
-  host udev policy needed for reliable probe access.
-- **`nix-nrf` helper**: `bootstrap`, `versions`, `probes`, and `doctor`
-  commands for provisioning and diagnosing the environment.
-- **Project initializer**: `nix run ...#init-project -- ./my-project` generates
-  a consumer flake pinned to a concrete NCS release (never `latest`).
-- **nRF5340 and nRF54L15 verification**: flashing flows proven on real
-  hardware for both families.
+- `nix develop` provides `west`, the Zephyr toolchain, and `ZEPHYR_BASE` for
+  the selected NCS release.
+- `openocd-master` and udev guidance support CMSIS-DAP probe access.
+- `nix-nrf` provides `bootstrap`, `versions`, `probes`, and `doctor`.
+- `init-project` writes `.envrc` and `flake.nix` pinned to one NCS release.
+- Manual hardware tests cover nRF5340 and nRF54L15 flashing.
 
 ## Quick start
 
-Prerequisites: Nix with flake support on `x86_64-linux`. [direnv] is
-recommended but optional.
+Requires Nix with flake support on `x86_64-linux`. [direnv] is optional.
 
-### Method A — Automated (recommended)
+### Create a project
 
 ```bash
 mkdir my-project && cd my-project
@@ -51,7 +42,7 @@ concrete NCS release (never `latest`), and never overwrites existing files.
 First use builds openocd-master from source (~10 min) unless Cachix is
 enabled (`cachix use qarnet`).
 
-### Method B — Manual (existing project)
+### Add nix-nrf-dev to an existing project
 
 Add nix-nrf-dev to your project's `flake.nix`:
 
@@ -63,7 +54,7 @@ Add nix-nrf-dev to your project's `flake.nix`:
     devShells.x86_64-linux.default =
       nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
         backend = "nrfutil";   # default; "west" is experimental
-        ncsVersion = "v3.3.0"; # required — exact release, never "latest"
+        ncsVersion = "v3.3.0"; # required, exact release, never "latest"
       };
   };
 }
@@ -75,9 +66,8 @@ nix-nrf bootstrap
 nix-nrf doctor
 ```
 
-For the full step-by-step guide — prerequisites, what gets installed and
-where, release-tag pinning, backend choice — see
-[docs/install.md](docs/install.md).
+See [docs/install.md](docs/install.md) for prerequisites, install locations,
+release pins, and backend selection.
 
 [direnv]: https://direnv.net
 
@@ -95,32 +85,28 @@ Backend-specific behavior and hardware setup live in
 [docs/backends.md](docs/backends.md) and [docs/hardware.md](docs/hardware.md).
 
 > [!NOTE]
-> **SEGGER / J-Link caveat:** the packaged nrfutil includes J-Link and its
-> unfree license even when you only use a CMSIS-DAP probe. The default flake
-> handles this automatically, but custom nrfutil or Nixpkgs compositions may
-> need license configuration — see
+> Packaged nrfutil includes J-Link and its unfree license even when using a
+> CMSIS-DAP probe. Default flake configuration accepts it. Custom nrfutil or
+> Nixpkgs compositions may need the same license configuration. See
 > [docs/backends.md#segger--j-link-caveat](docs/backends.md#segger--j-link-caveat).
 
 ## Hardware access
 
-A Nix dev shell cannot install host udev policy, because probe access is
-a system configuration. The packaged `60-openocd.rules` is the
-unmodified upstream OpenOCD contrib rule and needs an explicit `plugdev`
-group with your user as a member. On NixOS, activate it with the direct
-`services.udev.packages` form (primary, least intrusive) or import the
-`nixosModules.udevRules` module as a convenience equivalent. Both only add
-the rule, never the group or user. Other Linux distributions install the
-packaged rule with their standard udev procedure. `nix-nrf doctor` reports
-whether your probes are visible and accessible. Full instructions are in
-[docs/hardware.md](docs/hardware.md).
+A Nix dev shell cannot set host udev policy. The packaged
+`60-openocd.rules` is the unmodified OpenOCD contrib rule. It needs a
+`plugdev` group with your user as a member. On NixOS, set
+`services.udev.packages` directly or import `nixosModules.udevRules`. Both
+add only the rule. Other Linux distributions install the packaged rule through
+their normal udev procedure. `nix-nrf doctor` reports probe visibility and
+access. See [docs/hardware.md](docs/hardware.md).
 
 ## Documentation
 
-- [docs/install.md](docs/install.md) — step-by-step install guide (prereqs, what gets installed, pinning, backends)
-- [CHANGELOG.md](CHANGELOG.md) — release history (project SemVer, independent from NCS versions)
-- [docs/backends.md](docs/backends.md) — backend choice, toolchain selection, bootstrap
-- [docs/hardware.md](docs/hardware.md) — probe access, flashing, recovery safety
-- [CONTRIBUTING.md](CONTRIBUTING.md) — contributing to nix-nrf-dev itself
+- [docs/install.md](docs/install.md) covers installation and release pins.
+- [CHANGELOG.md](CHANGELOG.md) records project releases.
+- [docs/backends.md](docs/backends.md) explains backends and bootstrap.
+- [docs/hardware.md](docs/hardware.md) covers probes, flashing, and recovery.
+- [CONTRIBUTING.md](CONTRIBUTING.md) explains repository work.
 
 ## License
 

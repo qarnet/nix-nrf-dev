@@ -1,12 +1,12 @@
 # Dynamic project initializer gate: runs tests/unit/test_nix_nrf_init_project.py
-# twice with sandboxed Python stdlib — once against the raw repository script
-# (standalone) and once against the packaged public binary constructed with a
+# twice with sandboxed Python stdlib. One run uses the raw repository script
+# (standalone), and one uses the packaged public binary constructed with a
 # deterministic fake nrfutil (tests/fixtures/nrfutil-search.py) as
 # `nrfutilPackage` and the real west metadata. Proves CLI contract, version
 # resolution (semantic max, schema validation, offline explicit paths, west
 # metadata constraint), filesystem safety (collisions, symlink escapes,
-# exclusive create, atomic renameat2), and the exact generated file set — no
-# network, no real nrfutil, no sdk-manager state, no SDK/toolchain download.
+# exclusive create, atomic renameat2), and the exact generated file set. It uses no
+# network, real nrfutil, sdk-manager state, or SDK/toolchain download.
 {
   pkgs,
   # Real west backend version metadata (nix/backends/west/versions.nix); its

@@ -1,4 +1,4 @@
-# nix/backends/nrfutil/shell.nix — nrfutil backend dev shell construction.
+# nix/backends/nrfutil/shell.nix builds the nrfutil backend development shell.
 # Receives the internal dependencies plus the shared nix-nrf constructor and
 # a normalized set of public shell options (already validated by the public
 # dispatcher). Owns the nrfutil exact-executable/override selection, the
@@ -52,7 +52,7 @@
       else "newest compatible toolchain for NCS \"$_ncs_version\"";
 
     # Public CLI facade, instantiated from the selected nrfutil package, the
-    # wrapped openocd-master, and this shell's selector values — so a caller
+    # wrapped openocd-master, and this shell's selector values. A caller
     # package override also controls `versions`, and the shell-specific
     # `nix-nrf bootstrap` runs with the configured defaults (no CLI args
     # needed). The probes module is owned internally by nix-nrf.
@@ -114,8 +114,8 @@
         # -m32 builds work.
         export PATH="${pkgs.gccMultiStdenv.cc}/bin:$PATH"
       ''}
-      # Keep our openocd ahead of anything the toolchain bundle might ship —
-      # the west openocd runner must use the openocd-master build.
+      # Keep project OpenOCD ahead of anything the toolchain bundle might ship.
+      # The west OpenOCD runner must use the openocd-master build.
       export PATH="${openocd-master}/bin:$PATH"
 
       self="$(readlink -f "$0")"

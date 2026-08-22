@@ -1,31 +1,8 @@
-# Nightly latest-NCS initializer validation.
-#
-# The ONLY place in this repository where a normal automated run performs live
-# Nordic queries. Proves that the latest strict-stable NCS release advertised
-# as remotely installable by the real packaged sdk-manager can be selected by
-# `init-project`, rendered as a concrete consumer flake, evaluated against the
-# current checkout, and entered as a non-mutating dev shell with the expected
-# missing-SDK readiness — without ever downloading/installing an SDK or
-# toolchain. A Nordic service outage must never turn into a repository
-# failure: bounded transport/index outages yield an INCONCLUSIVE warning and a
-# successful exit.
-#
-# Supported PASS claim: "Latest strict-stable NCS release advertised by the
-# real packaged sdk-manager was selected, independently verified, rendered
-# into valid Nix, evaluated, and entered as a non-mutating shell with expected
-# missing-SDK readiness."
-# Explicit limitation: this does not prove SDK/toolchain download, firmware
-# build, or hardware.
-#
-# Key invariants:
-#   - one `resolve` step owns both live operations (initializer, then an
-#     independent `nrfutil sdk-manager search`) with at most three bounded
-#     retries each (10 s sleeps) and a strict Nordic-outage classifier;
-#   - validation steps run only when resolve outputs `result=pass`;
-#   - isolated HOME/NRFUTIL_HOME under a unique runner-temp path; the exact
-#     unique validation root is removed in the final `if: always()` step, and
-#     no fixed shared path is ever deleted;
-#   - normal ci.yml stays deterministic and never contacts Nordic.
+# Nightly latest-NCS initializer validation. `resolve` runs initializer and an
+# independent sdk-manager search. It retries Nordic transport or index outages
+# up to three times. It never downloads SDK or toolchain. Validation runs only
+# after `result=pass`. Each run uses unique temporary HOME and NRFUTIL_HOME,
+# then removes only that path. Normal CI never contacts Nordic.
 name: Latest NCS initializer
 
 on:
@@ -89,10 +66,9 @@ jobs:
           DEST_ROOT="$VALIDATION_ROOT/projects"
           mkdir -p "$HOME_DIR" "$NRFUTIL_HOME_DIR" "$DEST_ROOT"
 
-          # Preserve the Cachix substituter configuration cachix-action wrote
-          # into the runner's normal HOME. This is Nix cache configuration —
-          # not Nordic state — and keeps the cached qarnet derivations
-          # available to the isolated HOME below. Nordic SDK/toolchain state
+          # Preserve Cachix substituter configuration from runner HOME. This is
+          # Nix cache configuration, not Nordic state. It keeps cached qarnet
+          # derivations available to the isolated HOME below. Nordic SDK/toolchain state
           # stays fully isolated.
           if [ -f "$HOME/.config/nix/nix.conf" ]; then
             mkdir -p "$HOME_DIR/.config/nix"

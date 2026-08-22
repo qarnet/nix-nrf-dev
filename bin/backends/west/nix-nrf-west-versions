@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# nix-nrf-west-versions — `nix-nrf versions` command module for the west
-# backend: lists the NCS releases supported by the west backend metadata
+# `nix-nrf-west-versions` is the `nix-nrf versions` command module for the west
+# backend. It lists NCS releases supported by the west backend metadata
 # (nix/backends/west/versions.nix).
 #
 # Internal backend command: installed by nix/backends/west/versions-command.nix

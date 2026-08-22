@@ -1,4 +1,4 @@
-# nix/backends/west/versions-command.nix — packaged `nix-nrf versions` command
+# nix/backends/west/versions-command.nix packages the `nix-nrf versions` command
 # module for the west backend. Installs bin/backends/west/nix-nrf-west-versions
 # at $out/libexec/nix-nrf/versions and exposes no standalone $out/bin command.
 #

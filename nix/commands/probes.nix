@@ -1,4 +1,4 @@
-# nix/commands/probes.nix — internal probe/target identification module for
+# nix/commands/probes.nix. Internal probe/target identification module for
 # the `nix-nrf probes` subcommand. Not a public package: no `$out/bin` binary
 # is installed. `nix/commands/default.nix` resolves the exact store path of
 # the wrapped command below and execs it.
