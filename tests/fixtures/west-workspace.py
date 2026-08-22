@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# tests/fixtures/west-workspace.py — stdlib-only fake-ready west workspace
+# Stdlib-only fake-ready west workspace
 # creator shared by the west quoting and shell-boundary gates
 # (nix/flake/checks/west.nix). Replaces the duplicated inline shell creation
 # blocks: both modes create the same ready structure (workspace manifest,

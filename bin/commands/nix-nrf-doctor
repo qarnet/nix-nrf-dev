@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# nix-nrf doctor — read-only environment and probe-access diagnostics.
+# `nix-nrf doctor` provides read-only environment and probe-access diagnostics.
 #
 # Internal command module for the `nix-nrf` facade: installed by
 # nix/commands/doctor.nix at $out/libexec/nix-nrf/doctor and wrapped with the
@@ -36,7 +36,7 @@
 # so vendor-specific interfaces are never mistaken for CMSIS-DAP v2. Node
 # access uses os.access on the mapped /dev nodes;
 # NIX_NRF_DOCTOR_ACCESS_JSON is a test-only override so fixture
-# tests do not depend on sandbox permission semantics — the packaged wrapper
+# tests do not depend on sandbox permission semantics. Packaged wrapper
 # never sets it, and production always uses os.access.
 #
 # Testing hooks (never forced by the packaged wrapper):
@@ -66,7 +66,7 @@ DEFAULT_DEV_ROOT = "/dev"
 
 # Human environment label for headings/status/remediation/help. The packaged
 # wrapper always sets NIX_NRF_DOCTOR_ENVIRONMENT_LABEL (default
-# "SDK/toolchain"); only human message strings use it — JSON field names and
+# "SDK/toolchain"). Only human message strings use it. JSON field names and
 # exit semantics never change.
 DEFAULT_ENVIRONMENT_LABEL = "SDK/toolchain"
 

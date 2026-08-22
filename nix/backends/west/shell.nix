@@ -1,5 +1,5 @@
-# nix/backends/west/shell.nix — public west backend dev shell, selected
-# by `mkNrfShell { backend = "west"; ncsVersion = ...; }`.
+# nix/backends/west/shell.nix builds the public west backend development shell.
+# `mkNrfShell { backend = "west"; ncsVersion = ...; }` selects it.
 #
 # The hybrid model:
 #   - Nix owns the exact Zephyr SDK package (ZEPHYR_SDK_INSTALL_DIR /
@@ -16,7 +16,7 @@
 # Metadata values (NCS version, SDK version, Python version) are metadata-
 # controlled and may contain shell metacharacters, so every escaped value is
 # assigned to a shell variable OUTSIDE double quotes and all paths/messages
-# are composed from those variables — never by interpolating an escapeShellArg
+# are composed from those variables. Never interpolate an escapeShellArg
 # output directly inside double quotes (which would embed literal quote
 # characters into the value).
 #
@@ -176,7 +176,7 @@ in
         fi
         echo "setup: ready"
       else
-        echo "setup: not ready — run: nix-nrf bootstrap"
+        echo "setup: not ready. Run nix-nrf bootstrap."
       fi
       ${extraShellHook}
     '';

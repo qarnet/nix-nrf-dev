@@ -9,10 +9,10 @@
 #               -c init -c "flash_both APP_HEX NET_HEX [ALLOW_RECOVERY]" \
 #               -c shutdown
 # ALLOW_RECOVERY defaults to 1 (recovery on locked app core). Pass 0 to
-# abort with an error instead of running nrf53_recover — the hardware
+# abort with an error instead of running nrf53_recover. The hardware
 # harness calls `flash_both APP_HEX NET_HEX 0` and never recovers.
 #
-# Canonical copy extracted from le-audio-receiver (proven flow):
+# Sequence extracted from le-audio-receiver:
 # check_approtect recovery -> app flash -> UICR APPROTECT programming ->
 # cpunet FORCEOFF release -> net flash -> net UICR -> reset.
 # The UICR programming is NOT optional: nRF5340 debug access is a soft
@@ -22,7 +22,7 @@
 # nRF5340 debug access is a *soft* branch: at boot, SystemInit copies
 # UICR.APPROTECT into CTRLAP.APPROTECT.DISABLE. An ERASED UICR (0xFFFFFFFF)
 # therefore hard-locks the debug AP at every reset even though the firmware
-# runs — the chip then needs a full CTRL-AP recovery (mass erase) before it
+# runs. The chip then needs a full CTRL-AP recovery (mass erase) before it
 # can be reflashed. Programming UICR.APPROTECT = Unprotected (0x50FA50FA)
 # after every mass erase keeps the chip debuggable across resets.
 proc _uicr_unprotect {target addr} {
@@ -32,7 +32,7 @@ proc _uicr_unprotect {target addr} {
         return
     }
     if {$cur != 0xFFFFFFFF} {
-        puts [format "WARNING: UICR @%s = 0x%08x (not erased) — leaving as-is" $addr $cur]
+        puts [format "WARNING: UICR @%s = 0x%08x (not erased); leaving it unchanged" $addr $cur]
         return
     }
     flash fillw $addr 0x50FA50FA 1
@@ -56,7 +56,7 @@ proc uicr_unprotect_net {} {
 proc check_approtect {} {
     set locked [catch {nrf53.cpuapp arp_examine} err]
     if {$locked} {
-        puts "App core locked — running nrf53_recover..."
+        puts "App core locked. Running nrf53_recover..."
         nrf53_recover
     }
 }
@@ -96,9 +96,9 @@ proc flash_both {app_hex net_hex {allow_recovery 1}} {
     set app_locked [catch {nrf53.cpuapp arp_examine} err]
     if {$app_locked} {
         if {!$allow_recovery} {
-            error "App core locked (APPROTECT) — recovery disabled (allow_recovery 0); refusing nrf53_recover, no flash/verify/UICR performed"
+            error "App core locked (APPROTECT). Recovery disabled (allow_recovery 0). Refusing nrf53_recover. No flash, verify, or UICR write performed."
         }
-        puts "App core locked — running nrf53_recover..."
+        puts "App core locked. Running nrf53_recover..."
         nrf53_recover
     }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# tests/unit/test_nix_nrf_init_project.py — public-boundary unit tests for
+# Public-boundary unit tests for
 # the dynamic project initializer (bin/commands/nix-nrf-init-project,
 # packaged by nix/init-project/default.nix and published through
 # apps.<system>.init-project).
@@ -114,9 +114,8 @@ TEST_WEST_VERSIONS_JSON = os.environ.get(
     "NIX_NRF_INIT_TEST_WEST_VERSIONS_JSON", RAW_WEST_VERSIONS_JSON
 )
 # Expected west `latest` in every mode: the numeric semantic maximum among
-# strict stable keys of the exact metadata list under test (the packaged
-# versions.nix list in packaged mode, the synthetic list in raw mode) —
-# never a hard-coded per-mode expectation.
+# strict stable keys of exact metadata list under test. It does not use a
+# hard-coded per-mode expectation.
 TEST_WEST_VERSIONS = json.loads(TEST_WEST_VERSIONS_JSON)
 TEST_WEST_LATEST = _strict_stable_max(TEST_WEST_VERSIONS)
 
@@ -527,8 +526,8 @@ class InitProjectTestCase(unittest.TestCase):
     #    raw-mode list otherwise) and never invokes fake nrfutil; explicit
     #    west values must be exact metadata keys.
     def test_west_latest_resolves_from_local_metadata_without_nrfutil(self):
-        # Expected value is derived from the exact metadata list under test —
-        # no hard-coded per-mode expectation.
+        # Derive expected value from exact metadata list under test. Do not use
+        # a hard-coded per-mode expectation.
         expected = TEST_WEST_LATEST
         for selection in (None, "latest"):
             dest = self.fresh_dest(f"west-{selection or 'omitted'}")

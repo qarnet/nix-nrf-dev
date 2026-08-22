@@ -1,4 +1,4 @@
-# nix/backends/west/zephyr-sdk.nix — exact Zephyr SDK package assembled from
+# nix/backends/west/zephyr-sdk.nix assembles the exact Zephyr SDK package from
 # official release assets, selected by version metadata (see versions.nix).
 #
 # The minimal distribution bundle plus the selected compiler archives are
@@ -9,8 +9,8 @@
 # so ZEPHYR_SDK_INSTALL_DIR can point straight at $out. The interactive
 # setup/registration script and the host-tools installer are removed; there is
 # no CMake package-registry registration (the environment exports
-# ZEPHYR_SDK_INSTALL_DIR instead) and no installer ever runs during the build
-# — the derivation builds inside the Nix sandbox, which has no network.
+# ZEPHYR_SDK_INSTALL_DIR instead) and no installer runs during the build.
+# The derivation builds inside the Nix sandbox, which has no network.
 #
 # The prototype supports only x86_64-linux; any other system fails evaluation
 # with a clear message.
@@ -66,8 +66,8 @@ in
       pkgs.libxcrypt
       pkgs.ncurses
     ];
-    # gdb-py binaries need libpython3.10.so.1.0 (not in pinned Nixpkgs —
-    # Python 3.10 is EOL) and the legacy libcrypt.so.1 ABI (Nixpkgs libxcrypt
+    # gdb-py binaries need libpython3.10.so.1.0. Pinned Nixpkgs does not include it
+    # because Python 3.10 is EOL. They also need the legacy libcrypt.so.1 ABI (Nixpkgs libxcrypt
     # ships libcrypt.so.2). The python-enabled gdb intentionally remains
     # unpatched because of those missing EOL/legacy ABIs; the plain gdb and
     # all compilers work.

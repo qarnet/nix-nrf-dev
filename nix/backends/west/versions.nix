@@ -1,4 +1,4 @@
-# nix/backends/west/versions.nix — version metadata for the west backend
+# nix/backends/west/versions.nix contains version metadata for the west backend
 # prototype. Plain attrset keyed by NCS release. This file owns every
 # release-specific version, requirement path, asset URL, and hash; builder
 # files (zephyr-sdk.nix, shell.nix) and the setup-helper wrapper select
@@ -6,9 +6,9 @@
 #
 # Zephyr SDK asset hashes are verified against the official v0.17.0 release
 # sha256.sum (https://github.com/zephyrproject-rtos/sdk-ng/releases/download/
-# v0.17.0/sha256.sum) — see docs/development/west-backend-status.md.
+# v0.17.0/sha256.sum). See docs/development/west-backend-status.md.
 #
-# The prototype supports only x86_64-linux; builder files fail clearly on any
+# The prototype supports only x86_64-linux; builder files report an error on any
 # other system.
 {
   "v3.3.0" = {
@@ -64,7 +64,7 @@
     # invocation. Grounds the loose NCS requirement files in NCS's own pinned
     # resolution: requirements-fixed.txt pins cbor2==5.9.0 for Python 3.12,
     # while nrf/scripts/requirements-build.txt allows cbor2>=5.4.2.post1 and
-    # current PyPI resolves 6.x — which breaks zcbor 0.8.1 (cbor2 6 removed
+    # current PyPI resolves 6.x, which breaks zcbor 0.8.1 (cbor2 6 removed
     # the CBORDecodeValueError alias zcbor imports). The exact 5.9.0 pin (not
     # a `<6` range) matches requirements-fixed.txt verbatim and never admits
     # an unverified 5.x release.

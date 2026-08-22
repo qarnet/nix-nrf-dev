@@ -1,10 +1,9 @@
-# Clean room — manual-only proof that a fresh isolated HOME can bootstrap
-# NCS v3.3.0 + toolchain and build the XIAO nRF54L15 sysbuild blinky, with
-# resource telemetry recorded to the run logs and job summary.
+# Manual clean-room test. It bootstraps NCS v3.3.0 and toolchain in isolated
+# HOME, builds XIAO nRF54L15 sysbuild blinky, and writes telemetry to logs.
 #
 # Deliberately NOT part of normal PR CI: a cold multi-gigabyte SDK/toolchain
 # bootstrap is too large and slow for `.github/workflows/ci.yml`. Dispatch
-# manually on the known self-hosted runner when a full cold-bootstrap proof
+# manually on the known self-hosted runner when a full cold bootstrap test
 # is wanted. Manual-only: no schedule, no hardware/probe/flashing step.
 #
 # Each dispatch writes a unique telemetry report under runner.temp (run ID +

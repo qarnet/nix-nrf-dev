@@ -1,4 +1,4 @@
-# nix/release.nix — canonical nix-nrf-dev project version loader.
+# nix/release.nix. nix-nrf-dev project version loader.
 #
 # The nix-nrf-dev/nix-nrf product/package version is INDEPENDENT from Nordic
 # NCS versions: `release.json` holds the one canonical strict stable SemVer

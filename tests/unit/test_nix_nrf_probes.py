@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# tests/unit/test_nix_nrf_probes.py — fake-boundary unit tests for the
+# Fake-boundary unit tests for
 # `nix-nrf probes` command module (bin/commands/nix-nrf-probes).
 #
 # Exercises the command as a subprocess through public args and environment
@@ -255,9 +255,7 @@ class ProbesTestCase(unittest.TestCase):
         self.assertEqual(proc.returncode, 0)
         row = self.table_row(proc.stdout, "plock")
         self.assertIn("nrf52 (locked?)", row)
-        self.assertIn(
-            "AP locked (APPROTECT engaged) — identity from DP/AP signature only", row
-        )
+        self.assertIn("AP locked. Identity comes from DP/AP signature only.", row)
 
     # 6. Serial filtering invokes OpenOCD only for selected present serials.
     def test_serial_filtering(self):

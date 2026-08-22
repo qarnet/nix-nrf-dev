@@ -1,5 +1,5 @@
 {
-  description = "Reusable Nordic nRF development environment — NCS toolchain shell + openocd-master flashing tools";
+  description = "Nix shell for Nordic NCS development and OpenOCD flashing";
 
   inputs = {
     # nixos-unstable: Nixpkgs packages nRF Util and its extensions (see
@@ -30,7 +30,7 @@
     # Repository's implemented host platform only. Per-system construction
     # (configured Nixpkgs, components, formatter/pre-commit, checks, dev
     # shells) lives in nix/flake/per-system.nix. Future platform expansion
-    # must add implementation, metadata, and proof before being listed here.
+    # must add implementation, metadata, and verification before being listed here.
     supportedSystems = ["x86_64-linux"];
   in
     flake-utils.lib.eachSystem supportedSystems (

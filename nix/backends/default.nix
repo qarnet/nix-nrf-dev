@@ -1,4 +1,4 @@
-# mkNrfShell — devShell factory for nRF Connect SDK projects.
+# mkNrfShell is the devShell factory for nRF Connect SDK projects.
 #
 # Two backends provide the NCS toolchain environment:
 #
@@ -11,7 +11,7 @@
 # (internal `udevRules` closure wiring from nix/flake/components.nix).
 #
 #   Scoped toolchain env: Nordic's `nrfutil sdk-manager toolchain env` script
-#   exports PYTHONHOME, PYTHONPATH, LD_LIBRARY_PATH, GIT_EXEC_PATH, ... —
+#   exports PYTHONHOME, PYTHONPATH, LD_LIBRARY_PATH, GIT_EXEC_PATH, and other
 #   variables that break any non-toolchain tool run from the same shell (nix
 #   itself fails to load shared libraries, nix-store pythons pick up the
 #   wrong stdlib, git may misbehave). Instead of eval'ing that script into
@@ -26,7 +26,7 @@
 #   NIX_NRF_BOOTSTRAP_YES=1 / `--yes`), and returns the absolute SDK root for
 #   ZEPHYR_BASE. With `autoBootstrap = false` it only checks and, when anything
 #   is missing, reports that automatic bootstrap is disabled plus the exact
-#   `nix-nrf bootstrap` remediation — it never mutates. The shell hook itself
+#   `nix-nrf bootstrap` remediation. It never mutates. The shell hook itself
 #   stays non-mutating (read-only `--check` path).
 #
 # west (experimental; v3.3.0 / x86_64-linux only): Nix owns the exact Zephyr
@@ -76,7 +76,7 @@
   # import: the exact udev-rules package whose store path the shell-specific
   # `nix-nrf doctor` wrapper reports in its remediation
   # (NIX_NRF_DOCTOR_UDEV_RULES). Required here so the wiring can never be
-  # silently dropped — it is not a public consumer option; the public
+  # silently dropped. It is not a public consumer option; the public
   # `mkNrfShell { ... }` call signature is unchanged (only
   # nix/flake/components.nix imports this module).
   udevRules,

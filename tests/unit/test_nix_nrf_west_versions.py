@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# tests/unit/test_nix_nrf_west_versions.py — fake-boundary unit tests for the
+# Fake-boundary unit tests for
 # west backend `nix-nrf versions` command module
 # (bin/backends/west/nix-nrf-west-versions,
 # packaged by nix/backends/west/versions-command.nix).
@@ -9,7 +9,7 @@
 # The wrapped module is exercised as a subprocess; the supported-release list
 # and JSON come from the wrapper's NIX_NRF_WEST_VERSIONS /
 # NIX_NRF_WEST_VERSIONS_JSON variables (baked from the sorted attr names of
-# versions.nix at build time — the script source contains no release
+# versions.nix at build time. The script source contains no release
 # literals). No nrfutil, no sdk-manager, no network.
 #
 # Run standalone from the repo:
@@ -104,7 +104,7 @@ class WestVersionsTestCase(unittest.TestCase):
         self.assertIn("too many options", proc.stderr)
 
     # 6. Packaged module (real metadata): reports exactly v3.3.0, sorted,
-    #    text + parseable JSON — and never invokes nrfutil.
+    #    text and parseable JSON. It never invokes nrfutil.
     @unittest.skipUnless(
         PACKAGED, "packaged module not supplied by the check derivation"
     )

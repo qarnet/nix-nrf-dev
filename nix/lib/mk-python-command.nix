@@ -1,4 +1,4 @@
-# nix/lib/mk-python-command.nix — narrow shared packaging helper for the
+# nix/lib/mk-python-command.nix is a narrow shared packaging helper for the
 # internal Python command modules installed under $out/libexec/nix-nrf/.
 #
 # Owns exactly:
@@ -22,7 +22,7 @@
 #     ];
 #   }
 #
-# — not an attrset — so the current wrapper argument order stays explicit and
+# wrapperArgs is a list, not an attrset, so the current wrapper argument order stays explicit and
 # stable. Callers own every wrapper argument, including explicit PYTHONPATH
 # and PYTHONHOME unsets; the helper adds no default environment variables,
 # runtime inputs, standalone $out/bin commands, dynamic command discovery, or

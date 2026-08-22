@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# scripts/release.py — release metadata parsing and validation for
-# nix-nrf-dev.
+# Parses and validates nix-nrf-dev release metadata.
 #
 # The nix-nrf-dev project version is independent from Nordic NCS versions:
-# release.json (repo root) holds the one canonical strict stable SemVer
+# release.json (repo root) holds the only strict stable SemVer
 # (MAJOR.MINOR.PATCH, no leading `v`, no prerelease/build metadata), and
 # CHANGELOG.md must carry a matching table row and release body. This
 # utility owns that parsing; the Nix flake gate, the direct CI gate, and the
@@ -242,7 +241,7 @@ def main(argv=None):
     )
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("check", help="validate release.json + CHANGELOG.md")
-    sub.add_parser("version", help="print only the canonical version")
+    sub.add_parser("version", help="print only the project version")
     notes = sub.add_parser("notes", help="write only the current release body")
     notes.add_argument("--output", required=True, help="output file path")
     args = parser.parse_args(argv)

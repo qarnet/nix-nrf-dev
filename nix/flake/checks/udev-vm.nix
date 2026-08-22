@@ -10,7 +10,7 @@
 #
 # The check also proves synthetic rule semantics: two hand-constructed
 # umockdev USB fixtures are replayed with the pinned umockdev preload sandbox
-# (0.19.3, referenced by its exact store binary — deliberately not added to
+# (0.19.3, referenced by its exact store binary and deliberately not added to
 # systemPackages) against the pinned systemd (261.1)
 # `udevadm test --action=add --json=short` and the activated
 # `/etc/udev/rules.d/60-openocd.rules` tree. The CMSIS-DAP fixture must

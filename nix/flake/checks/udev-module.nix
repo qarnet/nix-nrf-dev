@@ -1,20 +1,20 @@
 # Isolated NixOS module-system gate: proves `self.nixosModules.udevRules`
 # contributes only the declared `services.udev.packages` config boundary and
-# the exact expected udev-rules package, using `lib.evalModules` — no full
+# the exact expected udev-rules package, using `lib.evalModules`. No full
 # NixOS system, no build, no VM, no network.
 #
-# The proof has three parts:
+# The check has three parts:
 # 1. Exact public option AND config surfaces: after excluding the
 #    module-system `_module` internal option, the public module's option tree
 #    is exactly `services.udev.packages`; its observable config tree is
 #    exactly the same three levels. A module that declares an extra option
-#    and sets it — or that sneaks config under a freeform/internal path —
+#    and sets it, or sneaks config under a freeform/internal path,
 #    would widen either surface and fail here. `_module.check` alone cannot
 #    catch a self-declared extra option, so the surface assertions are the
 #    load-bearing part.
 # 2. Undeclared-config rejection: with `_module.check` enabled (the default),
 #    a synthetic test-only module that defines `users.groups.plugdev`
-#    without declaring it is rejected under `builtins.tryEval`. This proves
+#    without declaring it is rejected under `builtins.tryEval`. This checks
 #    the gate harness itself enforces declared-only config. The synthetic
 #    module never touches the public module or real configuration.
 # 3. Exact package contribution: with the module imported, the package list
@@ -92,7 +92,7 @@
 
   # 2. Undeclared-config rejection: a synthetic test-only module defines an
   #    unrelated path without declaring it; the enabled `_module.check` must
-  #    make evaluation fail, proven under tryEval/deepSeq.
+  #    make evaluation fail under tryEval/deepSeq.
   undeclaredConfigRejected = let
     synthetic = lib.evalModules {
       modules = [

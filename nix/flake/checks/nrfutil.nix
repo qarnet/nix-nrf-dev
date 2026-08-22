@@ -11,9 +11,9 @@
   # Fake-boundary bootstrap test gate: runs
   # tests/unit/test_nix_nrf_bootstrap.py against a temporary fake
   # nrfutil executable/state directory with sandboxed Python stdlib.
-  # Proves every lifecycle branch — ready selection, --check, approval,
+  # Covers every lifecycle branch: ready selection, --check, approval,
   # install matrix, exact-bundle behavior, malformed state, failed and
-  # incomplete installs, missing version — with no network, no real SDK,
+  # incomplete installs, missing version. It uses no network or real SDK,
   # and no real nrfutil state.
   bootstrapTests =
     pkgs.runCommand "nix-nrf-bootstrap-tests"
@@ -36,8 +36,8 @@
   # selector values containing spaces and single/double quotes,
   # proving wrapProgram generation succeeds without shell injection
   # or syntax break, then round-trip the generated wrapper's exports
-  # to prove the exact values — and the exact selected nrfutil store
-  # path — survive.
+  # to check the exact values and selected nrfutil store
+  # path survive.
   bootstrapQuotingCheck = let
     nastyNcsVersion = "v3.3.0 with space 'and quote'";
     nastyBundleId = "bundle \"with\" 'quotes' and spaces";
@@ -252,9 +252,9 @@
     '';
   };
 
-  # Test-only fake real west: logs one JSON line per invocation — the exact
+  # Test-only fake real west logs one JSON line per invocation. It records exact
   # argv plus the toolchain-scoped ZEPHYR_BASE / FAKE_TOOLCHAIN_ENV /
-  # PYTHONHOME / GIT_EXEC_PATH / PATH — under $FAKE_NRFUTIL_STATE/west.log,
+  # PYTHONHOME / GIT_EXEC_PATH / PATH under $FAKE_NRFUTIL_STATE/west.log,
   # then exits 0. A sh launcher is required because this binary runs INSIDE
   # the scoped toolchain env, where PYTHONHOME carries the fake marker value
   # that breaks the Nix python3 interpreter (encodings import failure); the
@@ -297,7 +297,7 @@
   # extraShellHook/withMultilib and a test-only fake `nrfutilPackage`, then
   # runs the real generated shell hook and the real scoped `west` wrapper as
   # subprocess boundaries against fake sdk-manager state and a fake real
-  # west — no network, no real Nordic downloads, no real sdk-manager state,
+  # west. No network, real Nordic downloads, or real sdk-manager state,
   # no mutable developer HOME. Proves: the shell hook is read-only (list +
   # toolchain-env probes only), derives the exact ZEPHYR_BASE, never evals
   # the toolchain script into the parent shell, runs the extra hook marker,
@@ -309,7 +309,7 @@
   # missing state without mutation; a failing toolchain env load and a
   # missing real west keep the existing wrapper errors and exit nonzero; and
   # exact-bundle selectors (values with spaces and both quote kinds) survive
-  # as single argv elements — no quote artifacts or shell injection.
+  # as single argv elements, with no quote artifacts or shell injection.
   nrfutilShellBoundaryCheck = let
     boundaryFixture = pkgs.mkShell {
       packages = [pkgs.ripgrep];
@@ -772,7 +772,7 @@
   # Public `nix-nrf versions` delegation boundary gate: instantiates the REAL
   # nix/commands/default.nix with the purpose-specific fake nrfutil package
   # above (plus the tiny OpenOCD stand-in) and executes the packaged
-  # `$cli/bin/nix-nrf` binary — never copied shell fragments. Proves, against
+  # `$cli/bin/nix-nrf` binary, never copied shell fragments. It checks against
   # deterministic fake output: `versions` delegates the exact argv
   # `sdk-manager search ...` with quoting preserved as single argv elements
   # (spaces, single quote, double quote, option-like values); stdout, stderr,
@@ -924,7 +924,7 @@
   # and fails with its own diagnostic naming the URL. This proves the public
   # `nix-nrf versions` runtime authority (sdk-manager search) reports
   # non-success plus a real network/index diagnostic under offline conditions
-  # — no separate global connectivity probe, and the check fails outright if
+  # It has no separate global connectivity probe and fails outright if
   # the command unexpectedly succeeds. (The fake boundary above proves argv
   # and status preservation deterministically; this real gate proves the
   # packaged binary's genuine offline failure mode.)

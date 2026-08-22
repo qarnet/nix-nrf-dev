@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# tests/unit/test_nix_nrf_doctor.py — fake-boundary unit tests for the
+# Fake-boundary unit tests for
 # `nix-nrf doctor` command module (bin/commands/nix-nrf-doctor).
 #
 # Exercises the command as a subprocess through public-style args and
@@ -261,7 +261,7 @@ class DoctorTestCase(unittest.TestCase):
         return override
 
     def add_pico(self, accessible=True):
-        """Debugprobe on Pico (CMSIS-DAP, bulk transport — no hidraw)."""
+        """Debugprobe on Pico. CMSIS-DAP bulk transport with no hidraw."""
         self.make_device(
             "5-2.4",
             product="Debugprobe on Pico (CMSIS-DAP)",

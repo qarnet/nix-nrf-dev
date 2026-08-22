@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# nix-nrf-init-project — public flake app that generates a consumer
-# nix-nrf-dev project with a concrete NCS release (never `latest`).
+# `nix-nrf-init-project` is a public flake app that generates a consumer
+# nix-nrf-dev project with a concrete NCS release, never `latest`.
 #
 # Installed by nix/init-project/default.nix at $out/bin/nix-nrf-init-project
 # and published through `apps.<system>.init-project`. The wrapper pins the
@@ -62,7 +62,7 @@
 #   7. Existing directory: unrelated entries are allowed, but each generated
 #      file is installed with os.open(O_CREAT|O_EXCL|O_WRONLY|O_NOFOLLOW,
 #      0o644); only files created by this invocation are tracked, and on
-#      failure only those are removed — every pre-existing entry is
+#      failure only those are removed. Every pre-existing entry is
 #      preserved.
 #   8. The temporary sibling is always cleaned; generated target symlinks are
 #      never followed or overwritten; each final target is verified to remain
@@ -189,8 +189,8 @@ def nrfutil_candidates(entries):
     """Strict stable nrf candidates: sdkType nrf, strict stable version,
     remote SDK available, at least one remote-available toolchain, and no
     blocked tag ({unstable, preview, rc}, compared per tag after
-    normalization). Tag blocking is exact — never a substring search over the
-    joined tags — so an unrelated tag that merely contains the letters "rc"
+    normalization). Tag blocking is exact, never a substring search over joined
+    tags. An unrelated tag that merely contains letters "rc"
     (e.g. "source") cannot falsely exclude a strict stable candidate; the
     strict version regex already rejects RC/preview version suffixes."""
     candidates = []
@@ -407,11 +407,13 @@ def _rollback_created(created):
 
 
 def install_into_existing(dest_abs, generated):
-    """Existing directory: install each generated file exclusively, track only
-    files created by this invocation, and on failure remove only those —
-    for both OSError (wrapped as a concise write error) and a post-create
-    InitError from verify_target (preserved unchanged). KeyboardInterrupt and
-    SystemExit are never caught."""
+    """Install into an existing directory without touching other entries.
+
+    Tracks only files created by this invocation and removes only those on
+    failure. OSError becomes a concise write error. A post-create InitError
+    from verify_target stays unchanged. KeyboardInterrupt and SystemExit are
+    never caught.
+    """
     created = []
     try:
         for name, content in generated.items():

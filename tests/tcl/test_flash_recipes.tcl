@@ -1,19 +1,19 @@
 #!/usr/bin/env tclsh
 # SPDX-License-Identifier: MIT
 #
-# tests/tcl/test_flash_recipes.tcl — fake-OpenOCD semantic regression tests
+# Fake-OpenOCD semantic regression tests
 # for the repository Tcl flash recipes (tcl/nrf53_flash.tcl and
 # tcl/nrf54l_flash.tcl).
 #
 # Sources the REAL recipes under tclsh with fake OpenOCD commands that record
 # every command + args into ::log, then asserts command order, single-argument
 # preservation (including paths with spaces), conditionals, and safety
-# branches — no hardware, no real OpenOCD, no Tcl packages. Command semantics
-# matter more than formatting; human `puts` text is only asserted where it
-# proves a warning or recovery branch fired.
+# branches. It uses no hardware, real OpenOCD, or Tcl packages. Command semantics
+# matter more than formatting; human `puts` text is asserted only when it
+# confirms a warning or recovery branch fired.
 #
 # Recipe paths come from the required env vars NIX_NRF_NRF53_FLASH_TCL and
-# NIX_NRF_NRF54L_FLASH_TCL; fail clearly when unset.
+# NIX_NRF_NRF54L_FLASH_TCL; exit with an error when unset.
 #
 # Run standalone from the repo:
 #   NIX_NRF_NRF53_FLASH_TCL="$PWD/tcl/nrf53_flash.tcl" \
@@ -239,8 +239,8 @@ _uicr_unprotect nrf53.cpuapp 0x00FF8000
 assert_eq $::log [list [list nrf53.cpuapp read_memory 0x00FF8000 32 1]] \
     "other-programmed UICR performs no write"
 assert_count_cmd flash "other-programmed UICR has no flash fillw" 0
-assert_contains_substr $::puts_log "leaving as-is" \
-    "other-programmed UICR prints leave-as-is warning"
+assert_contains_substr $::puts_log "leaving it unchanged" \
+    "other-programmed UICR prints unchanged-value warning"
 
 # 6. App helper reads/programs the exact current two app addresses; net
 #    helper the exact current net address (current recipe contract, not newly
@@ -277,7 +277,7 @@ assert_count_cmd nrf53_recover "locked check_approtect recovers exactly once" 1
 assert_eq $::log \
     [list [list nrf53.cpuapp arp_examine] [list nrf53_recover]] \
     "locked check_approtect recovery order"
-assert_contains_substr $::puts_log "running nrf53_recover" \
+assert_contains_substr $::puts_log "Running nrf53_recover" \
     "locked check_approtect prints recovery message"
 
 # 8. flash_both unlocked path with space-containing names: each name is one
@@ -312,7 +312,7 @@ assert_eq $::log \
         [list reset run]] \
     "flash_both unlocked exact command sequence with space-containing names"
 assert_count_cmd nrf53_recover "flash_both unlocked does not recover" 0
-# Ordered-subsequence claims re-proven independently of the full equality.
+# Ordered-subsequence checks run independently of the full equality check.
 assert_subseq \
     [list [list flash write_image erase $app_hex] [list verify_image $app_hex] \
         [list nrf53.cpuapp read_memory 0x00FF8000 32 1]] \
@@ -348,7 +348,7 @@ assert_subseq \
     [list [list nrf53.cpuapp arp_examine] [list nrf53_recover] \
         [list targets nrf53.cpuapp]] \
     $::log "recovery after failed app examine and before app reset/flash"
-assert_contains_substr $::puts_log "running nrf53_recover" \
+assert_contains_substr $::puts_log "Running nrf53_recover" \
     "flash_both locked prints recovery message"
 assert_eq $::log \
     [list \
@@ -379,7 +379,7 @@ assert_eq $::log \
 
 # 9b. flash_both locked path with recovery disabled (allow_recovery 0):
 #     raises an error naming recovery disabled BEFORE any nrf53_recover,
-#     flash write, verify, or UICR write — the harness is authorized to
+#     flash write, verify, or UICR write. The harness is authorized to
 #     flash but never to recover.
 reset_state
 set ::app_locked 1
@@ -398,7 +398,7 @@ assert_count_cmd targets "locked no-recovery flash_both never selects a target" 
 assert_eq $::puts_log [list] \
     "locked no-recovery flash_both prints no recovery or success lines"
 assert_eq $errmsg \
-    "App core locked (APPROTECT) — recovery disabled (allow_recovery 0); refusing nrf53_recover, no flash/verify/UICR performed" \
+    "App core locked (APPROTECT). Recovery disabled (allow_recovery 0). Refusing nrf53_recover. No flash, verify, or UICR write performed." \
     "locked no-recovery flash_both error text names recovery disabled exactly"
 
 # 9c. flash_both unlocked path with explicit allow_recovery 0 (the harness

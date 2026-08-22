@@ -1,4 +1,4 @@
-# nix/backends/nrfutil/bootstrap.nix — nrfutil backend SDK/toolchain bootstrap
+# nix/backends/nrfutil/bootstrap.nix packages the nrfutil backend SDK/toolchain bootstrap
 # module for the `nix-nrf bootstrap` subcommand. Not a public package: no
 # `$out/bin` binary is installed. `nix/commands/default.nix` resolves the
 # exact store path of the wrapped command below and execs it.

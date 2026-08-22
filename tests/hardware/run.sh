@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 #
-# tests/hardware/run.sh — hardware integration test for nix-nrf-dev.
+# Hardware integration test for nix-nrf-dev.
 #
 # Builds four distinct runtime artifacts and flashes them through
-# openocd-master + the TCL recipes, proving REAL multicore flashing:
+# openocd-master and the Tcl recipes. It tests multicore flashing:
 #
 #   - nRF5340 CPUAPP blinky  (nrf5340dk/nrf5340/cpuapp)
 #   - nRF5340 CPUNET empty   (nrf5340dk/nrf5340/cpunet, official NCS
 #                             samples/basic/empty)
-#   - XIAO nRF54L15 CPUAPP blinky (existing normal app proof)
+#   - XIAO nRF54L15 CPUAPP blinky (existing app build)
 #   - XIAO nRF54L15 FLPR bundle   (xiao_nrf54l15/nrf54l15/cpuflpr,
 #                             official NCS samples/basic/empty sysbuild
 #                             bundle: CPUAPP VPR launcher + FLPR RRAM)
@@ -20,8 +20,8 @@
 # invocation is captured to a per-step log; the nRF53 run must byte-verify
 # BOTH cores ("Verified app core:" / "Verified net core:") with no "no
 # flash bank found" warning, and the FLPR run must byte-verify the whole
-# bundle ("Verified image: <bundle>"). FLPR EXECUTION is not observed —
-# this harness proves flashability, not runtime IPC/heartbeat.
+# bundle ("Verified image: <bundle>"). FLPR execution is not observed. This
+# harness checks flashability, not runtime IPC or heartbeat.
 #
 # Before ANY probe enumeration, NCS build, or flash, the harness proves the
 # real XIAO probe (serial 8EE9B3FF) is usable through the explicit
@@ -30,7 +30,7 @@
 # tests/hardware/preflight_xiao.py, which asserts the exact consumer
 # contract. OpenOCD is never invoked by the preflight, and nothing is
 # mutated. The parser itself is covered by hosted CI
-# (checks.preflight-xiao-tests); the physical proof stays in this manual
+# (checks.preflight-xiao-tests); the physical test runs only in this manual
 # hardware workflow.
 #
 # The harness never recovers or mass-erases: nrf53 flash_both is invoked
@@ -46,13 +46,13 @@
 
 set -euo pipefail
 
-# fail <step> <message> — print context and exit non-zero.
+# fail <step> <message>. Print context and exit non-zero.
 fail() {
   echo "FAIL: $1: $2" >&2
   exit 1
 }
 
-# step <label> — echo a header for the next assertion.
+# step <label>. Print a header for the next assertion.
 step() {
   echo ""
   echo "=== $1 ==="
@@ -63,9 +63,9 @@ cd "$REPO_ROOT"
 
 # ── 0. Verify tools are present ─────────────────────────────────────────────
 step "Verify tools"
-command -v openocd >/dev/null 2>&1 || fail "tools" "openocd not on PATH — enter the nix dev shell first"
-command -v nix-nrf >/dev/null 2>&1 || fail "tools" "nix-nrf not on PATH — enter the nix dev shell first"
-command -v west >/dev/null 2>&1 || fail "tools" "west not on PATH — enter the nix dev shell first"
+command -v openocd >/dev/null 2>&1 || fail "tools" "openocd not on PATH. Enter the nix dev shell first."
+command -v nix-nrf >/dev/null 2>&1 || fail "tools" "nix-nrf not on PATH. Enter the nix dev shell first."
+command -v west >/dev/null 2>&1 || fail "tools" "west not on PATH. Enter the nix dev shell first."
 command -v python3 >/dev/null 2>&1 || fail "tools" "python3 not on PATH (needed for Intel HEX layout validation)"
 echo "OK: openocd, nix-nrf, west, python3 present"
 
@@ -99,15 +99,15 @@ echo "OK: nRF54L15 probe serial: $SER54L"
 
 # ── 3. Build four artifacts from NCS ────────────────────────────────────────
 # The west wrapper loads the NCS toolchain env. If NCS v3.3.0 is not
-# installed, west fails with a clear message — run.sh surfaces that.
+# installed, west fails with a clear message. run.sh surfaces it.
 NCS_ROOT="${ZEPHYR_BASE:-$HOME/ncs/v3.3.0/zephyr}/.."
 BLINKY_SRC="${ZEPHYR_BASE:-$HOME/ncs/v3.3.0/zephyr}/samples/basic/blinky"
 NCS_EMPTY_SRC="$NCS_ROOT/nrf/samples/basic/empty"
 if [ ! -d "$BLINKY_SRC" ]; then
-  fail "blinky-src" "blinky sample not found at $BLINKY_SRC — is ZEPHYR_BASE set or NCS v3.3.0 installed?"
+  fail "blinky-src" "blinky sample not found at $BLINKY_SRC. Is ZEPHYR_BASE set or NCS v3.3.0 installed?"
 fi
 if [ ! -d "$NCS_EMPTY_SRC" ]; then
-  fail "empty-src" "empty sample not found at $NCS_EMPTY_SRC — is ZEPHYR_BASE set or NCS v3.3.0 installed?"
+  fail "empty-src" "empty sample not found at $NCS_EMPTY_SRC. Is ZEPHYR_BASE set or NCS v3.3.0 installed?"
 fi
 
 BUILD_DIR_53="$(mktemp -d -t nrf53-blinky-XXXXXX)"
@@ -174,7 +174,7 @@ echo "OK: FLPR domains.yaml declares domains 'empty' and 'vpr_launcher'"
 # or unsupported address state, counts data bytes per required region,
 # rejects any byte outside the required regions, and prints total bytes
 # and min/max address. Every required region must contain at least one
-# data byte — this catches the original app-image-as-net-image defect
+# data byte. This catches the original app-image-as-net-image defect
 # before any flash write touches hardware.
 # validate_hex_layout <hex> <name:start:end,...>
 validate_hex_layout() {
@@ -336,18 +336,18 @@ if openocd \
   -c shutdown 2>&1 | tee "$LOG_FLASH53"; then
   echo "OK: nRF5340 openocd exited 0"
 else
-  fail "flash-nrf53" "openocd flash via nrf53_flash.tcl failed (exit $?) — see $LOG_FLASH53"
+  fail "flash-nrf53" "openocd flash via nrf53_flash.tcl failed (exit $?). See $LOG_FLASH53"
 fi
 if grep -q "no flash bank found" "$LOG_FLASH53"; then
-  fail "flash-nrf53" "'no flash bank found' in OpenOCD log — a core was not flashed: $LOG_FLASH53"
+  fail "flash-nrf53" "'no flash bank found' in OpenOCD log. A core was not flashed: $LOG_FLASH53"
 fi
 grep -qF "Verified app core: $HEX53" "$LOG_FLASH53" || \
-  fail "flash-nrf53" "missing exact 'Verified app core: $HEX53' line — see $LOG_FLASH53"
+  fail "flash-nrf53" "missing exact 'Verified app core: $HEX53' line. See $LOG_FLASH53"
 grep -qF "Verified net core: $HEX53_NET" "$LOG_FLASH53" || \
-  fail "flash-nrf53" "missing exact 'Verified net core: $HEX53_NET' line — see $LOG_FLASH53"
+  fail "flash-nrf53" "missing exact 'Verified net core: $HEX53_NET' line. See $LOG_FLASH53"
 echo "OK: nRF5340 both cores flashed and byte-verified"
 
-# ── 7. Flash nRF54L15 blinky via our TCL recipe (existing normal app proof) ─
+# 7. Flash nRF54L15 blinky via Tcl recipe (existing app build)
 step "Flash nRF54L15 blinky via tcl/nrf54l_flash.tcl"
 if openocd \
   -f interface/cmsis-dap.cfg \
@@ -361,7 +361,7 @@ if openocd \
   -c shutdown 2>&1 | tee "$LOG_FLASH54L"; then
   echo "OK: nRF54L15 blinky openocd exited 0"
 else
-  fail "flash-nrf54l" "openocd flash via nrf54l_flash.tcl failed (exit $?) — see $LOG_FLASH54L"
+  fail "flash-nrf54l" "openocd flash via nrf54l_flash.tcl failed (exit $?). See $LOG_FLASH54L"
 fi
 
 # ── 8. Flash nRF54L15 FLPR bundle via our TCL recipe ────────────────────────
@@ -378,11 +378,11 @@ if openocd \
   -c shutdown 2>&1 | tee "$LOG_FLASH54L_FLPR"; then
   echo "OK: nRF54L15 FLPR openocd exited 0"
 else
-  fail "flash-nrf54l-flpr" "openocd FLPR flash via nrf54l_flash.tcl failed (exit $?) — see $LOG_FLASH54L_FLPR"
+  fail "flash-nrf54l-flpr" "openocd FLPR flash via nrf54l_flash.tcl failed (exit $?). See $LOG_FLASH54L_FLPR"
 fi
 grep -qF "Verified image: $HEX54L_FLPR" "$LOG_FLASH54L_FLPR" || \
-  fail "flash-nrf54l-flpr" "missing exact 'Verified image: $HEX54L_FLPR' line — see $LOG_FLASH54L_FLPR"
-echo "OK: nRF54L15 FLPR bundle loaded and byte-verified (execution not observed — out of scope)"
+  fail "flash-nrf54l-flpr" "missing exact 'Verified image: $HEX54L_FLPR' line. See $LOG_FLASH54L_FLPR"
+echo "OK: nRF54L15 FLPR bundle loaded and byte-verified. Execution not observed."
 
 echo ""
 echo "ALL HARDWARE TESTS PASSED"

@@ -4,7 +4,7 @@
 #
 # nRF54L RRAM needs no OpenOCD flash driver: once the RRAMC write-enable is
 # set it is plain byte-writable memory, so load_image/verify_image suffice.
-# FLPR (RISC-V coprocessor) firmware is flashed the same way — its code
+# FLPR (RISC-V coprocessor) firmware is flashed the same way. Its code
 # partition is an RRAM slice in the app core address space (0x165000 on the
 # nRF54L15). tests/hardware/run.sh byte-verifies the FLPR bundle on a XIAO
 # nRF54L15.

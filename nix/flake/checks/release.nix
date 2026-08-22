@@ -1,9 +1,9 @@
 # Release/changelog consistency gate: runs the real scripts/release.py
 # `check` command and the tests/unit/test_release.py regression suite against
 # a sandbox layout holding copies of the real release.json and CHANGELOG.md.
-# Proves the canonical strict-SemVer manifest, the changelog contract
+# Checks the strict-SemVer manifest and changelog contract
 # (table row, exact current heading, `## [Unreleased]` before current,
-# nonempty body), and every negative contract element — no network, no
+# nonempty body), and every negative contract element. No network or
 # repository mutation, pinned pkgs.python3. Fails outright when any required
 # release file is absent from the flake source.
 {pkgs}: let

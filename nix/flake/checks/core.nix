@@ -23,7 +23,7 @@
   # (versions via sdk-manager, bootstrap/doctor on SDK/toolchain), list
   # `-V, --version` among its global options, and report exactly the
   # canonical project version (stdout only, exit 0) for both `-V` and
-  # `--version`, rejecting extra arguments with exit 2 — all through the
+  # `--version`, rejecting extra arguments with exit 2, all through the
   # real packaged binary. The west shell's backend-aware descriptions are
   # asserted in checks.west-shell-boundary.
   nixNrfHelpCheck =
@@ -68,7 +68,7 @@
   # sandboxed Python stdlib. Proves enumeration filtering, table
   # parsing, serial filtering, --find exit semantics, missing-OpenOCD
   # and timeout handling, and the exact read-only OpenOCD argument
-  # vector — no hardware, no real /sys or USB, no network.
+  # vector. No hardware, real /sys or USB, or network.
   probesTests =
     pkgs.runCommand "nix-nrf-probes-tests"
     {
@@ -90,7 +90,7 @@
   # sysfs/dev roots and a fake bootstrap command, with sandboxed
   # Python stdlib. Proves candidate discovery, node mapping, access
   # classification (hidraw/USB fallback), SDK check boundaries,
-  # remediation, JSON schema, and exit codes — no hardware, no real
+  # remediation, JSON schema, and exit codes. No hardware or real
   # /sys or /dev, no network, no SDK.
   doctorTests =
     pkgs.runCommand "nix-nrf-doctor-tests"
@@ -115,9 +115,9 @@
   # (exactly one candidate with the requested serial, explicit CMSIS-DAP v2
   # bulk USB: type cmsis-dap, accessible, access_method usb, no fallback,
   # and an accessible USB node) plus exit-class handling for malformed
-  # input and remediation forwarding — no hardware, no real /sys or /dev,
+  # input and remediation forwarding. No hardware or real /sys or /dev,
   # no doctor or OpenOCD invocation, no network. The parser is the same
-  # file tests/hardware/run.sh pipes doctor output into; the physical proof
+  # file tests/hardware/run.sh pipes doctor output into; the physical test
   # stays in the manual hardware workflow.
   preflightXiaoTests =
     pkgs.runCommand "nix-nrf-preflight-xiao-tests"
@@ -139,7 +139,7 @@
   # tcl/nrf53_flash.tcl and tcl/nrf54l_flash.tcl under tclsh (pinned pkgs.tcl)
   # with fake OpenOCD commands that record command + args, then proves
   # command order, single-argument preservation (incl. paths with spaces),
-  # conditionals, and UICR safety branches — no hardware, no real OpenOCD.
+  # conditionals, and UICR safety branches. No hardware or real OpenOCD.
   # Proc semantics live here; the real-OpenOCD hosted-CI steps only gate
   # source/syntax compatibility. Recipe paths come from env vars set to the
   # copied recipe files; the script fails clearly when they are unset.
@@ -211,7 +211,7 @@
   # `nix-nrf doctor` (from devShells.default, built through mkNrfShell's
   # internal udevRules closure wiring) reports the exact packaged udev
   # rule path in its remediation. Runs the real shell `nix-nrf doctor`
-  # against a temporary fake sysfs/dev root with one blocked candidate —
+  # against a temporary fake sysfs/dev root with one blocked candidate. It uses
   # no host USB, no network, no SDK. The gate prevents a shell-specific
   # doctor from losing the exact packaged-rule-path line (mkNrfShell must
   # keep passing the internal udevRules package through the closure).
@@ -252,15 +252,15 @@
     '';
 
   # Public NixOS module evaluation gate: evaluates two otherwise identical
-  # pinned `lib.nixosSystem` configurations (no build, no VM) — one importing
+  # pinned `lib.nixosSystem` configurations (no build, no VM). One imports
   # the real `self.nixosModules.udevRules`, one using the direct
-  # `services.udev.packages` form — and requires the resulting udev package
+  # `services.udev.packages` form and requires the resulting udev package
   # lists to be exactly equal by outPath. This proves the named module is a
   # convenience equivalent of the documented least-intrusive direct form. It
   # also asserts the nix-nrf-owned udev-rules derivation appears exactly once
   # and that the public `self.packages.${system}.udev-rules` output path
   # equals the internal one. Only evaluated booleans/count/store paths cross
-  # the derivation boundary — never a full NixOS system. The total list
+  # the derivation boundary. It never passes a full NixOS system. The total list
   # length is NOT asserted: NixOS contributes its own generated udev/hwdb
   # packages.
   nixosModuleCheck = let

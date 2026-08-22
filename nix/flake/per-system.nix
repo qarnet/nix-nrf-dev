@@ -13,8 +13,8 @@
     inherit system;
     # nrfutil and its extensions are unfree. The packaged nrfutil
     # derivation also unconditionally depends on segger-jlink-headless
-    # and sets NRF_JLINK_DLL_PATH — including when only the sdk-manager
-    # extension is composed — so SEGGER license acceptance is required
+    # and sets NRF_JLINK_DLL_PATH, even when only the sdk-manager
+    # extension is composed. SEGGER license acceptance is required
     # (no sdk-manager-only composition avoids J-Link).
     config = {
       allowUnfree = true;
@@ -50,7 +50,7 @@
       black.enable = true;
       shellcheck = {
         enable = true;
-        # .envrc is a direnv config, not a shell script — no shebang.
+        # .envrc is a direnv config, not a shell script. It has no shebang.
         excludes = ["\\.envrc$"];
       };
       typos.enable = true;
