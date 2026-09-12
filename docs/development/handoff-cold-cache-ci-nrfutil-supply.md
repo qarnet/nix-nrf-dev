@@ -7,6 +7,12 @@
 
 ## Progress log
 
+- 2026-09-12. Refreshed PR #10 summary and validation with source `0.1.2`,
+  release-note test repair, full local gate, and prior receiver cold-cache
+  evidence. Preparing final handoff commit before pushing branch.
+- 2026-09-12. Pre-push review: PR #10 remains open and merge-clean, with
+  prior CI green. Local branch is three commits ahead and clean. Refresh PR
+  summary for `0.1.2` and final gates, then push current branch for fresh CI.
 - 2026-09-12. Final-handoff commit hook rejected an abbreviated commit
   identifier as a typo. Remove only that opaque identifier and retry; source
   content and release evidence remain unchanged.
