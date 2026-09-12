@@ -2,11 +2,14 @@
   description = "Nix shell for Nordic NCS development and OpenOCD flashing";
 
   inputs = {
-    # nixos-unstable: Nixpkgs packages nRF Util and its extensions (see
+    # nixos-unstable: Nixpkgs packages nRF Util core (see
     # pkgs/by-name/nr/nrfutil); flake.lock pins the exact revision.
+    # nix/backends/nrfutil/package.nix pins sdk-manager 1.16.1 separately to
+    # a versioned Nordic archive, so a consumer's follows input cannot silently
+    # change the SDK/toolchain manager contract.
     # Consumers can replace this revision via
-    # `inputs.nix-nrf-dev.inputs.nixpkgs.follows = "nixpkgs"`, which also
-    # selects the packaged nrfutil/sdk-manager versions.
+    # `inputs.nix-nrf-dev.inputs.nixpkgs.follows = "nixpkgs"`, which selects
+    # the Nixpkgs core and normal optional extension versions.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     treefmt-nix = {

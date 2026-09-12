@@ -14,6 +14,13 @@ All notable changes to the nix-nrf-dev project (and its `nix-nrf` CLI).
 
 ## [Unreleased]
 
+### Fixed
+
+- Default `nrfutil` now combines the Nixpkgs core with sdk-manager `1.16.1`
+  from Nordic's versioned, content-pinned package archive. This replaces the
+  legacy mutable executable supply path and keeps the NCS v3.3.0 toolchain
+  contract stable when a consumer follows another Nixpkgs revision.
+
 ## [0.1.1]
 
 ### Documentation

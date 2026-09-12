@@ -34,6 +34,8 @@
     bootstrap-quoting
     nrfutil-shell-boundary
     nrfutil-versions-boundary
+    nrfutil-sdk-manager-version
+    nrfutil-supply-definition
     nrfutil-search-offline
     ;
   inherit
