@@ -7,6 +7,10 @@
 
 ## Progress log
 
+- 2026-09-12. PR #10 current-source CI run `34718371078` passed; Release
+  skipped on pull request as designed. PR is merge-clean. Merging to `main`
+  triggers trusted `0.1.2` publication after normal checks. Recording final
+  hosted outcome in this handoff, then pushing documentation-only closure.
 - 2026-09-12. Expanded `0.1.2` notes for full `v0.1.1..HEAD` scope. Follow-up
   release check, 22-test suite, all-system flake evaluation, full flake gate,
   packaged `nix-nrf`, and exact `0.1.2` CLI output passed. Ready to commit
