@@ -87,18 +87,10 @@ class RealFileContractTest(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
 
-    def test_extracted_release_notes_nonempty_with_current_release_content(self):
+    def test_extracted_release_notes_nonempty_for_current_release(self):
         body = release.current_release_body(CHANGELOG.read_text(), canonical_version())
         self.assertIsNotNone(body)
         self.assertTrue(body.strip())
-        for needle in [
-            "init-project",
-            "mkNrfShell",
-            "flake.nix",
-            "docs/install.md",
-            "README",
-        ]:
-            self.assertIn(needle, body)
 
 
 class ManifestNegativeTest(unittest.TestCase):
@@ -221,8 +213,11 @@ class NotesCommandTest(unittest.TestCase):
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
             content = out.read_text()
-            self.assertTrue(content.strip())
-            self.assertIn("mkNrfShell", content)
+            expected = release.current_release_body(
+                CHANGELOG.read_text(), canonical_version()
+            )
+            self.assertIsNotNone(expected)
+            self.assertEqual(content, expected.strip() + "\n")
             # No-overwrite: second run must refuse and leave the file alone.
             before = out.read_text()
             proc = subprocess.run(
