@@ -7,6 +7,18 @@
 
 ## Progress log
 
+- 2026-09-12. Expanded `0.1.2` notes for full `v0.1.1..HEAD` scope. Follow-up
+  release check, 22-test suite, all-system flake evaluation, full flake gate,
+  packaged `nix-nrf`, and exact `0.1.2` CLI output passed. Ready to commit
+  scope correction and refresh PR/CI.
+- 2026-09-12. Last tag `v0.1.1` scope includes documentation refactor
+  `a3f665f` and source fix `2e6ac03`. Expand `0.1.2` notes to cover both,
+  plus release-test maintenance. Add required latest hygiene receipt to PR
+  body, then rerun final gate and CI.
+- 2026-09-12. Pushed branch through `8e76a74`; PR #10 CI run `34718102794`
+  passed all `check` steps. Final wrapup review found two follow-ups before
+  merge: release notes need full last-tag scope, and PR body needs latest
+  documentation-hygiene receipt. Inspecting both now; do not merge yet.
 - 2026-09-12. Refreshed PR #10 summary and validation with source `0.1.2`,
   release-note test repair, full local gate, and prior receiver cold-cache
   evidence. Preparing final handoff commit before pushing branch.
