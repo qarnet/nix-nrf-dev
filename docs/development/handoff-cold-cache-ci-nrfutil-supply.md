@@ -1,10 +1,25 @@
-# Handoff: fix cold-cache CI nrfutil supply
+# nrfutil cold-cache CI supply record
 
-## Goal
+## Resolution
+
+Source commit `2e6ac03` adds the repository-owned `nrfutil` composition in
+`nix/backends/nrfutil/package.nix`. It combines the consumer's Nixpkgs core
+with sdk-manager `1.16.1` from Nordic's versioned archive and fixed Nix hash.
+
+At validation, receiver commit `02d042f` locked that source revision and
+removed its local sdk-manager override. GitHub Actions run `34705924687` ran
+after exact Nix and NCS cache misses, verified sdk-manager `1.16.1` and
+toolchain `911f4c5c26`, passed `72 PASS / 0 FAIL / 72 TOTAL`, then passed the
+nRF54L15 firmware job.
+
+This record preserves the original diagnosis, constraints, and verification
+boundary for future supply changes.
+
+## Original goal
 
 Fix PR #12 CI failure without hash-only workaround. Make Nix `nrfutil` supply reproducible on fresh GitHub runners.
 
-## Root cause, already confirmed
+## Original root cause
 
 PR run `34668261245`, job `103484518928`, fails before NCS install, tests, firmware build, or release.
 
@@ -20,22 +35,24 @@ Old locked input:
 
 Nix correctly rejects changed upstream bytes. Both Nix-store and NCS caches missed, exposing stale mutable dependency.
 
-`nrfutil-sdk-manager` 1.16.1 workflow download passed checksum. It is separate from failed `nrfutil-core` derivation.
+The receiver's earlier standalone sdk-manager `1.16.1` download passed its
+checksum. It was separate from the failed `nrfutil-core` derivation.
 
-## Scope
+## Implementation scope
 
-Work across:
+The fix spans:
 
 1. `/home/thomas-workstation/repos/nix-nrf-dev`
 2. `/home/thomas-workstation/repos/le-audio-receiver`
 
-Use current `nix-nrf-dev` `main` architecture as baseline:
+Source implementation used current `nix-nrf-dev` `main` architecture as its
+baseline:
 
 - `nix/flake/components.nix`
 - `nix/backends/nrfutil/`
 - `nix/flake/checks/nrfutil.nix`
 
-Then update receiver:
+Receiver update changed:
 
 - `flake.lock`
 - `flake.nix` only if current `mkNrfShell` API needs explicit compatible arguments.
@@ -48,27 +65,27 @@ Then update receiver:
 - Preserve exact NCS v3.3.0 / toolchain `911f4c5c26` contract.
 - Preserve current public `mkNrfShell` behavior needed by receiver builds.
 
-## Important compatibility trap
+## Compatibility diagnosis
 
-Current `nix-nrf-dev` packages versioned Nixpkgs archives through:
+Before this fix, source composition used:
 
 ```nix
 pkgs.nrfutil.withExtensions [ "nrfutil-sdk-manager" ]
 ```
 
-Good immutable-source direction. But:
+That delegated the manager version to consumer Nixpkgs. At incident time:
 
 - receiver follows pinned Nixpkgs 25.11, where nrfutil-sdk-manager is 1.8.0;
-- current nix-nrf-dev own unstable pin has 1.15.0;
-- receiver CI currently provisions 1.16.1.
+- nix-nrf-dev's then-current unstable pin had 1.15.0;
+- receiver CI required 1.16.1.
 
 Do not blindly update receiver lock to current nix-nrf-dev. Keep 1.16.1, or prove a deliberate replacement satisfies exact toolchain environment contract before changing it.
 
-## Required result
+## Required outcome
 
 Use versioned, content-pinned Nordic package archives or another immutable controlled source. No mutable `.../executables/.../nrfutil` endpoint.
 
-## Verification
+## Validation
 
 In `nix-nrf-dev`:
 
@@ -92,8 +109,12 @@ Expected canonical result:
 Gate complete: 72 PASS / 0 FAIL / 72 TOTAL
 ```
 
-Push fix branch. Fresh GitHub Actions run must pass tests from empty Nix/NCS caches, then firmware. No release expected because VERSION stays unchanged.
+The source checks, receiver shell and full test gate, and a fresh GitHub
+Actions cache-miss run all passed. No release ran because `VERSION` stayed
+unchanged and the proof used a non-main dispatch.
 
-## Stop condition
+## Decision boundary
 
-If immutable 1.16.1 packaging cannot satisfy exact NCS/toolchain contract, stop. Report exact command output and proposed compatibility decision. Do not downgrade silently or land cache-dependent fix.
+Do not silently downgrade or land a cache-dependent workaround. If a future
+manager change cannot satisfy the exact NCS/toolchain contract, stop and report
+the command output with a compatibility decision.
