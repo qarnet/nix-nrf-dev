@@ -7,6 +7,44 @@
 
 ## Progress log
 
+- 2026-09-12. Final-handoff commit hook rejected an abbreviated commit
+  identifier as a typo. Remove only that opaque identifier and retry; source
+  content and release evidence remain unchanged.
+- 2026-09-12. Committed release preparation
+  (`chore(release): prepare v0.1.2`). It includes canonical release metadata,
+  changelog notes, and durable release-note contract tests. Commit hooks
+  passed. Next: commit final handoff record, push existing PR #10, and watch
+  fresh CI.
+- 2026-09-12. Final incremental documentation audit covered all 12
+  human-written paths since `b1a9fccc`. Release table/body, backend contract,
+  CI comments, test intent, and incident handoff agree. No stale claims,
+  duplicate source-of-truth, or marker change found. Ready for separate
+  `0.1.2` release-preparation commit.
+- 2026-09-12. Final source CI-equivalent gate passed for `0.1.2`: release
+  checks, all-system evaluation, all 21 flake checks, package builds, command
+  smoke, exact `nix-nrf 0.1.2` output, shell boundaries, OpenOCD source
+  compatibility, and generated-consumer checks. No SDK/bootstrap download ran.
+- 2026-09-12. Updated stale release-note tests. Release manifest check,
+  22-test source suite, and sandboxed `release-consistency` derivation now
+  pass for `0.1.2`. Starting final all-system and full flake checks.
+- 2026-09-12. Found stale release-specific assertions in
+  `tests/unit/test_release.py`, contrary to its canonical-version policy.
+  Replace them with stable public contract checks: nonempty current notes and
+  `release.py notes` output exactly matching current release body.
+- 2026-09-12. Release manifest check passed, but release unit suite failed
+  two tests because fixtures expect previous `0.1.1` notes (`mkNrfShell` and
+  `init-project`). This is expected release-test maintenance, not a supply
+  regression. Inspecting tests before updating current-release assertions.
+- 2026-09-12. Prepared source `0.1.2`: updated `release.json`, added table
+  row and exact release body in `CHANGELOG.md`, and left `Unreleased` first.
+  Starting release contract checks before final full gate.
+- 2026-09-12. User approved source patch release `0.1.2`. Next: update
+  release metadata and changelog, rerun release and full source gates, then
+  commit separately before pushing existing PR #10.
+- 2026-09-12. Committed live-handoff maintenance as `d5d4956`
+  (`docs(nrfutil): maintain cold-cache handoff`). Commit hooks passed: secret,
+  whitespace, typo, conventional-commit, and size checks. Next: ask source
+  release version choice required by repo-wrapup.
 - 2026-09-12. User approved cleanup of generated Python bytecode.
   Removed `scripts/__pycache__/release.cpython-314.pyc`. Source tree now has
   only intended live-handoff documentation changes.
