@@ -1,6 +1,92 @@
-# nrfutil cold-cache CI supply record
+# Live handoff: cold-cache CI nrfutil supply
 
-## Resolution
+> **Maintenance rule:** Read this file before resuming work. Record every
+> material investigation, edit, command result, CI result, blocker, and
+> decision in **Progress log** before reporting status. Keep newest entry
+> first.
+
+## Progress log
+
+- 2026-09-12. User approved cleanup of generated Python bytecode.
+  Removed `scripts/__pycache__/release.cpython-314.pyc`. Source tree now has
+  only intended live-handoff documentation changes.
+- 2026-09-12. Post-gate status found generated, untracked
+  `scripts/__pycache__/` from Python verification. It is outside source scope
+  and blocks clean wrapup until user approves deleting it or keeping it.
+- 2026-09-12. Full source CI-equivalent gate passed. OpenOCD sourced both
+  recipes and reached expected no-probe boundaries. Generated consumer project
+  evaluated and entered its shell. Documentation audit found no stale contract;
+  it only replaced em-dash separators in this required live handoff.
+- 2026-09-12. Package smoke tests and both development-shell checks passed.
+  `nrfutil` reported 8.2.0; packaged `nix-nrf` reported current release 0.1.1.
+  Clean-environment shell preserved host Nix, Node, Git, and Python behavior.
+  Starting OpenOCD recipe and generated-project checks.
+- 2026-09-12. Source release checks, all-system flake evaluation, full flake
+  checks, and all CI package builds passed. Pre-commit, formatter, Nix, Python,
+  shell, and workflow checks passed. Starting CI smoke, shell, OpenOCD parser,
+  and initializer checks.
+- 2026-09-12. Starting full source CI-equivalent gate after documentation
+  cleanup. It evaluates flakes, builds packages, runs smoke and shell checks,
+  and uses impossible probe serials for OpenOCD recipe parsing. It does not
+  bootstrap an NCS SDK or change hardware.
+- 2026-09-12. Documentation hygiene incremental audit started for all ten
+  human-written paths changed since merge base `b1a9fccc`, plus this live
+  handoff update. Existing managed baseline marker is valid; no full audit or
+  marker change is needed.
+- 2026-09-12. Started `repo-wrapup` for `nix-nrf-dev` at user request.
+  Scope: source branch only. Next: verify repository truth and branch-wide
+  documentation, run full gate, ask release-bump choice, then commit/PR/CI.
+- 2026-09-12. Compared `nix-community/zephyr-nix` at `5ef0903`. It keeps
+  multiple source-controlled SDK versions, hashes every versioned archive in
+  JSON manifests, and maps `latest` to a reviewed alias, never a live remote
+  value. Its `update-sdk` helper generates a chosen-version hash manifest;
+  Renovate maintains flake locks weekly. Recommendation: treat sdk-manager as
+  a tested compatibility baseline with reviewed update PRs, not an automatic
+  per-release chase; full NCS bundle immutability is separate future work.
+- 2026-09-12. Clarified scope: 1.16.1 is pinned `sdk-manager` client
+  version, not an NCS v3.3.0 pin. `nrfutil` backend accepts each explicit
+  stable NCS release available from Nordic's index; default bootstrap chooses
+  newest compatible patched toolchain, while `toolchainBundleId` selects an
+  exact bundle. sdk-manager upgrades are deliberate version/hash/compatibility
+  changes, never automatic.
+- 2026-09-12. Confirmed `v0.1.1` is already published at
+  `41e27a9636444eb9542c7140a5bf8a40b12f4b89`. Merging source fix without a
+  manifest bump would produce no new release; `0.1.2` is required to publish
+  this repair.
+- 2026-09-12. Release decision: recommend a `nix-nrf-dev` patch release
+  `0.1.2` after source PR #10 merges. This fixes public fresh-shell behavior
+  while preserving `mkNrfShell` API, NCS version, and toolchain contract. Do
+  not bump receiver firmware `VERSION`: change is CI/dependency supply only;
+  its workflow correctly skips release when `VERSION` is unchanged.
+- 2026-09-12. Hosted evidence rechecked. Fresh workflow-dispatch run
+  `34705924687` recorded an NCS cache miss, sdk-manager 1.16.1, and
+  `72 PASS / 0 FAIL / 72 TOTAL`; it completed successfully. Current source PR
+  #10 CI is green; receiver PR #12 tests and firmware are green, release
+  skipped. `git diff --check` passes in both repositories; only this live
+  handoff file remains locally modified.
+- 2026-09-12. Receiver acceptance passed: exact `nix develop` toolchain
+  command found `911f4c5c26`; `nix develop --command bash scripts/test-all.sh`
+  ended `Gate complete: 72 PASS / 0 FAIL / 72 TOTAL`. Existing source and
+  receiver implementation needs no additional code repair. Next: confirm
+  hosted fresh-cache CI evidence and final worktree state.
+- 2026-09-12. Source acceptance passed on current branch: `nix build
+  .#nrfutil` and `nix flake check -L` both exited 0. Flake checks reported all
+  checks passed; only dirty-tree warning came from this live handoff update.
+  Starting receiver toolchain and canonical test-gate acceptance.
+- 2026-09-12. Starting source acceptance: `nix build .#nrfutil`, then
+  `nix flake check`. Receiver acceptance follows only if source passes.
+- 2026-09-12. Inspected active branches. Source commit `2e6ac03` supplies
+  sdk-manager 1.16.1 from versioned, fixed-hash Nordic archive; receiver
+  commit `02d042f` locks it and uses public `mkNrfShell`. Receiver workflow
+  asserts manager 1.16.1 and toolchain `911f4c5c26`. Running handoff
+  acceptance commands next; no repair identified yet.
+- 2026-09-12. Resumed implementation at user request. Next: inspect current
+  source and receiver branches, then repair or verify immutable supply against
+  handoff acceptance commands.
+- 2026-09-12. Converted this document into live handoff at user request. No
+  source, receiver, CI, or validation work ran in this turn.
+
+## Historical resolution evidence
 
 Source commit `2e6ac03` adds the repository-owned `nrfutil` composition in
 `nix/backends/nrfutil/package.nix`. It combines the consumer's Nixpkgs core
