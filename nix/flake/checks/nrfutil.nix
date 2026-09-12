@@ -915,10 +915,78 @@
       mkdir -p "$out"
     '';
 
+  # ── Repository-pinned sdk-manager supply gates ─────────────────────────
+  # The public dispatcher must resolve exactly the SDK manager carried by the
+  # Nix closure with a fresh state directory. This catches accidental fallback
+  # to a consumer Nixpkgs extension or an ambient user-installed plugin.
+  nrfutilSdkManagerVersionCheck =
+    pkgs.runCommand "nrfutil-sdk-manager-version"
+    {
+      inherit nrfutil;
+      expectedSdkManagerVersion = "1.16.1";
+    }
+    ''
+      set -eu
+
+      export HOME="$PWD/home"
+      export NRFUTIL_HOME="$PWD/nrfutil-home"
+      mkdir -p "$HOME" "$NRFUTIL_HOME"
+
+      "$nrfutil/bin/nrfutil-sdk-manager" --version > direct-version.out 2>&1
+      grep -F "$expectedSdkManagerVersion" direct-version.out >/dev/null || {
+        echo "FAIL: packaged sdk-manager did not report $expectedSdkManagerVersion" >&2
+        cat direct-version.out >&2
+        exit 1
+      }
+
+      "$nrfutil/bin/nrfutil" sdk-manager --version > delegated-version.out 2>&1
+      grep -F "$expectedSdkManagerVersion" delegated-version.out >/dev/null || {
+        echo "FAIL: nrfutil did not dispatch to sdk-manager $expectedSdkManagerVersion" >&2
+        cat delegated-version.out >&2
+        exit 1
+      }
+
+      echo "nrfutil sdk-manager version check passed" >&2
+      mkdir -p "$out"
+    '';
+
+  # Source policy gate: retain the versioned archive and its fixed content hash
+  # and reject the legacy mutable executable endpoint. Runtime dispatch above
+  # proves this source definition reaches the public nrfutil command.
+  nrfutilSupplyDefinitionCheck =
+    pkgs.runCommand "nrfutil-supply-definition"
+    {
+      source = ../../backends/nrfutil/package.nix;
+      expectedSdkManagerVersion = "1.16.1";
+    }
+    ''
+      set -eu
+
+      grep -F "sdkManagerVersion = \"$expectedSdkManagerVersion\";" "$source" >/dev/null || {
+        echo "FAIL: sdk-manager version is not $expectedSdkManagerVersion" >&2
+        exit 1
+      }
+      grep -F "nrfutil-sdk-manager/nrfutil-sdk-manager-x86_64-unknown-linux-gnu-" "$source" >/dev/null || {
+        echo "FAIL: sdk-manager source is not a versioned x86_64 archive" >&2
+        exit 1
+      }
+      grep -F "sha256-0v6X8UP4iKZ5Ij2cbgtR1zDrYLSl9KXa/JcKzSAg/jg=" "$source" >/dev/null || {
+        echo "FAIL: sdk-manager source hash changed or is missing" >&2
+        exit 1
+      }
+      if grep -F "/executables/" "$source" >/dev/null; then
+        echo "FAIL: legacy mutable nrfutil executable endpoint is forbidden" >&2
+        exit 1
+      fi
+
+      echo "nrfutil immutable supply definition check passed" >&2
+      mkdir -p "$out"
+    '';
+
   # ── Real packaged nrfutil forced-offline gate ──────────────────────────
   # Runs the REAL packaged nrfutil (the same `nrfutil` the repository shells
   # carry) inside an isolated writable HOME and NRFUTIL_HOME with both
-  # verified sdk-manager 1.15.0 index-override variables pointed at
+  # verified sdk-manager 1.16.1 index-override variables pointed at
   # unreachable loopback URLs. With a fresh NRFUTIL_HOME there is no local
   # config to fall back on, so sdk-manager must fetch the SDK remote config
   # and fails with its own diagnostic naming the URL. This proves the public
@@ -981,5 +1049,7 @@ in {
   bootstrap-quoting = bootstrapQuotingCheck;
   nrfutil-shell-boundary = nrfutilShellBoundaryCheck;
   nrfutil-versions-boundary = nrfutilVersionsBoundaryCheck;
+  nrfutil-sdk-manager-version = nrfutilSdkManagerVersionCheck;
+  nrfutil-supply-definition = nrfutilSupplyDefinitionCheck;
   nrfutil-search-offline = nrfutilSearchOfflineCheck;
 }

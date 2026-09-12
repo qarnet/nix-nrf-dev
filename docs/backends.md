@@ -145,8 +145,9 @@ tools, including Nix. The shell does not evaluate the script globally. The
 No. nix-nrf-dev works with the nixpkgs revision pinned in its `flake.lock`.
 
 If your project already pins its own nixpkgs, adding `inputs.nixpkgs.follows`
-makes nix-nrf-dev reuse that revision, reducing duplicate nixpkgs inputs and
-replacing the packaged nrfutil/sdk-manager versions:
+makes nix-nrf-dev reuse that revision and reduces duplicate nixpkgs inputs.
+It changes the Nixpkgs `nrfutil` core and optional-extension versions. Default
+sdk-manager stays at repository-pinned `1.16.1`:
 
 ```nix
 {

@@ -39,7 +39,7 @@ jobs:
       # through the exact packaged sdk-manager; (2) independently re-query the
       # same live index with `timeout 90 nix run .#nrfutil -- sdk-manager
       # search --json --skip-overhead`; (3) validate the required sdk-manager
-      # 1.15.0 schema and recompute the expected release with a fresh Python
+      # 1.16.1 schema and recompute the expected release with a fresh Python
       # stdlib here-doc that never imports the initializer's parser; (4)
       # require the generated flake to carry exactly one
       # `backend = "nrfutil"` and one strict-stable `ncsVersion` equal to the
@@ -245,7 +245,7 @@ jobs:
               sys.exit(1)
 
 
-          # Required sdk-manager 1.15.0 search shape (unknown extra fields allowed).
+          # Required sdk-manager 1.16.1 search shape (unknown extra fields allowed).
           if not isinstance(data, dict) or not isinstance(data.get("entries"), list):
               fail("expected a top-level object with an 'entries' list")
           entries = data["entries"]

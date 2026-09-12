@@ -6,8 +6,10 @@ state under `$HOME`. Experimental `west` backend supports NCS `v3.3.0` on
 
 ## Current behavior
 
-- Nixpkgs provides `pkgs.nrfutil.withExtensions [ "nrfutil-sdk-manager" ]`.
-  `flake.lock` pins its Nixpkgs revision.
+- Nixpkgs provides the `nrfutil` core. This repository composes it with
+  sdk-manager `1.16.1` from Nordic's versioned package archive and fixed
+  content hash. `flake.lock` pins the core's Nixpkgs revision; a consumer's
+  `nixpkgs.follows` input cannot change the default sdk-manager version.
 - `mkNrfShell` requires `ncsVersion`. Optional `toolchainBundleId` selects
   exact bundle. `autoBootstrap` defaults to `true`. `nrfutilPackage` is an
   advanced package override.

@@ -24,10 +24,10 @@
     openocd = openocd-master-unwrapped;
   };
 
-  # Packaged nRF Util with the sdk-manager extension. Extension archives,
-  # versions, and hashes are maintained by Nixpkgs; this repository does
-  # not duplicate them.
-  nrfutil = pkgs.nrfutil.withExtensions ["nrfutil-sdk-manager"];
+  # Packaged nRF Util core plus repository-pinned sdk-manager 1.16.1. The core
+  # stays in Nixpkgs; the manager archive is versioned and content-pinned in
+  # the nrfutil backend so consumer `nixpkgs.follows` cannot downgrade it.
+  nrfutil = import ../backends/nrfutil/package.nix {inherit pkgs;};
 
   # Public project CLI facade: fixed dispatcher over the default
   # composed nrfutil (versions), the internal probe command module

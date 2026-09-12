@@ -9,10 +9,31 @@ All notable changes to the nix-nrf-dev project (and its `nix-nrf` CLI).
 
 | Version | Date | Highlights |
 |---|---|---|
+| [0.1.2](#012) | 2026-09-12 | Documentation refresh; fixed fresh-shell default `nrfutil` bootstrap with content-pinned sdk-manager `1.16.1` supply |
 | [0.1.1](#011) | 2026-08-17 | Documentation: install section split into automated (`init-project`) and manual (hand-written `flake.nix`) quick start methods; new detailed install guide (`docs/install.md`) |
 | [0.1.0](#010) | 2026-08-08 | First release: reusable x86_64-linux flake and public `mkNrfShell` (default nrfutil/sdk-manager backend, experimental west backend); `nix-nrf` CLI (`versions`, `probes`, `bootstrap`, `doctor`, `--version`); dynamic concrete-version `init-project` app; pinned OpenOCD, udev package, narrow NixOS module with explicit plugdev policy; NCS v3.3.0 tested baseline with nRF5340/nRF54L15 flash and probe verification; deterministic flake/unit/VM/metadata checks, scheduled latest-NCS validation, manual hardware/clean-room workflows, clean-room telemetry; release automation (consistency gate, trusted-main GitHub Release workflow) |
 
 ## [Unreleased]
+
+## [0.1.2]
+
+### Fixed
+
+- Default `nrfutil` now combines the Nixpkgs core with sdk-manager `1.16.1`
+  from Nordic's versioned, content-pinned package archive. This replaces the
+  legacy mutable executable supply path and keeps the NCS v3.3.0 toolchain
+  contract stable when a consumer follows another Nixpkgs revision.
+
+### Documentation
+
+- Consolidated and tightened installation, backend, architecture, hardware,
+  test, and contributor guidance. Updated supporting workflow and source
+  comments to match current contracts.
+
+### Testing
+
+- Make release-note tests derive current notes from `release.json` instead of
+  requiring prose from an earlier release.
 
 ## [0.1.1]
 
