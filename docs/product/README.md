@@ -121,7 +121,7 @@ Execution owns plans, notes, summaries, checkbox state, and evidence. Status
 is agent-manageable under the definitions above. Size, area, and dependencies
 may be corrected from repository evidence, with the reason recorded.
 
-## Adoption
+## Adoption and research migration
 
 Setup compared local repositories on 2026-09-25 after fetching both named
 references. `serial-mcp` remote main at `a76f02fe` supplied the pinned Nix CLI,
@@ -137,6 +137,11 @@ Keep upstream's Nixpkgs pin: serial-mcp documents an install-check incompatibili
 when replacing it with a newer consumer Nixpkgs. This repository adds the tool
 only to contributor shells, not `mkNrfShell` consumer packages.
 
-The initial backlog is empty. Research and product items are added separately
-from this tooling setup. The [roadmap](../development/roadmap.md) retains
-proposals until they are represented by backlog items.
+The initial [RTT/debug research](../development/rtt-debug-research.md) was
+converted into PB-001 through PB-022 after inspecting le-audio-receiver.
+The research document retains sources, receiver evidence, and a coverage map;
+the task files own current priorities, dependencies, scope, and acceptance.
+Use the CLI for current status. Receiver tooling and FLPR investigation are
+near-term work; profiling and SWO/trace remain later research. The older
+[roadmap](../development/roadmap.md) retains unrelated proposals rather than
+duplicating migrated item status.

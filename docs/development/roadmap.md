@@ -7,6 +7,14 @@ Pure Nix `sdk-nrf` research lives in
 [sdk-nrf-feasibility-draft.md](sdk-nrf-feasibility-draft.md). Hybrid west
 backend status lives in [west-backend-status.md](west-backend-status.md).
 
+## Tracked debug work
+
+RTT capture, GDB workflows, and serial-console helper are tracked in PB-006,
+PB-007, and PB-012. See the
+[research coverage map](rtt-debug-research.md#backlog-migration) for related
+debug work and the [product contract](../product/README.md) for CLI views.
+The backlog owns their priorities and status.
+
 ## Near term
 
 - Package `tcl/*.tcl` and consider `nrf-flash` command that combines
@@ -20,7 +28,6 @@ backend status lives in [west-backend-status.md](west-backend-status.md).
 
 ## Later
 
-- Add OpenOCD RTT tools, gdb attach guidance, and serial-console helper.
 - Add nRF52 recipe and flash CLI integration.
 - Document `nrfutil device recover` J-Link fallback for nRF54 and investigate
   nRF54L CTRL-AP recovery for upstream OpenOCD.
