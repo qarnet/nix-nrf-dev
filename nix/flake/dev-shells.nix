@@ -6,6 +6,7 @@
   pkgs,
   mkNrfShell,
   pre-commit,
+  backlog,
 }: let
   # Internal hybrid-input fixture: plain mkShell whose packages provide
   # the regression tools (Node, Git, Python). clean-env-test pulls them in
@@ -28,8 +29,17 @@ in {
     backend = "nrfutil";
     ncsVersion = "v3.3.0";
     name = "nix-nrf-dev";
-    packages = pre-commit.enabledPackages;
+    packages = pre-commit.enabledPackages ++ [backlog];
     extraShellHook = pre-commit.shellHook;
+  };
+
+  # Product work needs neither the Nordic SDK nor probe tooling.
+  product = pkgs.mkShell {
+    name = "nix-nrf-dev-product";
+    packages = [
+      backlog
+      pkgs.git
+    ];
   };
 
   # Clean-environment test shell: exercises shell-hook behavior to

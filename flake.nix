@@ -12,6 +12,9 @@
     # the Nixpkgs core and normal optional extension versions.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    # Contributor tooling only. Match the revision used by serial-mcp and
+    # karnetvr-infra; keep upstream's tested Nixpkgs rather than following ours.
+    backlog-md.url = "github:MrLesk/Backlog.md/3c7fde65e28a6e5e154f63126957649514eee370";
     treefmt-nix = {
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -28,6 +31,7 @@
     flake-utils,
     treefmt-nix,
     git-hooks,
+    backlog-md,
     ...
   }: let
     # Repository's implemented host platform only. Per-system construction
@@ -45,6 +49,7 @@
             nixpkgs
             treefmt-nix
             git-hooks
+            backlog-md
             ;
         }
     )

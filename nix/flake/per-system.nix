@@ -8,6 +8,7 @@
   nixpkgs,
   treefmt-nix,
   git-hooks,
+  backlog-md,
 }: let
   pkgs = import nixpkgs {
     inherit system;
@@ -67,9 +68,18 @@
     };
   };
 
-  devShells = import ./dev-shells.nix {inherit pkgs mkNrfShell pre-commit;};
+  backlog = backlog-md.packages.${system}.backlog-md;
+  devShells = import ./dev-shells.nix {
+    inherit
+      pkgs
+      mkNrfShell
+      pre-commit
+      backlog
+      ;
+  };
 
   checks = import ./checks/default.nix {
+    product = import ./checks/product.nix {inherit pkgs backlog;};
     backendSelector = import ./checks/backend-selector.nix {inherit pkgs mkNrfShell;};
     core = import ./checks/core.nix {
       inherit

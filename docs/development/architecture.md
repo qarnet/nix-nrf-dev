@@ -21,8 +21,10 @@ live in [nrfutil-backend-status.md](nrfutil-backend-status.md) and
 components, shells, and checks. `nix/flake/components.nix` creates OpenOCD,
 udev rules, nrfutil, `nix-nrf`, west builders, and `mkNrfShell`.
 
-`nix/flake/dev-shells.nix` creates repository default and clean-environment
-shells. `nix/flake/checks/default.nix` combines domain check modules. Duplicate
+`nix/flake/dev-shells.nix` creates repository default, clean-environment, and
+SDK-free product shells. Backlog.md is contributor-only and does not enter
+consumer `mkNrfShell` packages. `nix/flake/checks/default.nix` combines domain
+check modules. Duplicate
 check keys fail during Nix attrset construction.
 
 ## Backend boundaries
@@ -83,6 +85,9 @@ body. CI invokes `.github/workflows/release.yml` only after trusted push to
 - `nix/flake/checks/` contains deterministic evaluation, packaging, shell,
   metadata, and NixOS module checks.
 - `tests/unit/` contains fake-boundary subprocess tests.
+- `tests/product/test_backlog.py` exercises the pinned Backlog.md CLI against
+  the repository configuration in a disposable Git repository. The product
+  check also validates real backlog items without changing them.
 - `tests/fixtures/` contains fake sdk-manager and west-workspace helpers.
 - `tests/tcl/test_flash_recipes.tcl` runs real recipes against fake OpenOCD
   commands and checks command order, arguments, and recovery branches.

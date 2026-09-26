@@ -17,6 +17,18 @@ hardware access without running `sudo`. There are no standalone
 See [docs/development/architecture.md](docs/development/architecture.md) for
 source ownership and construction flow.
 
+## Product work
+
+[Product backlog contract](docs/product/README.md) defines Backlog.md statuses,
+priorities, readiness, and evidence requirements. Use the pinned CLI rather
+than a global install. The SDK-free shell supports planning without bootstrap:
+
+```bash
+nix develop .#product -c backlog task list --plain
+nix develop .#product -c backlog doctor
+nix build .#checks.x86_64-linux.backlog
+```
+
 ## Before committing
 
 Formatting and lint hooks run automatically via `pre-commit` (wired through
@@ -166,4 +178,5 @@ CMSIS-DAP probes and target boards attached. See
 
 This is a Nix flake library, not a firmware project. The `tcl/` recipes and
 `bin/commands/nix-nrf-probes` are reusable tools consumed by other repos; they are not
-flashed here. Do not add board-specific firmware or build artifacts.
+flashed here. Small test-owned firmware fixtures may verify host tooling;
+production board firmware and build artifacts belong in consumer projects.

@@ -13,6 +13,7 @@
   release,
   formatting,
   pre-commit,
+  product,
 }: {
   inherit (backendSelector) backend-selector;
   inherit
@@ -49,5 +50,6 @@
     ;
   inherit (initProject) init-project-tests;
   inherit (release) release-consistency;
+  inherit (product) backlog;
   inherit formatting pre-commit;
 }

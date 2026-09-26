@@ -107,6 +107,8 @@ access. See [docs/hardware.md](docs/hardware.md).
 - [docs/backends.md](docs/backends.md) explains backends and bootstrap.
 - [docs/hardware.md](docs/hardware.md) covers probes, flashing, and recovery.
 - [CONTRIBUTING.md](CONTRIBUTING.md) explains repository work.
+- [docs/product/README.md](docs/product/README.md) defines the product backlog
+  and its SDK-free contributor tooling.
 
 ## License
 
