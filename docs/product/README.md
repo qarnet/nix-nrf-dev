@@ -22,6 +22,19 @@ expose it to a network. Automatic browser opening, commits, and remote operation
 are disabled. If port 6420 is occupied by another repository, select another
 port through the CLI's documented options.
 
+Before a read-only `nix flake check --no-build` on a cold store, run:
+
+```bash
+nix eval --raw .#devShells.x86_64-linux.product.drvPath >/dev/null
+```
+
+Pinned bun2nix imports a checked-in `deps.nix` through a nested source path.
+Nix's read-only evaluation can compute that path without copying it into the
+store, then fail with `path '...-cache-entry-creator' is not valid`. Writable
+SDK-free evaluation materializes those source paths; it does not build the CLI,
+install an SDK/toolchain, or change dependency pins. CI runs this before its
+read-only all-systems gate. A warm local store can mask the issue.
+
 `backlog.config.yml` selects `docs/product/backlog`:
 
 ```text

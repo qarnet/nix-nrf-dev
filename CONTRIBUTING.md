@@ -57,6 +57,7 @@ python3 scripts/release.py check       # release manifest/changelog consistency
 python3 tests/unit/test_release.py     # release contract regression suite
 nix build -L .#checks.x86_64-linux.release-consistency  # sandboxed release gate (same as `nix flake check`)
 nix build -L .#checks.x86_64-linux.init-project-tests  # raw + packaged initializer gate
+nix eval --raw .#devShells.x86_64-linux.product.drvPath >/dev/null  # materialize nested contributor sources on cold stores
 nix flake check --all-systems --no-build -L  # evaluate all checks without building (fast pass)
 nix flake check -L                      # build and run all checks (incl. doctor-tests
                                         # and the udev-rules byte-for-byte check)

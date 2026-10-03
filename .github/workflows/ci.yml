@@ -54,6 +54,11 @@ jobs:
       # test downloads an SDK or toolchain.
       - name: Flake check
         run: |
+          # --no-build uses read-only evaluation. Pinned Backlog.md/bun2nix
+          # imports a nested source path that must first be materialized in
+          # the store. Writable SDK-free evaluation does that without building
+          # contributor packages, bootstrapping an SDK, or changing pins.
+          nix eval --raw .#devShells.x86_64-linux.product.drvPath >/dev/null
           nix flake check --all-systems --no-build -L
           nix flake check -L
 

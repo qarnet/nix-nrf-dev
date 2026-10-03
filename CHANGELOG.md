@@ -36,6 +36,10 @@ All notable changes to the nix-nrf-dev project (and its `nix-nrf` CLI).
 
 ### Fixed
 
+- Cold-store CI now materializes pinned contributor source paths through
+  writable SDK-free product evaluation before `nix flake check --no-build`.
+  This avoids the bun2nix nested-source import failure masked by warm caches,
+  without changing pins or acquiring an SDK/toolchain.
 - West child processes discard unrelated `PYTHONHOME` and `PYTHONPATH` settings
   so the selected Python environment does not import another interpreter's
   libraries. Parent-shell environment remains unchanged.
