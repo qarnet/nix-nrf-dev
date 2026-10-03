@@ -6,7 +6,7 @@
 # facade (which owns the internal `nix-nrf probes`, `nix-nrf bootstrap`, and
 # `nix-nrf doctor` command modules), the packaged nrfutil with the sdk-manager
 # extension, multilib GCC (for native_sim -m32 builds), a scoped-env `west`
-# wrapper with lazy SDK/toolchain bootstrap, and ZEPHYR_BASE derivation. The
+# wrapper with lazy SDK/toolchain bootstrap, and managed-source ZEPHYR_BASE derivation. The
 # shell-specific `nix-nrf doctor` carries the exact udev-rules package path
 # (internal `udevRules` closure wiring from nix/flake/components.nix).
 #
@@ -21,23 +21,26 @@
 #
 #   Lazy bootstrap: the `west` wrapper invokes the shell-specific
 #   `nix-nrf bootstrap --print-sdk-path` on every call. That checks the
-#   configured NCS SDK source and selected toolchain, installs only when
+#   configured NCS SDK source and selected toolchain. Managed mode installs only when
 #   something is missing (with interactive confirmation unless
 #   NIX_NRF_BOOTSTRAP_YES=1 / `--yes`), and returns the absolute SDK root for
 #   ZEPHYR_BASE. With `autoBootstrap = false` it only checks and, when anything
 #   is missing, reports that automatic bootstrap is disabled plus the exact
 #   `nix-nrf bootstrap` remediation. It never mutates. The shell hook itself
-#   stays non-mutating (read-only `--check` path).
+#   stays non-mutating (read-only `--check` path). Existing-workspace mode instead
+#   validates caller-owned sources and can install only the selected toolchain.
 #
 # west (experimental; v3.3.0 / x86_64-linux only): Nix owns the exact Zephyr
 # SDK package, host tools, and the metadata-selected Python interpreter; the
-# official mutable west workspace and a version-local venv own the NCS source,
+# managed mutable west workspace and a version-local venv own the NCS source,
 # west, and workspace Python requirements (see nix/backends/west/). No
 # nrfutil/sdk-manager participates. `nix-nrf versions`, `nix-nrf bootstrap`,
 # and `nix-nrf doctor` become backend-aware via exact west command modules.
 # `toolchainBundleId` and non-default `nrfutilPackage` overrides are rejected
 # for west; `autoBootstrap`, `name`, `packages`, `withMultilib`,
-# `extraShellHook`, and `inputsFrom` behave like the nrfutil backend.
+# `extraShellHook`, and `inputsFrom` behave like the nrfutil backend. Existing
+# workspace sources and prepared Python environments remain caller-owned and
+# check-only, regardless of autoBootstrap.
 #
 # The NCS release is a required argument for both backends: every caller
 # selects a release explicitly (no "latest" alias or default).
@@ -76,9 +79,8 @@
   # import: the exact udev-rules package whose store path the shell-specific
   # `nix-nrf doctor` wrapper reports in its remediation
   # (NIX_NRF_DOCTOR_UDEV_RULES). Required here so the wiring can never be
-  # silently dropped. It is not a public consumer option; the public
-  # `mkNrfShell { ... }` call signature is unchanged (only
-  # nix/flake/components.nix imports this module).
+  # silently dropped. It is internal wiring, not a public consumer option;
+  # nix/flake/components.nix supplies it before public options are applied.
   udevRules,
   # West backend constructors, always supplied by nix/flake/components.nix at the module
   # import: the version metadata attrset and the builder imports. The west
@@ -101,15 +103,28 @@
   # nix/backends/west/versions.nix; unknown releases fail evaluation naming
   # the supported west versions.
   ncsVersion,
+  # Source ownership, independent of application location/toolchain backend:
+  # { mode = "managed"; } is default. Existing sources use
+  # { mode = "workspace"; workspace = "."; }, with a non-empty string anchored
+  # at shell-entry CWD. Nix paths are rejected to avoid copying SDK trees.
+  # Resolution/checks are read-only; see docs/application-types.md for boundaries.
+  source ? {
+    mode = "managed";
+  },
+  # Workspace-mode west only: null selects <workspace>/.venv. A non-empty
+  # string selects an existing environment, absolute or relative to workspace.
+  # Neither shell entry nor bootstrap repairs it or runs pip.
+  pythonEnvironment ? null,
   # Exact patched Nordic toolchain bundle ID (nrfutil backend only). null
   # (omission) selects the newest compatible patched toolchain for
   # `ncsVersion` (via --ncs-version); a non-null value selects that exact
   # bundle (via --toolchain-bundle-id). Rejected for `backend = "west"`.
   toolchainBundleId ? null,
-  # Lazy SDK/toolchain bootstrap: `west` checks the selection on every
+  # Managed-source lazy SDK/toolchain bootstrap: `west` checks on every
   # invocation and installs only when something is missing (with
   # confirmation). false switches west to check-only with exact manual
-  # remediation; shell entry stays non-mutating either way.
+  # remediation; shell entry stays non-mutating either way. Existing workspace
+  # sources are never provisioned; its west Python environment is check-only.
   autoBootstrap ? true,
   name ? "nrf-dev",
   # Extra packages for the shell (project-specific tools).
@@ -129,6 +144,25 @@
   # `backend = "west"` (no nrfutil participates).
   nrfutilPackage ? nrfutil,
 }: let
+  sourceValid =
+    builtins.isAttrs source
+    && builtins.all (
+      key:
+        builtins.elem key [
+          "mode"
+          "workspace"
+        ]
+    ) (builtins.attrNames source)
+    && builtins.elem (source.mode or null) [
+      "managed"
+      "workspace"
+    ]
+    && (
+      if source.mode == "workspace"
+      then builtins.isString (source.workspace or null) && source.workspace != ""
+      else !(source ? workspace)
+    );
+  sourceConfig = import ./source.nix {inherit pkgs;} {inherit source ncsVersion;};
   # Backend selector: exact-match only, no aliases, no silent fallback.
   supportedBackends = [
     "nrfutil"
@@ -180,6 +214,18 @@ in
   # toolchainBundleId, non-default nrfutilPackage) are asserted only in the
   # selected west branch, so the nrfutil branch keeps today's behavior.
   assert backendSupported;
+  assert sourceValid
+  || throw "mkNrfShell: source must be { mode = managed; } or { mode = workspace; workspace = a non-empty string; }; use strings, not Nix paths";
+  assert pythonEnvironment
+  == null
+  || (
+    backend
+    == "west"
+    && source.mode == "workspace"
+    && builtins.isString pythonEnvironment
+    && pythonEnvironment != ""
+  )
+  || throw "mkNrfShell: pythonEnvironment requires backend west and source.mode workspace, and must be a non-empty string";
   assert backend != "west" || westReleaseSupported;
   assert backend
   != "west"
@@ -200,6 +246,8 @@ in
           withMultilib
           extraShellHook
           inputsFrom
+          sourceConfig
+          pythonEnvironment
           ;
       }
     else
@@ -214,5 +262,6 @@ in
           extraShellHook
           inputsFrom
           nrfutilPackage
+          sourceConfig
           ;
       }

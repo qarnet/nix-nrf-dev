@@ -2,8 +2,10 @@
 
 [![Release](https://img.shields.io/github/v/release/qarnet/nix-nrf-dev?sort=semver)](https://github.com/qarnet/nix-nrf-dev/releases)
 
-NCS SDKs and toolchains live outside the Nix store. Their environment scripts
-can affect host tools. CMSIS-DAP probes need host udev rules before they can
+Default Nordic-managed SDKs and toolchains live outside the Nix store. The
+experimental west backend provides its compiler SDK through Nix while keeping
+sources in a mutable workspace. Nordic environment scripts can affect host tools.
+CMSIS-DAP probes need host udev rules before they can
 flash nRF5340 and nRF54L15 boards.
 
 nix-nrf-dev provides a project-scoped Nix shell for NCS builds and OpenOCD
@@ -16,8 +18,8 @@ flashing.
 
 ## What it provides
 
-- `nix develop` provides `west`, the Zephyr toolchain, and `ZEPHYR_BASE` for
-  the selected NCS release.
+- `nix develop` provides `west` and the selected NCS build environment, with
+  toolchain setup scoped to build processes. Source selection is independent.
 - `openocd-master` and udev guidance support CMSIS-DAP probe access.
 - `nix-nrf` provides `bootstrap`, `versions`, `probes`, and `doctor`.
 - `nix-nrf session` owns shared nRF54L15 OpenOCD observation/debug sessions.
@@ -70,6 +72,11 @@ nix-nrf doctor
 See [docs/install.md](docs/install.md) for prerequisites, install locations,
 release pins, and backend selection.
 
+Already have a project-owned west workspace? Select it with
+`source = { mode = "workspace"; workspace = "."; };` and keep either toolchain
+backend. See [application layouts and source selection](docs/application-types.md)
+for examples, Python preparation, and ownership boundaries.
+
 [direnv]: https://direnv.net
 
 ## Everyday commands
@@ -106,6 +113,8 @@ access. See [docs/hardware.md](docs/hardware.md).
 - [docs/install.md](docs/install.md) covers installation and release pins.
 - [CHANGELOG.md](CHANGELOG.md) records project releases.
 - [docs/backends.md](docs/backends.md) explains backends and bootstrap.
+- [docs/application-types.md](docs/application-types.md) explains independent tool
+  and source selection for repository, workspace, and freestanding applications.
 - [docs/hardware.md](docs/hardware.md) covers probes, flashing, and recovery.
 - [docs/debug.md](docs/debug.md) covers shared sessions and their hardware
   validation limits.

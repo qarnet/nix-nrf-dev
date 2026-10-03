@@ -14,6 +14,11 @@ Keep Nordic's toolchain environment scoped to child processes. Contributor
 tools must not leak into consumer `mkNrfShell` packages. NCS version and the
 nix-nrf-dev release version are independent.
 
+`source.mode = "workspace"` selects existing SDK sources, not application type.
+Workspace strings anchor at shell entry; never replace them with Nix paths that
+copy SDK trees into the store. Existing-source readiness must not acquire/update
+repositories or implicitly repair Python environments.
+
 Do not run bootstrap downloads, flashing, recovery, or hardware control without
 explicit approval. Small verification firmware belongs in tests; production
 firmware belongs in consumer projects. Test real public behavior, not only

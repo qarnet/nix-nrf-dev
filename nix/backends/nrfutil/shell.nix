@@ -23,6 +23,10 @@
   extraShellHook ? "",
   inputsFrom ? [],
   nrfutilPackage ? nrfutil,
+  sourceConfig ? {
+    command = null;
+    shellHook = "";
+  },
 }: let
   useMultilib = pkgs.stdenv.isLinux && withMultilib;
   # ── nrfutil backend shell ───────────────────────────────────────────
@@ -65,6 +69,7 @@
         udevRules
         ;
       openocd = openocd-master;
+      sourceCommand = sourceConfig.command;
     };
 
     # `west` wrapper: lazy bootstrap, export ZEPHYR_BASE inside west's process,
@@ -78,8 +83,9 @@
         _toolchain_bundle_id=${bundleIdEsc}
       ''}
       # Lazy bootstrap: the shell-specific helper checks the configured NCS SDK
-      # source and selected toolchain, installs only when something is missing
-      # (with confirmation), and prints the absolute SDK root for ZEPHYR_BASE.
+      # source and selected toolchain. Managed mode can install missing sources;
+      # existing-workspace mode can install only tools, with confirmation.
+      # The returned root does not imply a literal zephyr/ project path.
       ${
         if autoBootstrap
         then ''
@@ -101,7 +107,16 @@
         echo "west wrapper: invalid SDK path from nix-nrf bootstrap: '$_sdk_path'" >&2
         exit 1
       fi
-      export ZEPHYR_BASE="$_sdk_path/zephyr"
+      ${
+        if sourceConfig.command == null
+        then ''
+          export ZEPHYR_BASE="$_sdk_path/zephyr"
+        ''
+        else ''
+          _zephyr_base="$(${sourceConfig.command} --zephyr-base --check-west -- "$@")" || exit 1
+          export ZEPHYR_BASE="$_zephyr_base"
+        ''
+      }
       _env="$(${nrfutilExe} sdk-manager toolchain env ${toolchainSelectorArgs} --as-script sh)" || {
         echo "west wrapper: nrfutil sdk-manager toolchain env ${toolchainSelectorArgs} failed" >&2
         echo "Selected toolchain: ${toolchainSelectorDesc}" >&2
@@ -109,6 +124,12 @@
         exit 1
       }
       eval "$_env"
+      ${pkgs.lib.optionalString (sourceConfig.command != null) ''
+        # Bind package discovery after loading tools; no global registry export
+        # and no application-specific HINTS declaration is required.
+        export ZEPHYR_BASE="$_zephyr_base"
+        export Zephyr_DIR="$_zephyr_base/share/zephyr-package/cmake"
+      ''}
       ${pkgs.lib.optionalString useMultilib ''
         # Keep multilib GCC ahead of the toolchain's host gcc so native_sim
         # -m32 builds work.
@@ -121,7 +142,11 @@
       self="$(readlink -f "$0")"
       while IFS= read -r cand; do
         if [ "$(readlink -f "$cand")" != "$self" ]; then
-          exec "$cand" "$@"
+          ${
+        if sourceConfig.command == null
+        then ''exec "$cand" "$@"''
+        else ''exec "$cand" -z "$_zephyr_base" "$@"''
+      }
         fi
       done < <(type -aP west)
       echo "west wrapper: real west not found in the NCS toolchain env" >&2
@@ -141,6 +166,7 @@
         ++ packages;
 
       shellHook = ''
+        ${sourceConfig.shellHook}
         # Escaped selector values, assigned once; used by the banner, the
         # ZEPHYR_BASE derivation, and any toolchain env queries below.
         _ncs_version=${ncsVersionEsc}
@@ -155,7 +181,7 @@
           then "lazy bootstrap on first west"
           else "manual bootstrap (autoBootstrap = false)"
         })"
-        ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+        ${pkgs.lib.optionalString (pkgs.stdenv.isLinux && sourceConfig.command == null) ''
           # ── ZEPHYR_BASE derivation ─────────────────────────────────────
           # The toolchain env itself stays scoped inside the west wrapper;
           # only ZEPHYR_BASE is exported here (needed by helper scripts and

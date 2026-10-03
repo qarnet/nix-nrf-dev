@@ -80,6 +80,7 @@
   };
 
   checks = import ./checks/default.nix {
+    source = import ./checks/source.nix {inherit pkgs mkNrfShell;};
     session = import ./checks/session.nix {
       inherit pkgs nix-nrf;
       openocd = openocd-master;

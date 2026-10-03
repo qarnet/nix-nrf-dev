@@ -47,12 +47,20 @@ version, requirement path, asset URL, and hash.
 Backends do not import each other's implementation. Shared code receives
 backend-specific commands and configuration as explicit arguments.
 
+`nix/backends/source.nix` packages read-only existing-workspace resolution in
+`bin/commands/nix-nrf-source`. It uses west's manifest API rather than a hard-coded
+Zephyr directory. Workspace roots are anchored at shell entry, while toolchain
+readiness stays backend-owned. Managed mode does not construct the resolver.
+Existing-source bootstrap never updates manifests/repositories or repairs Python
+environments. Public behavior and examples live in [application-types.md](../application-types.md).
+
 ## Commands and initialization
 
 `nix/commands/default.nix` builds the public `nix-nrf` dispatcher. It routes
 `versions`, `probes`, `bootstrap`, `doctor`, and `session` to internal commands installed
 under `$out/libexec/nix-nrf/`. `nix/init-project/default.nix` packages the
 separate public `nix-nrf-init-project` executable.
+Existing-workspace shells additionally route `source` to their exact resolver.
 
 `nix/init-project/default.nix` packages initializer with pinned nrfutil path,
 west version metadata, and skeleton. `bin/commands/nix-nrf-init-project` owns
@@ -95,6 +103,10 @@ body. CI invokes `.github/workflows/release.yml` only after trusted push to
   the repository configuration in a disposable Git repository. The product
   check also validates real backlog items without changing them.
 - `tests/fixtures/` contains fake sdk-manager and west-workspace helpers.
+- `tests/unit/test_source_workspace.py` exercises public shell hooks, real west,
+  and CMake package discovery with synthetic source packages. The opt-in
+  `tests/application-types/run.py` records real firmware-build qualification
+  separately and never provisions dependencies or accesses hardware.
 - `tests/unit/test_nix_nrf_session.py` tests owner/client process boundaries and
   actual pinned OpenOCD Tcl traffic through a no-hardware dummy target.
 - `tests/firmware/debug-fixture/` contains small CPUAPP verification firmware;

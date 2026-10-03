@@ -7,9 +7,8 @@
 #     Python interpreter (pkgs.<pythonPackage>) with venv support, and the
 #     host tools (cmake, ninja, dtc, gperf, Git, ccache, dfu-util, file, xz,
 #     make, which, optional multilib GCC);
-#   - the official mutable west workspace and the version-local venv own the
-#     NCS repositories and Python requirements, provisioned by the west
-#     bootstrap module (`nix-nrf bootstrap`);
+#   - managed mode provisions the official mutable west workspace and its venv;
+#     existing-workspace mode consumes caller-owned sources and prepared Python;
 #   - no nrfutil, sdk-manager, or Nordic opaque toolchain bundle participates
 #     (this shell intentionally does not include them).
 #
@@ -21,14 +20,16 @@
 # characters into the value).
 #
 # The scoped `west` wrapper requires the shell-specific `nix-nrf bootstrap`
-# readiness to pass (mutating when `autoBootstrap = true`, read-only when
-# false), prepends .venv/bin only inside west's process, exports ZEPHYR_BASE /
+# readiness to pass (managed setup may mutate with approval; existing sources
+# and Python are always check-only), prepends the selected Python bin directory
+# only inside west's process, exports ZEPHYR_BASE /
 # ZEPHYR_TOOLCHAIN_VARIANT / ZEPHYR_SDK_INSTALL_DIR, keeps the project
 # OpenOCD ahead of other runners, and execs the exact venv west.
 #
 # The shell hook is read-only: banner, workspace path, readiness via the
 # backend-aware `nix-nrf bootstrap --check --quiet --print-sdk-path`, and
-# ZEPHYR_BASE only when ready. It never activates the venv globally and never
+# managed-source ZEPHYR_BASE only when ready. Existing-workspace mode keeps
+# source-package variables out of the parent. It never activates the venv globally and never
 # runs setup/update/pip.
 {
   pkgs,
@@ -55,6 +56,11 @@
   withMultilib ? true,
   extraShellHook ? "",
   inputsFrom ? [],
+  sourceConfig ? {
+    command = null;
+    shellHook = "";
+  },
+  pythonEnvironment ? null,
 }:
 assert pkgs.stdenv.hostPlatform.system
 == "x86_64-linux"
@@ -71,15 +77,27 @@ assert pkgs.stdenv.hostPlatform.system
 
   useMultilib = pkgs.stdenv.isLinux && withMultilib;
 
-  # Scoped west wrapper: workspaces resolve from HOME at runtime; the venv
+  # Scoped west wrapper: managed workspaces resolve from HOME; existing roots
+  # are anchored by the source resolver. The venv
   # python is never leaked into the outer environment. Bootstrap readiness
   # comes from the shell-specific backend-aware `nix-nrf bootstrap` (mutating
-  # with approval when autoBootstrap = true, read-only check otherwise).
+  # only in managed mode with approval, read-only for existing sources/Python).
   westWrapper = pkgs.writeShellScriptBin "west" ''
+    # The selected Python environment must not import a caller's unrelated
+    # interpreter libraries. Only this child process loses those variables.
+    unset PYTHONHOME PYTHONPATH
     _nix_nrf=${nixNrf}/bin/nix-nrf
     _sdk_dir=${sdkPackage}
     _ncs_version=${ncsVersionEsc}
-    _workspace="$HOME/ncs/$_ncs_version"
+    ${
+      if sourceConfig.command == null
+      then ''
+        _workspace="$HOME/ncs/$_ncs_version"
+      ''
+      else ''
+        _workspace="$(${sourceConfig.command} --workspace-root)" || exit 1
+      ''
+    }
 
     ${
       if autoBootstrap
@@ -104,8 +122,27 @@ assert pkgs.stdenv.hostPlatform.system
     fi
 
     # .venv/bin is prepended only inside west's process tree.
-    export PATH="$_workspace/.venv/bin:$PATH"
-    export ZEPHYR_BASE="$_workspace/zephyr"
+    ${
+      if sourceConfig.command == null
+      then ''
+        _python_environment="$_workspace/.venv"
+        export ZEPHYR_BASE="$_workspace/zephyr"
+      ''
+      else ''
+          _python_environment=${
+          pkgs.lib.escapeShellArg (
+            if pythonEnvironment == null
+            then ".venv"
+            else pythonEnvironment
+          )
+        }
+          _python_environment="$(${sourceConfig.command} --python-root "$_python_environment")" || exit 1
+          _zephyr_base="$(${sourceConfig.command} --zephyr-base --check-west -- "$@")" || exit 1
+        export ZEPHYR_BASE="$_zephyr_base"
+        export Zephyr_DIR="$_zephyr_base/share/zephyr-package/cmake"
+      ''
+    }
+    export PATH="$_python_environment/bin:$PATH"
     export ZEPHYR_TOOLCHAIN_VARIANT=zephyr
     export ZEPHYR_SDK_INSTALL_DIR="$_sdk_dir"
     ${pkgs.lib.optionalString useMultilib ''
@@ -116,7 +153,15 @@ assert pkgs.stdenv.hostPlatform.system
     # Keep the project OpenOCD ahead of anything a runner might find.
     export PATH="${openocd}/bin:$PATH"
 
-    exec "$_workspace/.venv/bin/west" "$@"
+    ${
+      if sourceConfig.command == null
+      then ''
+        exec "$_python_environment/bin/west" "$@"
+      ''
+      else ''
+        exec "$_python_environment/bin/west" -z "$_zephyr_base" "$@"
+      ''
+    }
   '';
 in
   pkgs.mkShell {
@@ -154,13 +199,24 @@ in
     };
 
     shellHook = ''
+      ${sourceConfig.shellHook}
       _ncs_version=${ncsVersionEsc}
       _sdk_version=${sdkVersionEsc}
       _python_version=${pythonVersionEsc}
       _nix_nrf=${nixNrf}/bin/nix-nrf
-      _workspace="$HOME/ncs/$_ncs_version"
+      ${
+        if sourceConfig.command == null
+        then ''
+          _workspace="$HOME/ncs/$_ncs_version"
+        ''
+        else ''
+          _workspace="$NIX_NRF_SOURCE_WORKSPACE"
+        ''
+      }
       echo "${name} shell (backend west, NCS "$_ncs_version", Nix Zephyr SDK "$_sdk_version", Python "$_python_version", ${
-        if autoBootstrap
+        if sourceConfig.command != null
+        then "existing sources/Python, no implicit setup"
+        else if autoBootstrap
         then "lazy bootstrap on first west"
         else "manual bootstrap (autoBootstrap = false)"
       })"
@@ -170,7 +226,11 @@ in
       # imports, or an unsatisfied west version all report not-ready. Never
       # mutates.
       if "$_nix_nrf" bootstrap --check --quiet --print-sdk-path >/dev/null 2>&1; then
-        if [ -d "$_workspace/zephyr" ]; then
+        if ${
+        if sourceConfig.command == null
+        then ''[ -d "$_workspace/zephyr" ]''
+        else "false"
+      }; then
           export ZEPHYR_BASE="$_workspace/zephyr"
           echo "ZEPHYR_BASE: $ZEPHYR_BASE"
         fi

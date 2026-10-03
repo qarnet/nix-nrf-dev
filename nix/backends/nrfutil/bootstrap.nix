@@ -13,6 +13,7 @@
   nrfutilPackage,
   ncsVersion ? null,
   toolchainBundleId ? null,
+  sourceCommand ? null,
 }: let
   mkPythonCommand = import ../../lib/mk-python-command.nix {inherit pkgs;};
 in
@@ -48,6 +49,13 @@ in
           "--set"
           "NIX_NRF_TOOLCHAIN_BUNDLE_ID"
           toolchainBundleId
+        ]
+      ]
+      ++ pkgs.lib.optionals (sourceCommand != null) [
+        [
+          "--set"
+          "NIX_NRF_SOURCE_RESOLVER"
+          sourceCommand
         ]
       ];
   }

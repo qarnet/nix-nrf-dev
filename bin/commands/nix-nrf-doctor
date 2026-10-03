@@ -75,9 +75,7 @@ _ACCESS_OVERRIDE = None
 
 
 def environment_label():
-    return os.environ.get(
-        "NIX_NRF_DOCTOR_ENVIRONMENT_LABEL", DEFAULT_ENVIRONMENT_LABEL
-    )
+    return os.environ.get("NIX_NRF_DOCTOR_ENVIRONMENT_LABEL", DEFAULT_ENVIRONMENT_LABEL)
 
 
 def sysfs_root():
@@ -250,7 +248,12 @@ def build_candidates(sysfs, devroot):
         usb = next((n for n in nodes if n["kind"] == "usb"), None)
 
         def ok(node):
-            return node is not None and node["exists"] and node["readable"] and node["writable"]
+            return (
+                node is not None
+                and node["exists"]
+                and node["readable"]
+                and node["writable"]
+            )
 
         if ctype == "j-link":
             # J-Link talks over the USB node (no hidraw requirement).
@@ -302,7 +305,9 @@ def hardware_status(candidates):
         return {"status": "fail", "message": "probe visible but inaccessible"}
     blocked = len(candidates) - len(accessible)
     if blocked:
-        message = f"{len(accessible)} accessible probe(s), {blocked} with limited access"
+        message = (
+            f"{len(accessible)} accessible probe(s), {blocked} with limited access"
+        )
     else:
         message = f"{len(accessible)} accessible probe(s)"
     return {"status": "pass", "message": message}
@@ -398,9 +403,7 @@ def nix_attr_quote(name):
     """Quote a username as a Nix double-quoted string (defensive; real
     usernames are simple, but this keeps the remediation copyable)."""
     return (
-        '"'
-        + name.replace("\\", "\\\\").replace('"', '\\"').replace("${", "\\${")
-        + '"'
+        '"' + name.replace("\\", "\\\\").replace('"', '\\"').replace("${", "\\${") + '"'
     )
 
 
@@ -421,7 +424,7 @@ def remediation(candidates, sdk, user):
         items.append(
             "NixOS (plugdev is required by upstream OpenOCD rules):\n"
             "  users.groups.plugdev = {};\n"
-            f"  users.users.{quoted}.extraGroups = [ \"plugdev\" ];\n"
+            f'  users.users.{quoted}.extraGroups = [ "plugdev" ];\n'
             "\n"
             "  Direct, least-intrusive integration:\n"
             "  services.udev.packages = [\n"
@@ -444,7 +447,9 @@ def remediation(candidates, sdk, user):
         )
         rules_pkg = os.environ.get("NIX_NRF_DOCTOR_UDEV_RULES")
         if rules_pkg:
-            items.append(f"Packaged udev rule: {rules_pkg}/lib/udev/rules.d/60-openocd.rules")
+            items.append(
+                f"Packaged udev rule: {rules_pkg}/lib/udev/rules.d/60-openocd.rules"
+            )
         items.append("OpenOCD should not run as root.")
     if sdk["status"] == "fail":
         items.append(f"{environment_label()}: run `nix-nrf bootstrap`")
@@ -459,6 +464,19 @@ def render_human(sdk, user, hardware, remediation_items):
         out.append(f"  NCS {sdk['version']} ready: {sdk['path']}")
     elif sdk["message"]:
         out.append(f"  {sdk['message']}")
+    if "source" in sdk:
+        source = sdk["source"]
+        out.append(f"  source mode: {source['mode']}")
+        out.append(f"  workspace: {source['workspace']}")
+        out.append(f"  manifest: {source['manifest']}")
+        out.append(f"  Zephyr: {source['zephyr_base']}")
+        out.append(f"  Nordic: {source['nrf_base']}")
+        selection = sdk["toolchain_selection"]
+        out.append(
+            f"  configured tools: {selection['backend']}, NCS {selection['ncs_version']}"
+        )
+        if selection["bundle_id"]:
+            out.append(f"  configured Nordic bundle: {selection['bundle_id']}")
     out.append("")
 
     out.append("User access")
@@ -535,6 +553,27 @@ def main(argv=None):
     load_access_override()
 
     sdk = sdk_status()
+    source_command = os.environ.get("NIX_NRF_DOCTOR_SOURCE")
+    if source_command and os.environ.get("NIX_NRF_DOCTOR_SKIP_SDK") != "1":
+        try:
+            source = subprocess.run(
+                [source_command, "--json"], capture_output=True, text=True, timeout=60
+            )
+            if source.returncode:
+                sdk.update(status="fail", message=source.stderr.strip())
+            else:
+                sdk["source"] = json.loads(source.stdout)
+                sdk["toolchain_selection"] = {
+                    "backend": os.environ.get("NIX_NRF_DOCTOR_TOOLCHAIN_PROVIDER"),
+                    "ncs_version": os.environ.get("NIX_NRF_DOCTOR_NCS_VERSION"),
+                    "bundle_id": os.environ.get("NIX_NRF_DOCTOR_TOOLCHAIN_BUNDLE_ID")
+                    or None,
+                }
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            sdk.update(
+                status="fail",
+                message=f"cannot inspect selected source workspace: {exc}",
+            )
     user = user_info()
     candidates = build_candidates(sysfs_root(), dev_root())
     hardware = hardware_status(candidates)

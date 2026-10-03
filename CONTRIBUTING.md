@@ -35,6 +35,11 @@ Session changes have hardware-free process/Tcl and fixture-protocol gates:
 nix build .#checks.x86_64-linux.session-tests .#checks.x86_64-linux.debug-fixture-tests
 ```
 
+Source-selection changes also run `nix build .#checks.x86_64-linux.source-workspace-tests`.
+This gate uses the public shell hooks/commands, real west and CMake, and synthetic
+source packages; it is not full firmware qualification. Existing real-build
+workspace prerequisites and source ownership are documented in `docs/application-types.md`.
+
 `nix develop .#hardware-tests` supplies the packaged session command and Python
 ELF parser without SDK bootstrap. See `tests/hardware/debug/README.md` before
 building, provisioning, or running physical acceptance. Host tests do not prove

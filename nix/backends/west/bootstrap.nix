@@ -29,6 +29,8 @@
   pythonPackage,
   # Version metadata entry (versions.nix), keyed by NCS release.
   metadata,
+  sourceCommand ? null,
+  pythonEnvironment ? null,
 }: let
   python =
     pkgs.${pythonPackage}
@@ -39,39 +41,54 @@ in
     pname = "nix-nrf-west-bootstrap";
     script = ../../../bin/backends/west/nix-nrf-west-bootstrap;
     destination = "bootstrap";
-    wrapperArgs = [
+    wrapperArgs =
       [
-        "--set"
-        "NIX_NRF_WEST_PYTHON"
-        "${python}/bin/python3"
+        [
+          "--set"
+          "NIX_NRF_WEST_PYTHON"
+          "${python}/bin/python3"
+        ]
+        [
+          "--set"
+          "NIX_NRF_WEST_NCS_VERSION"
+          metadata.ncsVersion
+        ]
+        [
+          "--set"
+          "NIX_NRF_WEST_TESTED_WEST_VERSION"
+          metadata.testedWestVersion
+        ]
+        [
+          "--set"
+          "NIX_NRF_WEST_REQUIREMENTS"
+          (builtins.concatStringsSep "\n" metadata.requirements)
+        ]
+        [
+          "--set"
+          "NIX_NRF_WEST_PIP_CONSTRAINTS"
+          (builtins.concatStringsSep "\n" (metadata.pipConstraints or []))
+        ]
+        [
+          "--unset"
+          "PYTHONPATH"
+        ]
+        [
+          "--unset"
+          "PYTHONHOME"
+        ]
       ]
-      [
-        "--set"
-        "NIX_NRF_WEST_NCS_VERSION"
-        metadata.ncsVersion
+      ++ pkgs.lib.optionals (sourceCommand != null) [
+        [
+          "--set"
+          "NIX_NRF_SOURCE_RESOLVER"
+          sourceCommand
+        ]
       ]
-      [
-        "--set"
-        "NIX_NRF_WEST_TESTED_WEST_VERSION"
-        metadata.testedWestVersion
-      ]
-      [
-        "--set"
-        "NIX_NRF_WEST_REQUIREMENTS"
-        (builtins.concatStringsSep "\n" metadata.requirements)
-      ]
-      [
-        "--set"
-        "NIX_NRF_WEST_PIP_CONSTRAINTS"
-        (builtins.concatStringsSep "\n" (metadata.pipConstraints or []))
-      ]
-      [
-        "--unset"
-        "PYTHONPATH"
-      ]
-      [
-        "--unset"
-        "PYTHONHOME"
-      ]
-    ];
+      ++ pkgs.lib.optionals (pythonEnvironment != null) [
+        [
+          "--set"
+          "NIX_NRF_WEST_PYTHON_ENVIRONMENT"
+          pythonEnvironment
+        ]
+      ];
   }

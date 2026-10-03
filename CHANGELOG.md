@@ -17,6 +17,9 @@ All notable changes to the nix-nrf-dev project (and its `nix-nrf` CLI).
 
 ### Added
 
+- Independent existing-workspace source selection for both toolchain backends,
+  read-only source diagnostics, and application-layout guidance. Full cross-layout
+  firmware qualification remains separate from host source-routing checks.
 - Pinned contributor-only Backlog.md tooling, an SDK-free product shell, and
   product backlog tracking RTT/debug work and its hardware acceptance blockers.
 - `nix-nrf session start/status` for foreground nRF54L15 CPUAPP OpenOCD
