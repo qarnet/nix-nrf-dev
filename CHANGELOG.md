@@ -9,17 +9,23 @@ All notable changes to the nix-nrf-dev project (and its `nix-nrf` CLI).
 
 | Version | Date | Highlights |
 |---|---|---|
+| [0.1.3](#013) | 2026-10-03 | Independent SDK workspace sources; experimental shared OpenOCD sessions and verification fixtures; pinned product backlog tooling |
 | [0.1.2](#012) | 2026-09-12 | Documentation refresh; fixed fresh-shell default `nrfutil` bootstrap with content-pinned sdk-manager `1.16.1` supply |
 | [0.1.1](#011) | 2026-08-17 | Documentation: install section split into automated (`init-project`) and manual (hand-written `flake.nix`) quick start methods; new detailed install guide (`docs/install.md`) |
 | [0.1.0](#010) | 2026-08-08 | First release: reusable x86_64-linux flake and public `mkNrfShell` (default nrfutil/sdk-manager backend, experimental west backend); `nix-nrf` CLI (`versions`, `probes`, `bootstrap`, `doctor`, `--version`); dynamic concrete-version `init-project` app; pinned OpenOCD, udev package, narrow NixOS module with explicit plugdev policy; NCS v3.3.0 tested baseline with nRF5340/nRF54L15 flash and probe verification; deterministic flake/unit/VM/metadata checks, scheduled latest-NCS validation, manual hardware/clean-room workflows, clean-room telemetry; release automation (consistency gate, trusted-main GitHub Release workflow) |
 
 ## [Unreleased]
 
+## [0.1.3]
+
 ### Added
 
-- Independent existing-workspace source selection for both toolchain backends,
-  read-only source diagnostics, and application-layout guidance. Full cross-layout
-  firmware qualification remains separate from host source-routing checks.
+- Independent existing-workspace source selection for both toolchain backends
+  through `source.mode = "workspace"`. Manifest-based source diagnostics,
+  scoped CMake package discovery, and conflict/cache checks support repository,
+  workspace, and freestanding applications without acquiring or updating sources.
+  Managed sources remain the default. nrfutil workspace bootstrap provisions
+  tools only; west workspace bootstrap checks caller-prepared Python only.
 - Pinned contributor-only Backlog.md tooling, an SDK-free product shell, and
   product backlog tracking RTT/debug work and its hardware acceptance blockers.
 - `nix-nrf session start/status` for foreground nRF54L15 CPUAPP OpenOCD
@@ -27,6 +33,33 @@ All notable changes to the nix-nrf-dev project (and its `nix-nrf` CLI).
   Physical state-preservation acceptance remains pending.
 - Small RTT/debug test firmware, an approval-gated evidence harness, and
   hardware-free process, real Tcl transport, and binary protocol checks.
+
+### Fixed
+
+- West child processes discard unrelated `PYTHONHOME` and `PYTHONPATH` settings
+  so the selected Python environment does not import another interpreter's
+  libraries. Parent-shell environment remains unchanged.
+
+### Documentation
+
+- Added application-layout/source-ownership guidance, Python setup and
+  troubleshooting, and revision-pinned Zephyr/zephyr-nix research.
+- Recorded FLPR capability research separating memory observation from unqualified
+  run control, plus the probe-diagnosis handoff. Shared-session hardware acceptance
+  remains blocked; no working target-reset or FLPR debugger is claimed.
+- Reconciled backend comments, architecture, and contributor guidance with source
+  selection and explicit ownership boundaries.
+
+### Testing
+
+- Added 13 public source-workspace regression tests using real west/CMake and
+  disposable Git manifest imports, plus an opt-in no-bootstrap firmware matrix.
+- Qualified 16 single-image/sysbuild builds across all application layouts with
+  both backends on NCS v3.3.0, x86_64-linux, and XIAO nRF54L15 CPUAPP. Evidence
+  includes source/compiler/module selection, extra-module symbols, and ELF hashes;
+  build success is not hardware execution proof.
+- Added session process/native-Tcl and fixture binary-protocol checks. Physical
+  RTT emission, running/halted preservation, and combined RTT/GDB remain unverified.
 
 ## [0.1.2]
 
