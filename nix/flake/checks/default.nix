@@ -14,6 +14,7 @@
   formatting,
   pre-commit,
   product,
+  session,
 }: {
   inherit (backendSelector) backend-selector;
   inherit
@@ -51,5 +52,6 @@
   inherit (initProject) init-project-tests;
   inherit (release) release-consistency;
   inherit (product) backlog;
+  inherit (session) session-tests debug-fixture-tests;
   inherit formatting pre-commit;
 }

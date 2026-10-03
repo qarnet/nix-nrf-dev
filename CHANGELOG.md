@@ -15,6 +15,16 @@ All notable changes to the nix-nrf-dev project (and its `nix-nrf` CLI).
 
 ## [Unreleased]
 
+### Added
+
+- Pinned contributor-only Backlog.md tooling, an SDK-free product shell, and
+  product backlog tracking RTT/debug work and its hardware acceptance blockers.
+- `nix-nrf session start/status` for foreground nRF54L15 CPUAPP OpenOCD
+  ownership, private session discovery, and opt-in local debug endpoints.
+  Physical state-preservation acceptance remains pending.
+- Small RTT/debug test firmware, an approval-gated evidence harness, and
+  hardware-free process, real Tcl transport, and binary protocol checks.
+
 ## [0.1.2]
 
 ### Fixed

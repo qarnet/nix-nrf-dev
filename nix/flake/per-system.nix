@@ -75,10 +75,15 @@
       mkNrfShell
       pre-commit
       backlog
+      nix-nrf
       ;
   };
 
   checks = import ./checks/default.nix {
+    session = import ./checks/session.nix {
+      inherit pkgs nix-nrf;
+      openocd = openocd-master;
+    };
     product = import ./checks/product.nix {inherit pkgs backlog;};
     backendSelector = import ./checks/backend-selector.nix {inherit pkgs mkNrfShell;};
     core = import ./checks/core.nix {

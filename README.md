@@ -20,6 +20,7 @@ flashing.
   the selected NCS release.
 - `openocd-master` and udev guidance support CMSIS-DAP probe access.
 - `nix-nrf` provides `bootstrap`, `versions`, `probes`, and `doctor`.
+- `nix-nrf session` owns shared nRF54L15 OpenOCD observation/debug sessions.
 - `init-project` writes `.envrc` and `flake.nix` pinned to one NCS release.
 - Manual hardware tests cover nRF5340 and nRF54L15 flashing.
 
@@ -106,6 +107,8 @@ access. See [docs/hardware.md](docs/hardware.md).
 - [CHANGELOG.md](CHANGELOG.md) records project releases.
 - [docs/backends.md](docs/backends.md) explains backends and bootstrap.
 - [docs/hardware.md](docs/hardware.md) covers probes, flashing, and recovery.
+- [docs/debug.md](docs/debug.md) covers shared sessions and their hardware
+  validation limits.
 - [CONTRIBUTING.md](CONTRIBUTING.md) explains repository work.
 - [docs/product/README.md](docs/product/README.md) defines the product backlog
   and its SDK-free contributor tooling.

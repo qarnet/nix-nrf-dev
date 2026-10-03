@@ -1,12 +1,13 @@
-# Per-system dev shells: the dogfood `default` shell and the
-# `clean-env-test` regression shell. Receives pkgs (for the internal
-# hybrid-input fixture), the public mkNrfShell factory, and the pre-commit
-# module (enabledPackages + shellHook).
+# Contributor shells compose the public mkNrfShell factory without adding
+# Backlog.md or hardware-harness dependencies to consumer shells. SDK-free
+# product and hardware-tests shells keep planning and capture separate from
+# SDK bootstrap.
 {
   pkgs,
   mkNrfShell,
   pre-commit,
   backlog,
+  nix-nrf,
 }: let
   # Internal hybrid-input fixture: plain mkShell whose packages provide
   # the regression tools (Node, Git, Python). clean-env-test pulls them in
@@ -39,6 +40,15 @@ in {
     packages = [
       backlog
       pkgs.git
+    ];
+  };
+
+  # Harness dependencies only; entering this shell never bootstraps an SDK.
+  hardware-tests = pkgs.mkShell {
+    name = "nix-nrf-hardware-tests";
+    packages = [
+      nix-nrf
+      (pkgs.python3.withPackages (ps: [ps.pyelftools]))
     ];
   };
 

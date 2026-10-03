@@ -26,7 +26,7 @@ probe access was performed during research.
 - Initially exclude interactive RTT consoles, down-channel commands, automatic
   flashing, and automatic device recovery from the capture workflow.
 
-## Repository evidence
+## Repository evidence at initial research
 
 - `nix/flake/dev-shells.nix` selects v3.3.0 for default nrfutil and clean-env
   shells. `tests/clean-room/run.sh`, `tests/hardware/run.sh`, active examples,
@@ -191,6 +191,11 @@ Pinned source expects `_kernel`, `_kernel_thread_info_offsets`, and
 are stale. Verify required Kconfig against the selected SDK during refinement.
 
 ## FLPR investigation: high priority, not deferred
+
+PB-005 now has a [source-backed capability report](flpr-debug-capabilities.md)
+covering the memory-mapped debug interface, stock host-stack gaps, receiver
+recovery hazards, and a proposed hardware experiment. It does not claim tested
+board support. The original investigation questions below remain its context.
 
 The pinned target config creates `nrf54l.cpu` as Cortex-M on AP0 and
 `nrf54l.aux` as a memory-access target on AP1. AUX is not a RISC-V run-control
@@ -381,7 +386,8 @@ refinement. No SDK or hardware changes accompanied item creation.
 | Later explicit provision-and-debug workflow evaluation | PB-021 |
 | Consumer adoption and firmware-recorder guidance | PB-022 |
 
-The tasks live in `docs/product/backlog/tasks/`. Read an item with
+Active tasks live in `docs/product/backlog/tasks/`; completed items move to
+`docs/product/backlog/completed/`. Read an item from either location with
 `nix develop .#product -c backlog task PB-005 --plain`; use `backlog doctor`
 through the same shell to validate IDs and dependencies. Unrelated roadmap
 proposals were not silently converted or reprioritized.

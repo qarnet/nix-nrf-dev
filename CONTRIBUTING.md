@@ -29,6 +29,17 @@ nix develop .#product -c backlog doctor
 nix build .#checks.x86_64-linux.backlog
 ```
 
+Session changes have hardware-free process/Tcl and fixture-protocol gates:
+
+```bash
+nix build .#checks.x86_64-linux.session-tests .#checks.x86_64-linux.debug-fixture-tests
+```
+
+`nix develop .#hardware-tests` supplies the packaged session command and Python
+ELF parser without SDK bootstrap. See `tests/hardware/debug/README.md` before
+building, provisioning, or running physical acceptance. Host tests do not prove
+target run-state preservation.
+
 ## Before committing
 
 Formatting and lint hooks run automatically via `pre-commit` (wired through
@@ -126,7 +137,7 @@ To prepare a new release:
    `python3 scripts/release.py check`, `python3 tests/unit/test_release.py`,
    `nix build -L .#checks.x86_64-linux.release-consistency`, and the normal
    `nix flake check`.
-4. Open and merge the reviewed PR.
+4. Open the PR for review; a human performs the merge. Agents never merge PRs.
 
 Trusted release workflow creates tag and GitHub Release after successful push
 to `main`. `.github/workflows/ci.yml` calls reusable

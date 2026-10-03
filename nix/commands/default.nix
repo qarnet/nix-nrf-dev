@@ -1,6 +1,6 @@
 # nix-nrf command dispatcher for nix-nrf-dev tools.
 #
-# Fixed dispatcher with four subcommands:
+# Fixed dispatcher with repository-owned subcommands:
 #   nix-nrf versions: by default delegates to `nrfutil sdk-manager search`
 #     (NCS version list; sdk-manager remains the runtime authority for
 #     available versions). The west backend supplies an exact `versionsCommand`
@@ -29,6 +29,8 @@
 #     receives the selected exact bootstrap command and runs only its
 #     read-only `--check --quiet --print-sdk-path` path; the west backend
 #     additionally passes `doctorEnvironmentLabel` for its human messages.
+#   nix-nrf session: foreground OpenOCD ownership and local status. Observation
+#     never deliberately changes run state; raw endpoints are explicit opt-ins.
 #
 # Global `-V`/`--version` prints exactly `nix-nrf <version>` where
 # `<version>` is the canonical project version embedded from release.json via
@@ -115,6 +117,10 @@ assert bootstrapCommand
       then doctorEnvironmentLabel
       else "SDK/toolchain";
   };
+  nrfSession = import ./session.nix {
+    inherit pkgs openocd;
+    doctor = nrfDoctor;
+  };
   # Human help lines: `versions`/`bootstrap`/`doctor` descriptions differ per
   # backend. The west shell names its `west workspace/Zephyr SDK`; the
   # nrfutil/standalone wording stays byte-for-byte current. `bootstrapCommand`
@@ -156,6 +162,7 @@ in
       nrf_probes_exe=${nrfProbes}/libexec/nix-nrf/probes
       nrf_bootstrap_exe=${bootstrapExe}
       nrf_doctor_exe=${nrfDoctor}/libexec/nix-nrf/doctor
+      nrf_session_exe=${nrfSession}/libexec/nix-nrf/session
 
       usage() {
         cat <<'EOF'
@@ -166,6 +173,7 @@ in
           probes     Identify CMSIS-DAP probes and targets (read-only)
           ${bootstrapDesc}
           ${doctorDesc}
+          session    Own or inspect a shared OpenOCD session
 
         Global options:
           -V, --version  Print the nix-nrf project version and exit
@@ -207,6 +215,9 @@ in
             doctor)
               exec "$nrf_doctor_exe" --help
               ;;
+            session)
+              exec "$nrf_session_exe" --help
+              ;;
             *)
               echo "nix-nrf: unknown help topic '$2'" >&2
               usage >&2
@@ -229,6 +240,10 @@ in
         doctor)
           shift
           exec "$nrf_doctor_exe" "$@"
+          ;;
+        session)
+          shift
+          exec "$nrf_session_exe" "$@"
           ;;
         *)
           echo "nix-nrf: unknown command '$cmd'" >&2

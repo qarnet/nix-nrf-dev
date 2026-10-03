@@ -1,0 +1,399 @@
+#!/usr/bin/env python3
+"""Own one foreground OpenOCD session; never infer permission to reset a target."""
+
+import argparse
+import contextlib
+import fcntl
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import re
+import selectors
+import signal
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+import uuid
+
+
+class SessionError(Exception):
+    pass
+
+
+class Cancelled(Exception):
+    pass
+
+
+def positive(value):
+    number = float(value)
+    if not math.isfinite(number) or not 0 < number <= 300:
+        raise argparse.ArgumentTypeError("must be finite and in (0, 300]")
+    return number
+
+
+def port(value):
+    number = int(value)
+    if not 0 <= number <= 65535:
+        raise argparse.ArgumentTypeError("port must be 0..65535; 0 allocates a port")
+    return number
+
+
+def serial(value):
+    if (
+        not value
+        or len(value) > 256
+        or any(ord(c) < 32 or ord(c) == 127 for c in value)
+    ):
+        raise argparse.ArgumentTypeError("serial must be 1..256 printable characters")
+    return value
+
+
+def tcl_string(value):
+    # Shell argv escaping alone does not stop Tcl substitution.
+    return '"' + re.sub(r'([\\"$\[\]])', r"\\\1", value) + '"'
+
+
+def configuration(args, token):
+    commands = [
+        f"set nix_nrf_session_id {token}",
+        "bindto 127.0.0.1",
+        "gdb port disabled",
+        "telnet port disabled",
+        f"tcl port {args.tcl_port if args.tcl_port is not None else 'disabled'}",
+        "source [find interface/cmsis-dap.cfg]",
+        "cmsis-dap backend usb_bulk",
+        f"adapter serial {tcl_string(args.serial)}",
+        "set WORKAREASIZE 0",
+        "source [find target/nordic/nrf54l.cfg]",
+        f"adapter speed {args.speed}",
+        "reset_config none connect_deassert_srst",
+        "targets nrf54l.cpu",
+        "nrf54l.aux configure -gdb-port disabled",
+    ]
+    if args.mode == "observe":
+        # Cortex-M poll clears double-fault lockup by halting. Disable it while
+        # init still masks polling, before examination can expose that state.
+        commands += [
+            "nrf54l.cpu configure -gdb-port disabled",
+            "nrf54l.cpu configure -event examine-start { poll off }",
+        ]
+    else:
+        commands += [
+            f"nrf54l.cpu configure -gdb-port {args.gdb_port}",
+            "nrf54l.cpu configure -event gdb-attach { halt 1000 }",
+            'nrf54l.cpu configure -event gdb-detach { echo "GDB detached; state left unchanged" }',
+        ]
+    commands += [
+        "proc nix_nrf_ready {} {",
+        '  if {![nrf54l.cpu was_examined]} { error "CPUAPP examination failed; no recovery attempted" }',
+        "  set part [lindex [nrf54l.cpu read_memory 0x00FFC31C 32 1] 0]",
+        '  if {$part != 0x54B15} { error "selected target is not nRF54L15" }',
+        "  set tp -1; set gp -1",
+        "  foreach svc [services] {",
+        "    if {[dict get $svc name] eq {tcl}} { set tp [dict get $svc port] }",
+        "    if {[dict get $svc name] eq {gdb}} { set gp [dict get $svc port] }",
+        "  }",
+        f'  echo "NIX_NRF_READY_{token} $tp $gp"',
+        "}",
+        # Tcl/Telnet bind before automatic init; GDB binds inside init. A
+        # marker after explicit early init would miss later port failures.
+        "lappend post_init_commands nix_nrf_ready",
+    ]
+    return "\n".join(commands)
+
+
+def private_directory(path):
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    info = path.lstat()
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != os.getuid()
+        or info.st_mode & 0o077
+    ):
+        raise SessionError(
+            f"runtime directory must be owned by you, private, and not a symlink: {path}"
+        )
+    return path
+
+
+def paths(args):
+    if args.runtime_dir:
+        root = Path(args.runtime_dir).absolute()
+    elif os.environ.get("XDG_RUNTIME_DIR"):
+        root = Path(os.environ["XDG_RUNTIME_DIR"]) / "nix-nrf"
+    else:
+        root = Path(tempfile.gettempdir()) / f"nix-nrf-{os.getuid()}"
+    root = private_directory(root)
+    key = hashlib.sha256(args.serial.encode()).hexdigest()
+    return root / (key + ".lock"), root / (key + ".json")
+
+
+def open_lock(path):
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    info = os.fstat(fd)
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or info.st_uid != os.getuid()
+        or info.st_mode & 0o077
+    ):
+        os.close(fd)
+        raise SessionError("unsafe probe lock file")
+    return fd
+
+
+def preflight(args):
+    doctor = os.environ.get("NIX_NRF_SESSION_DOCTOR")
+    cmd = [doctor, "--json"] if doctor else ["nix-nrf", "doctor", "--json"]
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=args.startup_timeout,
+        env=dict(os.environ, NIX_NRF_DOCTOR_SKIP_SDK="1"),
+    )
+    if result.returncode:
+        raise SessionError(
+            f"doctor preflight failed: {result.stderr.strip() or result.stdout.strip()}"
+        )
+    try:
+        candidates = json.loads(result.stdout)["hardware"]["candidates"]
+        matches = [c for c in candidates if c["serial"] == args.serial]
+        if len(matches) != 1:
+            raise SessionError(
+                f"expected exactly one probe with serial {args.serial!r}; found {len(matches)}"
+            )
+        candidate = matches[0]
+        if (
+            candidate["type"] != "cmsis-dap"
+            or candidate["accessible"] is not True
+            or candidate["access_method"] != "usb"
+            or candidate["fallback"] is not False
+            or not any(
+                n.get("kind") == "usb"
+                and all(n.get(k) is True for k in ("exists", "readable", "writable"))
+                for n in candidate["nodes"]
+            )
+        ):
+            raise SessionError(
+                "selected probe requires accessible CMSIS-DAP v2 bulk USB; run nix-nrf doctor"
+            )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise SessionError("malformed doctor preflight response") from exc
+
+
+def publish(path, data):
+    fd, name = tempfile.mkstemp(prefix="session-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w") as stream:
+            json.dump(data, stream)
+            stream.write("\n")
+        os.replace(name, path)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+
+
+def stop_child(child):
+    if child.poll() is not None:
+        return
+    # OpenOCD ignores SIGINT when stdin is not a controlling terminal.
+    # SIGTERM invokes its shutdown handler even with DEVNULL stdin.
+    child.terminate()
+    try:
+        child.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        child.wait(timeout=3)
+
+
+def start(args):
+    lock_path, manifest_path = paths(args)
+    with contextlib.closing(os.fdopen(open_lock(lock_path), "r+")) as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise SessionError(
+                "probe already owned by a session; use session status, not another start"
+            ) from exc
+        # A previous owner may have been killed after publishing. A held lock
+        # proves current ownership; leftover JSON alone never proves readiness.
+        manifest_path.unlink(missing_ok=True)
+        preflight(args)
+        token = uuid.uuid4().hex
+        openocd = os.environ.get("NIX_NRF_SESSION_OPENOCD", "openocd")
+        marker = re.compile(rf"NIX_NRF_READY_{token} (-?\d+) (-?\d+)$")
+        if args.mode == "debug":
+            print(
+                "Debug mode: GDB attach halts CPUAPP; disconnect leaves state unchanged.",
+                file=sys.stderr,
+            )
+        if args.tcl_port is not None:
+            print(
+                "Raw Tcl enabled on loopback: unrestricted target control, not a read-only endpoint.",
+                file=sys.stderr,
+            )
+        child = None
+        published = False
+        try:
+            child = subprocess.Popen(
+                [openocd, "-c", configuration(args, token)],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+                pass_fds=(lock.fileno(),),
+            )
+            # Child retains the lock if owner is SIGKILLed. Never unlink lock
+            # files: replacing an inode would allow two independent owners.
+            deadline = time.monotonic() + args.startup_timeout
+            pending = b""
+            with selectors.DefaultSelector() as selector:
+                selector.register(child.stdout, selectors.EVENT_READ)
+                while True:
+                    if not published and time.monotonic() >= deadline:
+                        raise SessionError(
+                            "OpenOCD startup timed out; target examination/services not ready"
+                        )
+                    events = selector.select(0.1)
+                    if not events:
+                        if child.poll() is not None:
+                            raise SessionError(
+                                f"OpenOCD exited unexpectedly ({child.returncode})"
+                            )
+                        continue
+                    chunk = os.read(child.stdout.fileno(), 8192)
+                    if not chunk:
+                        child.wait(timeout=3)
+                        raise SessionError(
+                            f"OpenOCD exited unexpectedly ({child.returncode})"
+                        )
+                    pending += chunk
+                    if len(pending) > 1024 * 1024:
+                        raise SessionError("OpenOCD output exceeded line limit")
+                    while b"\n" in pending:
+                        raw, pending = pending.split(b"\n", 1)
+                        line = raw.decode("utf-8", errors="replace").rstrip("\r")
+                        print(line, file=sys.stderr, flush=True)
+                        match = marker.search(line)
+                        if not match or published:
+                            continue
+                        tp, gp = map(int, match.groups())
+                        if (args.tcl_port is not None) != (tp > 0) or (
+                            args.mode == "debug"
+                        ) != (gp > 0):
+                            raise SessionError(
+                                "OpenOCD did not expose exactly the requested services"
+                            )
+                        data = {
+                            "schema": 1,
+                            "id": token,
+                            "serial": args.serial,
+                            "mode": args.mode,
+                            "target": "nrf54l.cpu",
+                            "host": "127.0.0.1",
+                            "owner_pid": os.getpid(),
+                            "openocd_pid": child.pid,
+                            "openocd": openocd,
+                            "speed_khz": args.speed,
+                            "tcl_port": tp if tp > 0 else None,
+                            "gdb_port": gp if gp > 0 else None,
+                            "manifest": str(manifest_path),
+                            "started_unix": time.time(),
+                            "run_state": "not-sampled",
+                            "background_poll": args.mode == "debug",
+                        }
+                        publish(manifest_path, data)
+                        published = True
+                        print(json.dumps(data), flush=True)
+        except Cancelled:
+            return 130
+        finally:
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            if child is not None:
+                stop_child(child)
+                if child.stdout:
+                    child.stdout.close()
+            if published:
+                manifest_path.unlink(missing_ok=True)
+
+
+def status(args):
+    lock_path, manifest_path = paths(args)
+    with contextlib.closing(os.fdopen(open_lock(lock_path), "r+")) as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            try:
+                fd = os.open(manifest_path, os.O_RDONLY | os.O_NOFOLLOW)
+                with os.fdopen(fd) as stream:
+                    data = json.load(stream)
+            except FileNotFoundError as exc:
+                raise SessionError(
+                    "session owns probe but has not published readiness"
+                ) from exc
+            if data.get("serial") != args.serial or data.get("schema") != 1:
+                raise SessionError("invalid session manifest")
+            print(json.dumps(data))
+            return 0
+        raise SessionError("no active session for this serial; no probe was opened")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="nix-nrf session",
+        description="Own or inspect a foreground nRF54L15 CPUAPP OpenOCD session.",
+    )
+    subs = parser.add_subparsers(dest="command", required=True)
+    for name in ("start", "status"):
+        sub = subs.add_parser(name)
+        sub.add_argument("--serial", required=True, type=serial)
+        sub.add_argument(
+            "--runtime-dir",
+            help="private same-user directory; all owners must use the same directory",
+        )
+        if name == "start":
+            sub.add_argument("--mode", choices=("observe", "debug"), default="observe")
+            sub.add_argument(
+                "--speed", type=int, default=1000, help="SWD clock in kHz, 1..10000"
+            )
+            sub.add_argument(
+                "--tcl-port",
+                type=port,
+                help="explicit unrestricted loopback Tcl endpoint; disabled by default",
+            )
+            sub.add_argument(
+                "--gdb-port", type=port, help="debug mode only; default 3333"
+            )
+            sub.add_argument("--startup-timeout", type=positive, default=15.0)
+    args = parser.parse_args()
+    if args.command == "start":
+        if not 1 <= args.speed <= 10000:
+            parser.error("--speed must be 1..10000 kHz")
+        if args.mode == "observe" and args.gdb_port is not None:
+            parser.error("--gdb-port requires explicit --mode debug")
+        if args.gdb_port is None:
+            args.gdb_port = 3333
+        if args.mode == "debug" and args.tcl_port and args.tcl_port == args.gdb_port:
+            parser.error("GDB and Tcl ports must differ")
+
+    def cancel(_signum, _frame):
+        raise Cancelled()
+
+    signal.signal(signal.SIGINT, cancel)
+    signal.signal(signal.SIGTERM, cancel)
+    try:
+        return start(args) if args.command == "start" else status(args)
+    except Cancelled:
+        return 130
+    except (SessionError, OSError, subprocess.SubprocessError, ValueError) as exc:
+        print(f"nix-nrf session: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
