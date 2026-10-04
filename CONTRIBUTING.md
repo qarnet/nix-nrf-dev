@@ -17,6 +17,18 @@ hardware access without running `sudo`. There are no standalone
 See [docs/development/architecture.md](docs/development/architecture.md) for
 source ownership and construction flow.
 
+## Optional OpenCode setup
+
+The committed `opencode.json` disables session snapshots and ignores generated
+directories in the file watcher. Disabling snapshots also disables OpenCode's
+snapshot-based undo; Git remains the source of change history.
+
+MCP servers are optional and belong in each contributor's global OpenCode config
+(`~/.config/opencode/opencode.json`). The project does not install, enable, disable,
+or override them. Configure the normal `serial-mcp` command and hardware access
+policy locally if needed; no `serial-mcp-dev` executable is required. Restart
+OpenCode after changing configuration.
+
 ## Product work
 
 [Product backlog contract](docs/product/README.md) defines Backlog.md statuses,
