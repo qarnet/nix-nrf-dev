@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# `nix-nrf bootstrap` ensures the configured NCS SDK source and selected
-# toolchain exist before Nordic's scoped toolchain environment is loaded.
+# `nix-nrf bootstrap` ensures managed SDK sources and the selected toolchain
+# exist. With NIX_NRF_SOURCE_RESOLVER, sources are inspected independently and
+# only a missing toolchain may be installed; source acquisition is forbidden.
 #
 # Internal command module for the `nix-nrf` facade: installed by
 # nix/backends/nrfutil/bootstrap.nix at $out/libexec/nix-nrf/bootstrap and wrapped with
@@ -294,8 +295,29 @@ def main(argv=None):
     sel_args, sel_desc = selector_args(ncs_version, bundle_id)
 
     # ── State detection (read-only) ────────────────────────────────────────
-    data = list_versions(nrfutil_exe)
-    sdk_path = find_sdk(data, ncs_version)
+    resolver = os.environ.get("NIX_NRF_SOURCE_RESOLVER")
+    if resolver:
+        if ncs_version != os.environ.get("NIX_NRF_NCS_VERSION", ncs_version):
+            fail("--ncs-version conflicts with this shell's source/toolchain baseline")
+        # An existing workspace is source-owned by its caller. Never consult
+        # sdk-manager's SDK inventory or acquire a duplicate source installation.
+        try:
+            result = subprocess.run(
+                [resolver, "--workspace-root"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            fail(f"cannot inspect source workspace: {exc}")
+        if result.returncode:
+            fail(result.stderr.strip() or "selected source workspace is not ready")
+        sdk_path = result.stdout.strip()
+        if not sdk_path or not Path(sdk_path).is_dir():
+            fail("source resolver returned an invalid workspace path")
+    else:
+        data = list_versions(nrfutil_exe)
+        sdk_path = find_sdk(data, ncs_version)
     toolchain_ready = toolchain_env_ready(nrfutil_exe, sel_args)
 
     if sdk_path is not None and toolchain_ready:
@@ -320,12 +342,16 @@ def main(argv=None):
         return 1
 
     # ── Mutation plan and approval ─────────────────────────────────────────
-    dest = install_dir(nrfutil_exe)
+    dest = "sdk-manager toolchain directory" if resolver else install_dir(nrfutil_exe)
     status(f"NCS version: {ncs_version}")
     status(f"toolchain selector: {sel_desc}")
     status(f"missing: {missing_msg}")
     status(f"destination: {dest}")
-    status("this downloads several gigabytes from Nordic (SDK source and toolchain)")
+    status(
+        "this downloads the selected Nordic toolchain; existing sources are unchanged"
+        if resolver
+        else "this downloads several gigabytes from Nordic (SDK source and toolchain)"
+    )
     status("re-running with everything already installed performs no download")
 
     if not yes:
@@ -342,11 +368,18 @@ def main(argv=None):
             status("  or: NIX_NRF_BOOTSTRAP_YES=1 west ...")
             return 2
 
-    run_actions(nrfutil_exe, ncs_version, bundle_id, sdk_path, toolchain_ready)
+    if resolver:
+        run_install(
+            nrfutil_exe,
+            ["toolchain", "install", *sel_args, "--skip-cmake-registration"],
+        )
+    else:
+        run_actions(nrfutil_exe, ncs_version, bundle_id, sdk_path, toolchain_ready)
 
     # ── Rerun state detection; success requires SDK path and toolchain ─────
-    data = list_versions(nrfutil_exe)
-    sdk_path = find_sdk(data, ncs_version)
+    if not resolver:
+        data = list_versions(nrfutil_exe)
+        sdk_path = find_sdk(data, ncs_version)
     toolchain_ready = toolchain_env_ready(nrfutil_exe, sel_args)
     if sdk_path is not None and toolchain_ready:
         if args.print_sdk_path:

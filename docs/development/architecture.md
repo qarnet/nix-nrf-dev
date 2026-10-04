@@ -22,7 +22,10 @@ components, shells, and checks. `nix/flake/components.nix` creates OpenOCD,
 udev rules, nrfutil, `nix-nrf`, west builders, and `mkNrfShell`.
 
 `nix/flake/dev-shells.nix` creates repository default and clean-environment
-shells. `nix/flake/checks/default.nix` combines domain check modules. Duplicate
+shells, plus SDK-free product and hardware-tests shells. Backlog.md and the
+hardware harness's Python ELF parser are contributor-only and do not enter
+consumer `mkNrfShell` packages. `nix/flake/checks/default.nix` combines domain
+check modules. Duplicate
 check keys fail during Nix attrset construction.
 
 ## Backend boundaries
@@ -44,12 +47,20 @@ version, requirement path, asset URL, and hash.
 Backends do not import each other's implementation. Shared code receives
 backend-specific commands and configuration as explicit arguments.
 
+`nix/backends/source.nix` packages read-only existing-workspace resolution in
+`bin/commands/nix-nrf-source`. It uses west's manifest API rather than a hard-coded
+Zephyr directory. Workspace roots are anchored at shell entry, while toolchain
+readiness stays backend-owned. Managed mode does not construct the resolver.
+Existing-source bootstrap never updates manifests/repositories or repairs Python
+environments. Public behavior and examples live in [application-types.md](../application-types.md).
+
 ## Commands and initialization
 
 `nix/commands/default.nix` builds the public `nix-nrf` dispatcher. It routes
-`versions`, `probes`, `bootstrap`, and `doctor` to internal commands installed
+`versions`, `probes`, `bootstrap`, `doctor`, and `session` to internal commands installed
 under `$out/libexec/nix-nrf/`. `nix/init-project/default.nix` packages the
 separate public `nix-nrf-init-project` executable.
+Existing-workspace shells additionally route `source` to their exact resolver.
 
 `nix/init-project/default.nix` packages initializer with pinned nrfutil path,
 west version metadata, and skeleton. `bin/commands/nix-nrf-init-project` owns
@@ -59,6 +70,11 @@ symlink-safe writes. It runs neither generated commands nor hooks.
 `nix/lib/mk-python-command.nix` packages internal Python commands. Callers pass
 ordered wrapper arguments. Helper installs script, patches its shebang, then
 wraps it once.
+
+`bin/commands/nix-nrf-session` owns foreground OpenOCD lifecycle and same-user
+probe locks. `nix/commands/session.nix` injects exact OpenOCD and doctor paths.
+It does not share flash-recipe lifecycle or bootstrap SDK state. The session
+JSON is client discovery metadata, not authorization to kill its recorded PIDs.
 
 ## Hardware support
 
@@ -83,7 +99,25 @@ body. CI invokes `.github/workflows/release.yml` only after trusted push to
 - `nix/flake/checks/` contains deterministic evaluation, packaging, shell,
   metadata, and NixOS module checks.
 - `tests/unit/` contains fake-boundary subprocess tests.
+- `tests/product/test_backlog.py` exercises the pinned Backlog.md CLI against
+  the repository configuration in a disposable Git repository. The product
+  check also validates real backlog items without changing them.
 - `tests/fixtures/` contains fake sdk-manager and west-workspace helpers.
+- `tests/unit/test_source_workspace.py` exercises public shell hooks, real west,
+  and CMake package discovery with synthetic source packages. The opt-in
+  `tests/application-types/run.py` records real firmware-build qualification
+  separately and never provisions dependencies or accesses hardware.
+- `tests/application-types/local_workspace.py` prepares a bounded local-only SDK
+  fixture with borrowed Git objects and independent working files/metadata.
+  `imported_workspace.py` qualifies application-owned imports with four opt-in
+  real builds; `test_local_sdk_fixture.py` verifies preparation/refusals with
+  disposable Git repositories in normal CI. Shared clones require retained seed
+  object stores; procedures and limits live in `tests/application-types/README.md`.
+- `tests/unit/test_nix_nrf_session.py` tests owner/client process boundaries and
+  actual pinned OpenOCD Tcl traffic through a no-hardware dummy target.
+- `tests/firmware/debug-fixture/` contains small CPUAPP verification firmware;
+  `tests/hardware/debug/` owns the approval-gated evidence harness and decoder.
+  The C serializer also supplies real encoded bytes to host protocol tests.
 - `tests/tcl/test_flash_recipes.tcl` runs real recipes against fake OpenOCD
   commands and checks command order, arguments, and recovery branches.
 - `tests/clean-room/run.sh`, `tests/west-backend/run.sh`, and

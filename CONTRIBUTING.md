@@ -17,6 +17,50 @@ hardware access without running `sudo`. There are no standalone
 See [docs/development/architecture.md](docs/development/architecture.md) for
 source ownership and construction flow.
 
+## Optional OpenCode setup
+
+The committed `opencode.json` disables session snapshots and ignores generated
+directories in the file watcher. Disabling snapshots also disables OpenCode's
+snapshot-based undo; Git remains the source of change history.
+
+MCP servers are optional and belong in each contributor's global OpenCode config
+(`~/.config/opencode/opencode.json`). The project does not install, enable, disable,
+or override them. Configure the normal `serial-mcp` command and hardware access
+policy locally if needed; no `serial-mcp-dev` executable is required. Restart
+OpenCode after changing configuration.
+
+## Product work
+
+[Product backlog contract](docs/product/README.md) defines Backlog.md statuses,
+priorities, readiness, and evidence requirements. Use the pinned CLI rather
+than a global install. The SDK-free shell supports planning without bootstrap:
+
+```bash
+nix develop .#product -c backlog task list --plain
+nix develop .#product -c backlog doctor
+nix build .#checks.x86_64-linux.backlog
+```
+
+Session changes have hardware-free process/Tcl and fixture-protocol gates:
+
+```bash
+nix build .#checks.x86_64-linux.session-tests .#checks.x86_64-linux.debug-fixture-tests
+```
+
+Source-selection changes also run `nix build .#checks.x86_64-linux.source-workspace-tests`.
+This gate uses the public shell hooks/commands, real west and CMake, and synthetic
+source packages; it is not full firmware qualification. Existing real-build
+workspace prerequisites and source ownership are documented in `docs/application-types.md`.
+Local SDK fixture changes also run
+`nix build -L .#checks.x86_64-linux.local-sdk-fixture-tests`. Its disposable Git/west
+tests require no SDK. The opt-in four-build application-owned import qualification
+and shared-clone lifetime/resource rules live in `tests/application-types/README.md`.
+
+`nix develop .#hardware-tests` supplies the packaged session command and Python
+ELF parser without SDK bootstrap. See `tests/hardware/debug/README.md` before
+building, provisioning, or running physical acceptance. Host tests do not prove
+target run-state preservation.
+
 ## Before committing
 
 Formatting and lint hooks run automatically via `pre-commit` (wired through
@@ -29,6 +73,7 @@ python3 scripts/release.py check       # release manifest/changelog consistency
 python3 tests/unit/test_release.py     # release contract regression suite
 nix build -L .#checks.x86_64-linux.release-consistency  # sandboxed release gate (same as `nix flake check`)
 nix build -L .#checks.x86_64-linux.init-project-tests  # raw + packaged initializer gate
+nix eval --raw .#devShells.x86_64-linux.product.drvPath >/dev/null  # materialize nested contributor sources on cold stores
 nix flake check --all-systems --no-build -L  # evaluate all checks without building (fast pass)
 nix flake check -L                      # build and run all checks (incl. doctor-tests
                                         # and the udev-rules byte-for-byte check)
@@ -114,7 +159,7 @@ To prepare a new release:
    `python3 scripts/release.py check`, `python3 tests/unit/test_release.py`,
    `nix build -L .#checks.x86_64-linux.release-consistency`, and the normal
    `nix flake check`.
-4. Open and merge the reviewed PR.
+4. Open the PR for review; a human performs the merge. Agents never merge PRs.
 
 Trusted release workflow creates tag and GitHub Release after successful push
 to `main`. `.github/workflows/ci.yml` calls reusable
@@ -166,4 +211,5 @@ CMSIS-DAP probes and target boards attached. See
 
 This is a Nix flake library, not a firmware project. The `tcl/` recipes and
 `bin/commands/nix-nrf-probes` are reusable tools consumed by other repos; they are not
-flashed here. Do not add board-specific firmware or build artifacts.
+flashed here. Small test-owned firmware fixtures may verify host tooling;
+production board firmware and build artifacts belong in consumer projects.

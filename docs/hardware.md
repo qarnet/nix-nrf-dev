@@ -108,6 +108,11 @@ reboot, reload the rules, and replug the probe. Confirm with
 
 ## Flash recipes
 
+For non-flashing session ownership and opt-in debug endpoints, see
+[Shared OpenOCD sessions](debug.md). The
+[RTT/debug fixture procedure](../tests/hardware/debug/README.md) separates
+approved provisioning from observation and intrusive acceptance tests.
+
 Repository includes two flash recipes:
 
 - [`../tcl/nrf53_flash.tcl`](../tcl/nrf53_flash.tcl) handles nRF5340 dual-core

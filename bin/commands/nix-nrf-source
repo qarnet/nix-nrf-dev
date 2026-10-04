@@ -1,0 +1,296 @@
+#!/usr/bin/env python3
+"""Inspect an existing NCS workspace without acquiring or updating its sources."""
+
+import argparse
+import configparser
+import json
+import os
+import re
+from pathlib import Path
+import subprocess
+import sys
+
+from west.configuration import Configuration, ConfigFile
+from west.manifest import (
+    Manifest,
+    ManifestImportFailed,
+    MalformedManifest,
+    ManifestVersionError,
+)
+
+
+class SourceError(Exception):
+    pass
+
+
+def revision(path):
+    topdir = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if topdir.returncode or Path(topdir.stdout.strip()).resolve() != path:
+        return None
+    result = subprocess.run(
+        ["git", "-C", str(path), "rev-parse", "--verify", "HEAD"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def resolve():
+    root = Path(os.environ["NIX_NRF_SOURCE_WORKSPACE"]).expanduser().resolve()
+    if not (root / ".west/config").is_file():
+        raise SourceError(
+            f"not an initialized west workspace: {root}; prepare it explicitly with west"
+        )
+    local_config = os.environ.get("WEST_CONFIG_LOCAL")
+    if local_config and Path(local_config).resolve() != root / ".west/config":
+        raise SourceError(
+            "WEST_CONFIG_LOCAL conflicts with the selected workspace; unset it"
+        )
+    config = Configuration(topdir=root)
+    manifest_path = config.get("manifest.path", configfile=ConfigFile.LOCAL)
+    if not manifest_path or not (root / manifest_path).resolve().is_relative_to(root):
+        raise SourceError(
+            "local manifest.path must identify a repository inside the selected workspace"
+        )
+    manifest = Manifest.from_topdir(topdir=root, config=config)
+    manifest_dir = root / manifest_path
+    manifest_file = manifest_dir / config.get("manifest.file", default="west.yml")
+    try:
+        zephyr = Path(
+            manifest.get_projects(["zephyr"], allow_paths=False)[0].abspath
+        ).resolve()
+    except ValueError as exc:
+        raise SourceError(
+            "workspace manifest must provide a project named 'zephyr'"
+        ) from exc
+    try:
+        nrf = Path(
+            manifest.get_projects(["nrf"], allow_paths=False)[0].abspath
+        ).resolve()
+    except ValueError:
+        # An SDK-owned manifest repository is itself sdk-nrf, not a project
+        # named nrf in its own manifest.
+        nrf = manifest_dir.resolve()
+    if not zephyr.is_relative_to(root) or not nrf.is_relative_to(root):
+        raise SourceError(
+            "Zephyr and Nordic projects must remain inside the selected workspace, including symlink targets"
+        )
+    if not (nrf / "Kconfig.nrf").is_file() or not (nrf / "VERSION").is_file():
+        raise SourceError(
+            f"missing Nordic source project (Kconfig.nrf and VERSION): {nrf}"
+        )
+    actual = (nrf / "VERSION").read_text().strip()
+    expected = os.environ["NIX_NRF_SOURCE_NCS_VERSION"].removeprefix("v")
+    if actual != expected:
+        raise SourceError(
+            f"workspace NCS VERSION {actual!r} does not match configured ncsVersion {expected!r}"
+        )
+    for name in (
+        "CMakeLists.txt",
+        "Kconfig",
+        "VERSION",
+        "cmake/modules/zephyr_default.cmake",
+        "scripts/zephyr_module.py",
+        "share/zephyr-package/cmake/ZephyrConfig.cmake",
+        "share/sysbuild/CMakeLists.txt",
+        "share/sysbuild-package/cmake/SysbuildConfig.cmake",
+    ):
+        if not (zephyr / name).is_file():
+            raise SourceError(
+                f"incomplete Zephyr source: missing {zephyr / name}; no update performed"
+            )
+    configured = config.get("zephyr.base")
+    if configured is not None and (
+        not configured or (root / configured).resolve() != zephyr
+    ):
+        raise SourceError(
+            f"west zephyr.base {configured!r} conflicts with manifest Zephyr {zephyr}"
+        )
+    inherited = os.environ.get("ZEPHYR_BASE")
+    if inherited and Path(inherited).expanduser().resolve() != zephyr:
+        raise SourceError(
+            f"inherited ZEPHYR_BASE={inherited} conflicts with selected {zephyr}; unset it before entering this shell"
+        )
+    package_dir = os.environ.get("Zephyr_DIR")
+    if (
+        package_dir
+        and Path(package_dir).resolve() != zephyr / "share/zephyr-package/cmake"
+    ):
+        raise SourceError(
+            "inherited Zephyr_DIR conflicts with the selected workspace; unset it"
+        )
+    # West starts discovery at CWD even if ZEPHYR_BASE names another workspace.
+    for parent in (Path.cwd().resolve(), *Path.cwd().resolve().parents):
+        if (parent / ".west").is_dir():
+            if parent != root:
+                raise SourceError(
+                    f"current directory belongs to another west workspace: {parent}; selected {root}"
+                )
+            break
+    requirements = []
+    for project in manifest.projects:
+        path = Path(project.abspath) / "scripts/requirements.txt"
+        if path.is_file():
+            requirements.append(str(path))
+    return dict(
+        schema=1,
+        mode="workspace",
+        workspace=str(root),
+        manifest=str(manifest_file.resolve()),
+        zephyr_base=str(zephyr),
+        nrf_base=str(nrf),
+        ncs_version=actual,
+        zephyr_revision=revision(zephyr),
+        nrf_revision=revision(nrf),
+        requirements=requirements,
+    )
+
+
+def check_west_args(info, args):
+    base = Path(info["zephyr_base"])
+    build_dir = None
+    command_index = 0
+    while command_index < len(args) and args[command_index].startswith("-"):
+        command_index += 2 if args[command_index] in ("-z", "--zephyr-base") else 1
+    build_command = command_index < len(args) and args[command_index] == "build"
+    for index, arg in enumerate(args):
+        value = None
+        cmake_arg = (
+            "-D" + args[index + 1] if arg == "-D" and index + 1 < len(args) else arg
+        )
+        typed = re.match(
+            r"^-D(ZEPHYR_BASE|Zephyr_DIR|Sysbuild_DIR)(?::[^=]+)?=(.*)$", cmake_arg
+        )
+        if typed:
+            value = typed[2]
+        elif arg in (
+            "-z",
+            "--zephyr-base",
+            "-DZEPHYR_BASE",
+            "-DZephyr_DIR",
+            "-DSysbuild_DIR",
+        ):
+            if index + 1 < len(args):
+                value = args[index + 1]
+        elif arg.startswith(("--zephyr-base=", "-DZEPHYR_BASE=", "-DZephyr_DIR=")):
+            value = arg.split("=", 1)[1]
+        elif arg.startswith("-z") and len(arg) > 2:
+            value = arg[2:]
+        if value is not None:
+            if "Zephyr_DIR" in cmake_arg:
+                wanted = base / "share/zephyr-package/cmake"
+            elif "Sysbuild_DIR" in cmake_arg:
+                wanted = base / "share/sysbuild-package/cmake"
+            else:
+                wanted = base
+            if Path(value).expanduser().resolve() != wanted:
+                raise SourceError(f"{arg} conflicts with selected Zephyr {base}")
+        if arg in ("-d", "--build-dir") and index + 1 < len(args):
+            build_dir = Path(args[index + 1])
+        elif arg.startswith("--build-dir="):
+            build_dir = Path(arg.split("=", 1)[1])
+        elif build_command and arg.startswith("-d") and len(arg) > 2:
+            build_dir = Path(arg[2:])
+    if not build_command:
+        return
+    if build_dir is None:
+        if (Path.cwd() / "CMakeCache.txt").is_file():
+            build_dir = Path.cwd()
+        else:
+            config = Configuration(topdir=info["workspace"])
+            template = config.get("build.dir-fmt", default="build")
+            if "{" in template:
+                # Do not guess expansion of west's board/application templates.
+                raise SourceError(
+                    "workspace mode requires explicit --build-dir with a templated build.dir-fmt"
+                )
+            build_dir = Path(template)
+    caches = [build_dir / "CMakeCache.txt", *build_dir.glob("*/CMakeCache.txt")]
+    expected_paths = {
+        "ZEPHYR_BASE": base,
+        "Zephyr_DIR": base / "share/zephyr-package/cmake",
+        "Sysbuild_DIR": base / "share/sysbuild-package/cmake",
+    }
+    for cache in caches:
+        if not cache.is_file():
+            continue
+        for line in cache.read_text().splitlines():
+            key, sep, value = line.partition("=")
+            expected = expected_paths.get(key.split(":", 1)[0])
+            if sep and expected is not None and Path(value).resolve() != expected:
+                raise SourceError(
+                    f"stale source selection in {cache}: {value}; use a new build directory or explicitly make it pristine outside this wrapper"
+                )
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    output = parser.add_mutually_exclusive_group()
+    output.add_argument(
+        "--json", action="store_true", help="show source identity (default)"
+    )
+    output.add_argument("--workspace-root", action="store_true")
+    output.add_argument("--zephyr-base", action="store_true")
+    output.add_argument(
+        "--python-root",
+        metavar="PATH",
+        help="resolve a Python environment path relative to the workspace",
+    )
+    output.add_argument(
+        "--anchor",
+        action="store_true",
+        help="anchor configured workspace at shell-entry CWD",
+    )
+    parser.add_argument(
+        "--check-west",
+        action="store_true",
+        help="validate west arguments and detectable build caches",
+    )
+    parser.add_argument("west_args", nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    try:
+        if args.anchor:
+            print(Path(os.environ["NIX_NRF_SOURCE_WORKSPACE"]).expanduser().resolve())
+            return 0
+        info = resolve()
+        if args.check_west:
+            west_args = (
+                args.west_args[1:] if args.west_args[:1] == ["--"] else args.west_args
+            )
+            check_west_args(info, west_args)
+        if args.workspace_root:
+            print(info["workspace"])
+        elif args.zephyr_base:
+            print(info["zephyr_base"])
+        elif args.python_root:
+            print(
+                (
+                    Path(info["workspace"]) / Path(args.python_root).expanduser()
+                ).resolve()
+            )
+        else:
+            print(json.dumps(info))
+        return 0
+    except (
+        SourceError,
+        OSError,
+        ValueError,
+        KeyError,
+        configparser.Error,
+        ManifestImportFailed,
+        MalformedManifest,
+        ManifestVersionError,
+        subprocess.SubprocessError,
+    ) as exc:
+        print(f"nix-nrf source: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

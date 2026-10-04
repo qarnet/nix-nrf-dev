@@ -1,0 +1,4 @@
+name: source_fixture_extra
+build:
+  cmake: .
+  kconfig: Kconfig

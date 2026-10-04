@@ -3,6 +3,8 @@
 #
 # `nix-nrf-west-bootstrap` creates or updates the mutable west workspace and
 # version-local Python virtual environment for the west backend.
+# With NIX_NRF_SOURCE_RESOLVER it only checks an existing source workspace and
+# prepared Python environment, even when --yes is supplied. No setup is run.
 #
 # Internal backend command: installed by nix/backends/west/bootstrap.nix at
 # $out/libexec/nix-nrf/bootstrap (no standalone $out/bin command) and wrapped
@@ -48,6 +50,7 @@
 # timeout; long installs (pip, west init/update) never do.
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -86,12 +89,20 @@ def resolve_workspace(args):
         return Path(os.path.abspath(os.path.expanduser(args.workspace)))
     ncs_version = os.environ.get("NIX_NRF_WEST_NCS_VERSION")
     if not ncs_version:
-        fail("NIX_NRF_WEST_NCS_VERSION is not set. Run through packaged nix-nrf-west-bootstrap.")
+        fail(
+            "NIX_NRF_WEST_NCS_VERSION is not set. Run through packaged nix-nrf-west-bootstrap."
+        )
     return Path.home() / "ncs" / ncs_version
 
 
 def venv_bin(workspace, name):
-    return workspace / ".venv" / "bin" / name
+    configured = os.environ.get("NIX_NRF_WEST_PYTHON_ENVIRONMENT")
+    root = (
+        workspace / ".venv"
+        if not configured
+        else workspace / Path(configured).expanduser()
+    )
+    return root / "bin" / name
 
 
 def required_requirements():
@@ -135,6 +146,7 @@ def pip_install_argv(venv_python, constraints_path, *install_args):
 
 
 # ── Readiness ────────────────────────────────────────────────────────────────
+
 
 def venv_python_imports_ok(venv_python):
     """venv Python can import the modules Zephyr/NCS builds need.
@@ -187,7 +199,9 @@ def parse_west_requirement(req_path):
                 continue
             # Drop `; python_version >= "3.12"` style markers.
             requirement = line.split(";", 1)[0].strip()
-            match = re.match(r"^west\s*(==|>=|<=|>|<)\s*(v?\d+(?:\.\d+)*)$", requirement)
+            match = re.match(
+                r"^west\s*(==|>=|<=|>|<)\s*(v?\d+(?:\.\d+)*)$", requirement
+            )
             if match:
                 constraints.append((match.group(1), match.group(2)))
 
@@ -223,7 +237,7 @@ def satisfies_constraints(installed, constraints):
     return True
 
 
-def west_version_ok(venv_west, workspace):
+def west_version_ok(venv_west, workspace, requirement_paths=None):
     """venv west reports a version satisfying the workspace's own west
     requirements (the configured requirement files, with `-r` includes
     resolved). An absent west pin means no constraint; the testedWestVersion
@@ -248,7 +262,9 @@ def west_version_ok(venv_west, workspace):
     installed = match.group(1)
 
     constraints = []
-    for req in required_requirements():
+    for req in (
+        required_requirements() if requirement_paths is None else requirement_paths
+    ):
         req_path = workspace / req
         if req_path.is_file():
             constraints.extend(parse_west_requirement(req_path))
@@ -261,20 +277,23 @@ def west_version_ok(venv_west, workspace):
     return True
 
 
-def readiness(workspace):
+def readiness(workspace, source_info=None):
     """Return the list of problems; empty list means ready. Read-only: no
     mutation, no network, no pip/west invocation except venv import and
     west --version checks."""
     problems = []
 
-    if not (workspace / ".west" / "config").is_file():
+    if source_info is None and not (workspace / ".west" / "config").is_file():
         problems.append("missing .west/config (workspace not initialized)")
-    if not (workspace / "nrf" / "west.yml").is_file():
+    if source_info is None and not (workspace / "nrf" / "west.yml").is_file():
         problems.append("missing nrf/west.yml")
-    if not (workspace / "zephyr" / "zephyr-env.sh").is_file():
+    if source_info is None and not (workspace / "zephyr" / "zephyr-env.sh").is_file():
         problems.append("missing zephyr/zephyr-env.sh")
 
-    for req in required_requirements():
+    requirement_paths = (
+        source_info["requirements"] if source_info else required_requirements()
+    )
+    for req in requirement_paths:
         if not (workspace / req).is_file():
             problems.append(f"missing requirements file {req}")
 
@@ -295,13 +314,14 @@ def readiness(workspace):
 
     if not venv_python_imports_ok(venv_python):
         problems.append("venv python import check failed")
-    if not west_version_ok(venv_west, workspace):
+    if not west_version_ok(venv_west, workspace, requirement_paths):
         problems.append("venv west version does not satisfy workspace requirements")
 
     return problems
 
 
 # ── Compatibility gate (pre-mutation) ────────────────────────────────────────
+
 
 def check_existing_structure(workspace):
     """Fail on an existing but incompatible .west or .venv. Never deletes or
@@ -331,6 +351,7 @@ def check_existing_structure(workspace):
 
 # ── Subprocess helpers ───────────────────────────────────────────────────────
 
+
 def run(argv, cwd, *, check_message):
     """Run one setup step. Output is inherited so long installs keep their
     full log. Any nonzero exit fails setup."""
@@ -343,6 +364,7 @@ def run(argv, cwd, *, check_message):
 
 
 # ── Mutation ─────────────────────────────────────────────────────────────────
+
 
 def approve(args):
     """Interactive confirmation or --yes / NIX_NRF_BOOTSTRAP_YES=1."""
@@ -371,13 +393,19 @@ def run_setup(args, workspace):
     anything."""
     ncs_version = os.environ.get("NIX_NRF_WEST_NCS_VERSION")
     if not ncs_version:
-        fail("NIX_NRF_WEST_NCS_VERSION is not set. Run through packaged nix-nrf-west-bootstrap.")
+        fail(
+            "NIX_NRF_WEST_NCS_VERSION is not set. Run through packaged nix-nrf-west-bootstrap."
+        )
     nix_python = os.environ.get("NIX_NRF_WEST_PYTHON")
     if not nix_python:
-        fail("NIX_NRF_WEST_PYTHON is not set. Run through packaged nix-nrf-west-bootstrap.")
+        fail(
+            "NIX_NRF_WEST_PYTHON is not set. Run through packaged nix-nrf-west-bootstrap."
+        )
     tested_west = os.environ.get("NIX_NRF_WEST_TESTED_WEST_VERSION")
     if not tested_west:
-        fail("NIX_NRF_WEST_TESTED_WEST_VERSION is not set. Run through packaged nix-nrf-west-bootstrap.")
+        fail(
+            "NIX_NRF_WEST_TESTED_WEST_VERSION is not set. Run through packaged nix-nrf-west-bootstrap."
+        )
 
     check_existing_structure(workspace)
 
@@ -405,9 +433,7 @@ def run_setup(args, workspace):
     #    upgraded west must not be downgraded back to the pin on re-run.
     if created_venv or not venv_west.is_file():
         run(
-            pip_install_argv(
-                venv_python, constraints_path, f"west=={tested_west}"
-            ),
+            pip_install_argv(venv_python, constraints_path, f"west=={tested_west}"),
             workspace,
             check_message="pip install west",
         )
@@ -443,9 +469,7 @@ def run_setup(args, workspace):
     #    changed; a ready workspace never reaches this function).
     for req in required_requirements():
         run(
-            pip_install_argv(
-                venv_python, constraints_path, "-r", str(workspace / req)
-            ),
+            pip_install_argv(venv_python, constraints_path, "-r", str(workspace / req)),
             workspace,
             check_message=f"pip install -r {req}",
         )
@@ -495,8 +519,39 @@ def main(argv=None):
     parser, args = parse_args(argv)
     _QUIET = args.quiet
 
-    workspace = resolve_workspace(args)
-    problems = readiness(workspace)
+    resolver = os.environ.get("NIX_NRF_SOURCE_RESOLVER")
+    source_info = None
+    if resolver:
+        try:
+            result = subprocess.run(
+                [resolver, "--json"], capture_output=True, text=True, timeout=60
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            fail(f"cannot inspect source workspace: {exc}")
+        if result.returncode:
+            fail(result.stderr.strip() or "selected source workspace is not ready")
+        try:
+            source_info = json.loads(result.stdout)
+            workspace = Path(source_info["workspace"])
+        except (ValueError, KeyError, TypeError) as exc:
+            fail(f"malformed source workspace response: {exc}")
+        if args.workspace and Path(args.workspace).expanduser().resolve() != workspace:
+            fail("--workspace conflicts with the shell's configured source workspace")
+    else:
+        workspace = resolve_workspace(args)
+    problems = readiness(workspace, source_info)
+
+    if resolver:
+        # Existing sources and Python environments are never repaired implicitly.
+        if problems:
+            fail(
+                "existing workspace Python environment not ready: "
+                + "; ".join(problems)
+                + ". Prepare .venv explicitly, or set pythonEnvironment; no sources or packages were changed"
+            )
+        if args.print_sdk_path:
+            print(workspace)
+        return 0
 
     if args.check:
         if problems:
@@ -522,7 +577,9 @@ def main(argv=None):
     status(f"NCS version: {os.environ.get('NIX_NRF_WEST_NCS_VERSION', '?')}")
     status(f"workspace: {workspace}")
     status("this downloads several gigabytes from GitHub (west workspace)")
-    status("completing setup runs `west update` and reinstalls requirements, which may fetch updates or downloads")
+    status(
+        "completing setup runs `west update` and reinstalls requirements, which may fetch updates or downloads"
+    )
 
     if not args.yes and os.environ.get("NIX_NRF_BOOTSTRAP_YES") != "1":
         if not approve(args):

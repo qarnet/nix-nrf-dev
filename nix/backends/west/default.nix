@@ -20,6 +20,11 @@
   withMultilib ? true,
   extraShellHook ? "",
   inputsFrom ? [],
+  sourceConfig ? {
+    command = null;
+    shellHook = "";
+  },
+  pythonEnvironment ? null,
 }: let
   # ── west backend shell ─────────────────────────────────────────────────────
   westShell = let
@@ -37,6 +42,8 @@
       inherit pkgs;
       inherit pythonPackage;
       inherit metadata;
+      sourceCommand = sourceConfig.command;
+      inherit pythonEnvironment;
     };
     # Exact `nix-nrf versions` command module for the west backend.
     versionsCommand = westVersionsCommandBuilder {
@@ -57,6 +64,7 @@
       versionsCommand = "${versionsCommand}/libexec/nix-nrf/versions";
       bootstrapCommand = "${westBootstrap}/libexec/nix-nrf/bootstrap";
       doctorEnvironmentLabel = "west workspace/Zephyr SDK";
+      sourceCommand = sourceConfig.command;
     };
   in
     import ./shell.nix {
@@ -72,6 +80,8 @@
         withMultilib
         extraShellHook
         inputsFrom
+        sourceConfig
+        pythonEnvironment
         ;
       openocd = openocd-master;
       nixNrf = westNixNrf;

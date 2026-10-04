@@ -12,6 +12,12 @@ NCS `v3.3.0` in its shells, hardware harness, and clean-room tests.
 
 Unknown `backend` values fail at Nix evaluation and list supported backends.
 
+Backend chooses tools; `source` chooses SDK source ownership. Omitted `source`
+keeps managed behavior below. With `source = { mode = "workspace"; workspace = "."; };`,
+nrfutil bootstrap only provisions tools and west bootstrap only checks an existing
+Python environment. Neither acquires or updates workspace sources. See
+[Application layouts and source selection](application-types.md) for complete examples.
+
 ## nrfutil backend (default)
 
 Omit `backend` or pass `backend = "nrfutil"`; both behave identically. The

@@ -1,6 +1,6 @@
 # nix-nrf command dispatcher for nix-nrf-dev tools.
 #
-# Fixed dispatcher with four subcommands:
+# Fixed dispatcher with repository-owned subcommands:
 #   nix-nrf versions: by default delegates to `nrfutil sdk-manager search`
 #     (NCS version list; sdk-manager remains the runtime authority for
 #     available versions). The west backend supplies an exact `versionsCommand`
@@ -19,6 +19,8 @@
 #     bootstrap --ncs-version v3.3.0 --check` works; `mkNrfShell` passes its
 #     selected values so the shell's `nix-nrf bootstrap` works with no
 #     arguments.
+#     With sourceCommand, existing sources are validated independently:
+#     nrfutil installs tools only, while west checks prepared Python only.
 #   nix-nrf doctor: delegate to the internal doctor command module
 #     (`./doctor.nix`, installed at $out/libexec/nix-nrf/doctor;
 #     read-only SDK/toolchain and probe-access diagnostics). The base
@@ -29,6 +31,10 @@
 #     receives the selected exact bootstrap command and runs only its
 #     read-only `--check --quiet --print-sdk-path` path; the west backend
 #     additionally passes `doctorEnvironmentLabel` for its human messages.
+#   nix-nrf session: foreground OpenOCD ownership and local status. Observation
+#     never deliberately changes run state; raw endpoints are explicit opt-ins.
+#   nix-nrf source: read-only source identity; available only when sourceCommand
+#     configures an existing workspace. It does not open a probe or bootstrap.
 #
 # Global `-V`/`--version` prints exactly `nix-nrf <version>` where
 # `<version>` is the canonical project version embedded from release.json via
@@ -63,11 +69,13 @@
   versionsCommand ? null,
   bootstrapCommand ? null,
   # Optional human environment label for `doctor` (default "SDK/toolchain"
-  # for compatibility). Only human message strings reflect the label; JSON
-  # field names/schema and exit semantics never change.
+  # for compatibility). The label affects human strings only. Existing-source
+  # metadata is an independent explicit option, not inferred from the label.
   doctorEnvironmentLabel ? null,
   # Packaged nrfutil used for the default versions/bootstrap modules.
   nrfutilPackage ? null,
+  # Exact existing-workspace resolver; null preserves managed command surface.
+  sourceCommand ? null,
 }:
 assert versionsCommand
 != null
@@ -100,20 +108,31 @@ assert bootstrapCommand
           nrfutilPackage
           ncsVersion
           toolchainBundleId
+          sourceCommand
           ;
       }
     }/libexec/nix-nrf/bootstrap";
   nrfDoctor = import ./doctor.nix {
+    inherit toolchainBundleId;
+    toolchainProvider =
+      if bootstrapCommand != null
+      then "west"
+      else "nrfutil";
     inherit
       pkgs
       ncsVersion
       udevRules
+      sourceCommand
       ;
     bootstrapCommand = bootstrapExe;
     environmentLabel =
       if doctorEnvironmentLabel != null
       then doctorEnvironmentLabel
       else "SDK/toolchain";
+  };
+  nrfSession = import ./session.nix {
+    inherit pkgs openocd;
+    doctor = nrfDoctor;
   };
   # Human help lines: `versions`/`bootstrap`/`doctor` descriptions differ per
   # backend. The west shell names its `west workspace/Zephyr SDK`; the
@@ -156,6 +175,8 @@ in
       nrf_probes_exe=${nrfProbes}/libexec/nix-nrf/probes
       nrf_bootstrap_exe=${bootstrapExe}
       nrf_doctor_exe=${nrfDoctor}/libexec/nix-nrf/doctor
+      nrf_session_exe=${nrfSession}/libexec/nix-nrf/session
+      ${pkgs.lib.optionalString (sourceCommand != null) "nrf_source_exe=${sourceCommand}"}
 
       usage() {
         cat <<'EOF'
@@ -166,6 +187,10 @@ in
           probes     Identify CMSIS-DAP probes and targets (read-only)
           ${bootstrapDesc}
           ${doctorDesc}
+          session    Own or inspect a shared OpenOCD session
+          ${pkgs.lib.optionalString (
+        sourceCommand != null
+      ) "source     Inspect the selected existing source workspace"}
 
         Global options:
           -V, --version  Print the nix-nrf project version and exit
@@ -207,6 +232,12 @@ in
             doctor)
               exec "$nrf_doctor_exe" --help
               ;;
+            session)
+              exec "$nrf_session_exe" --help
+              ;;
+            ${pkgs.lib.optionalString (sourceCommand != null) ''
+        source) exec "$nrf_source_exe" --help ;;
+      ''}
             *)
               echo "nix-nrf: unknown help topic '$2'" >&2
               usage >&2
@@ -230,6 +261,13 @@ in
           shift
           exec "$nrf_doctor_exe" "$@"
           ;;
+        session)
+          shift
+          exec "$nrf_session_exe" "$@"
+          ;;
+        ${pkgs.lib.optionalString (sourceCommand != null) ''
+        source) shift; exec "$nrf_source_exe" "$@" ;;
+      ''}
         *)
           echo "nix-nrf: unknown command '$cmd'" >&2
           usage >&2
