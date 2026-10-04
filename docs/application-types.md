@@ -18,6 +18,10 @@ single-image/sysbuild with both backends. Other boards, releases, and arbitrary
 consumer manifests are not inferred from those results.
 The opt-in [firmware matrix](../tests/application-types/README.md) records actual
 source/compiler/module selections with already prepared application fixtures.
+An additional four-build qualification covers a locally cloned, independent
+application-owned imported workspace with relocated SDK sources and a
+manifest-owned module. See the same procedure for local-only setup and limits;
+this does not qualify arbitrary imports or excluded SDK features.
 
 ## Keep the current managed workflow
 
@@ -95,6 +99,9 @@ the SDK's own Nordic manifest repository, must provide `Kconfig.nrf` and `VERSIO
 Nonstandard paths such as `vendor/rtos` are resolved from the manifest. Zephyr and
 Nordic source projects, including resolved symlink targets, must stay inside the
 selected workspace. Missing imports or source files fail without fetching them.
+Source-path resolution does not override upstream module naming. Stock NCS
+v3.3.0 Nordic module metadata derives its name from its directory basename;
+retain `nrf` (for example `sdk/nrf`) when relocating those unmodified sources.
 
 `ncsVersion` remains the explicit source/toolchain compatibility baseline.
 Nordic's `VERSION` must match it. A fork retaining that version is allowed; source

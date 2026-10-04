@@ -39,6 +39,10 @@ Source-selection changes also run `nix build .#checks.x86_64-linux.source-worksp
 This gate uses the public shell hooks/commands, real west and CMake, and synthetic
 source packages; it is not full firmware qualification. Existing real-build
 workspace prerequisites and source ownership are documented in `docs/application-types.md`.
+Local SDK fixture changes also run
+`nix build -L .#checks.x86_64-linux.local-sdk-fixture-tests`. Its disposable Git/west
+tests require no SDK. The opt-in four-build application-owned import qualification
+and shared-clone lifetime/resource rules live in `tests/application-types/README.md`.
 
 `nix develop .#hardware-tests` supplies the packaged session command and Python
 ELF parser without SDK bootstrap. See `tests/hardware/debug/README.md` before

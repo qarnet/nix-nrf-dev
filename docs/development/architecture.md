@@ -107,6 +107,12 @@ body. CI invokes `.github/workflows/release.yml` only after trusted push to
   and CMake package discovery with synthetic source packages. The opt-in
   `tests/application-types/run.py` records real firmware-build qualification
   separately and never provisions dependencies or accesses hardware.
+- `tests/application-types/local_workspace.py` prepares a bounded local-only SDK
+  fixture with borrowed Git objects and independent working files/metadata.
+  `imported_workspace.py` qualifies application-owned imports with four opt-in
+  real builds; `test_local_sdk_fixture.py` verifies preparation/refusals with
+  disposable Git repositories in normal CI. Shared clones require retained seed
+  object stores; procedures and limits live in `tests/application-types/README.md`.
 - `tests/unit/test_nix_nrf_session.py` tests owner/client process boundaries and
   actual pinned OpenOCD Tcl traffic through a no-hardware dummy target.
 - `tests/firmware/debug-fixture/` contains small CPUAPP verification firmware;

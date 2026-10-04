@@ -1,0 +1,4 @@
+name: source_import_probe
+build:
+  cmake: .
+  kconfig: Kconfig

@@ -75,6 +75,25 @@
     )
     invalid;
 in {
+  local-sdk-fixture-tests =
+    pkgs.runCommand "local-sdk-fixture-tests"
+    {
+      nativeBuildInputs = [
+        python
+        pkgs.git
+      ];
+      LOCAL_FIXTURE_HELPERS = ../../../tests/application-types;
+      LOCAL_APPLICATION_FIXTURE = ../../../tests/firmware/workspace-import-fixture;
+      PYTHONDONTWRITEBYTECODE = "1";
+      WEST_CONFIG_GLOBAL = "/dev/null";
+      WEST_CONFIG_SYSTEM = "/dev/null";
+      GIT_CONFIG_GLOBAL = "/dev/null";
+      GIT_CONFIG_NOSYSTEM = "1";
+    }
+    ''
+      python3 ${../../../tests/unit/test_local_sdk_fixture.py} -v
+      touch "$out"
+    '';
   source-workspace-tests =
     pkgs.runCommand "source-workspace-tests"
     {

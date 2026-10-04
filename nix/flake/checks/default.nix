@@ -54,6 +54,6 @@
   inherit (release) release-consistency;
   inherit (product) backlog;
   inherit (session) session-tests debug-fixture-tests;
-  inherit (source) source-workspace-tests;
+  inherit (source) source-workspace-tests local-sdk-fixture-tests;
   inherit formatting pre-commit;
 }

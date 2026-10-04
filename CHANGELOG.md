@@ -16,6 +16,14 @@ All notable changes to the nix-nrf-dev project (and its `nix-nrf` CLI).
 
 ## [Unreleased]
 
+### Testing
+
+- Added local-only independent SDK fixtures and seven disposable Git/west
+  lifecycle tests. Qualified four additional single-image/sysbuild builds through
+  both backends with an application-owned imported NCS v3.3.0 manifest, relocated
+  SDK sources, and a manifest-owned linked module. Source-preservation and negative
+  import/conflict checks passed; no downloads or hardware execution involved.
+
 ## [0.1.3]
 
 ### Added

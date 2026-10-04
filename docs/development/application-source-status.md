@@ -1,6 +1,6 @@
 # Existing-workspace source support
 
-PB-023 implementation and qualification evidence, 2026-10-03.
+PB-023 implementation and PB-024 qualification evidence, 2026-10-04.
 User-facing setup and supported boundaries live in
 [application-types.md](../application-types.md); design research remains a
 [revision-pinned snapshot](application-types-research.md).
@@ -64,6 +64,65 @@ These local artifacts are not committed or durable team storage. Preserve them
 separately before moving/removing this workspace. The reusable runner is
 `tests/application-types/run.py`; procedure is in its adjacent README.
 
+## Independent application-owned import qualification
+
+PB-024 adds a separate four-case real-build run using the same pinned NCS/Zephyr
+revisions and board above, but independent working files and Git metadata under
+`/tmp/opencode/imported-workspace-qualification-final/workspace`. Its application
+manifest imports Nordic at `sdk/nrf`, overrides Zephyr at `sdk/rtos` with Nordic's
+exact pinned allowlist, and owns the extra module at `modules/source_import_probe`.
+No SDK source patch or `EXTRA_ZEPHYR_MODULES` override is involved.
+
+| Case | Result | Build seconds |
+| --- | --- | --- |
+| nrfutil single-image | Pass | 22.4 |
+| nrfutil sysbuild | Pass | 24.9 |
+| west single-image | Pass | 22.1 |
+| west sysbuild | Pass | 27.6 |
+
+Both public shells selected the new application manifest and relocated sources.
+Every sampled module map selected paths inside the new workspace, including
+Nordic and the manifest-owned module. Compiler selections matched the distinct
+paths above; nrfutil selected its bundle's Python 3.12 and west selected
+`/tmp/opencode/source-qualification-venv/bin/python`. Each final ELF contains
+`source_import_fixture_value`; all four recorded hashes were independently
+recomputed with `sha256sum`.
+
+Four negative checks passed: each backend rejected the original SDK's conflicting
+`ZEPHYR_BASE` and a removed destination Nordic `manifest-rev` ref. Neither command
+repaired that ref. The test restores only its own destination ref afterward.
+The original SDK's tracked state, refs, HEAD, index/config fingerprints, and
+workspace configuration remained unchanged, as did the fixture manifest/config.
+The runner's final preservation check also controls its exit status.
+
+Preparation reused 48 local repositories through shared Git object stores, not
+hardlinked working files or source Git worktrees. Tracked blob estimate was
+1,489,276,214 bytes (1.39 GiB), below the 3 GiB configured estimate cap. Allocated
+workspace space measured about 1.9 GiB, with another 113 MiB for builds. Setup took
+12.2 seconds; total run took 146.6 seconds. These local costs are not universal
+limits; the estimate excludes block-allocation overhead, Git metadata, and builds.
+
+Matter and CMock were explicitly excluded because their populated submodules are
+outside this fixture's local-only preparation. Twenty other unpopulated gitlinks
+remain empty; features requiring those assets are not qualified. Shared clones
+depend on retained seed object stores and can break after seed removal or garbage
+collection. Stock Nordic module metadata requires the `nrf` basename for these
+unpatched sources. No download, provisioning, flashing, or target execution
+occurred in this qualification.
+
+Raw report, commands, logs, source snapshots, and artifacts are retained at:
+
+```text
+/tmp/opencode/imported-workspace-qualification-final/result.json
+```
+
+Repeatable command and lifetime/resource rules live in
+[`tests/application-types/README.md`](../../tests/application-types/README.md).
+Seven SDK-free CI tests exercise real disposable Git/west import resolution,
+independent working-file mutation, and refusals for existing destinations, dirty
+inputs, copy-budget/free-space shortage, missing importer refs/revisions, and
+absolute source symlinks. The real-build run remains separate from normal CI.
+
 ## Python preparation and limitations
 
 The user approved isolated Python dependency downloads and temporary test fixture
@@ -82,7 +141,8 @@ now unset foreign `PYTHONHOME`/`PYTHONPATH`, without changing the parent. This i
 covered by a public CLI regression test.
 
 This qualification does not establish every board, NCS release, fork, custom board,
-or custom nested build layout. Relocated projects, imported project manifests,
+or custom nested build layout. Relocated projects and application-owned imports
+have the focused real-build evidence above; more varied imported manifests,
 same-version modified sources, conflicts, quoting, cancellation, child failures,
 and read-only ownership are covered separately by host tests. Source acquisition,
 manifest scaffolding, an outer-shell direct-CMake execution API, and SDK baseline
