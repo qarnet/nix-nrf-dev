@@ -1,4 +1,4 @@
-# Manual clean-room test. It bootstraps NCS v3.3.0 and toolchain in isolated
+# Manual clean-room test. It bootstraps NCS v3.4.1 and toolchain in isolated
 # HOME, builds XIAO nRF54L15 sysbuild blinky, and writes telemetry to logs.
 #
 # Deliberately NOT part of normal PR CI: a cold multi-gigabyte SDK/toolchain

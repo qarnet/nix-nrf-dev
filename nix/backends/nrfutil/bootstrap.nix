@@ -29,6 +29,11 @@ in
           "${nrfutilPackage}/bin/nrfutil"
         ]
         [
+          "--set"
+          "NIX_NRF_BOOTSTRAP_HOST_SYSTEM"
+          pkgs.stdenv.hostPlatform.system
+        ]
+        [
           "--unset"
           "PYTHONPATH"
         ]

@@ -211,7 +211,9 @@ class SessionTests(unittest.TestCase):
                 data += sock.recv(1024)
             self.assertEqual(data, b"42\x1a")
             sock.sendall(b"list [nrf54l.cpu was_examined] [poll]\x1a")
-            data = sock.recv(1024)
+            data = b""
+            while not data.endswith(b"\x1a"):
+                data += sock.recv(1024)
             self.assertIn(b"1", data)
             # Ephemeral RTT service removal uses original key "0", not the
             # allocated port. Exercise the pinned server, not a mock here.

@@ -1,0 +1,132 @@
+{
+  "schema": 1,
+  "observed_at": "2026-10-06T03:54:38.175254+00:00",
+  "outcome": "captured",
+  "scope": "published SDK source selectors, Linux toolchain selectors, and Linux sdk-manager package versions; not a full Artifactory mirror",
+  "not_covered": [
+    "unadvertised/orphaned artifacts",
+    "other host indexes",
+    "Python distribution files",
+    "archive contents or runtime compatibility"
+  ],
+  "sources": [
+    {
+      "url": "https://files.nordicsemi.com/artifactory/api/repositories",
+      "kind": "repositories",
+      "scope": null,
+      "content_type": "application/json",
+      "etag": null,
+      "last_modified": null,
+      "bytes": 3486,
+      "sha256": "358e75384fd9548161565f47d648ed64c146f027b770755eb66195ed8dfa7835",
+      "status": "pass",
+      "records": 21
+    },
+    {
+      "url": "https://files.nordicsemi.com/artifactory/NCS/external/bundles/config.json",
+      "kind": "configuration",
+      "scope": "toolchains",
+      "content_type": "application/json",
+      "etag": "85bfa29bf6635bfaf9ec614047941beb13e06bd2",
+      "last_modified": "Mon, 12 Jan 2026 10:56:19 GMT",
+      "bytes": 4040,
+      "sha256": "1f8c57ab6eef530874e190ddebf58a2882ab0f8b1929c32a616aa337acdc65e1",
+      "status": "pass",
+      "records": 1
+    },
+    {
+      "url": "https://files.nordicsemi.com/artifactory/ncs-src-mirror/external/sdk-manager/config.json",
+      "kind": "configuration",
+      "scope": "sdk-sources",
+      "content_type": "application/json",
+      "etag": "be0fe7db1a544eac710853bd7f556f24e4a58a06",
+      "last_modified": "Fri, 21 Nov 2025 07:38:54 GMT",
+      "bytes": 1842,
+      "sha256": "19e7010a0baa8236bf48bce7519af38e4b62b9a4eff20abd2551695b0a35827f",
+      "status": "pass",
+      "records": 1
+    },
+    {
+      "url": "https://files.nordicsemi.com/artifactory/swtools/external/nrfutil/index/config.json",
+      "kind": "configuration",
+      "scope": "nrfutil-packages",
+      "content_type": "application/json",
+      "etag": "91ec4c518eefb5d80aa44ba3e54f8b20da31039f",
+      "last_modified": "Wed, 15 May 2024 10:28:45 GMT",
+      "bytes": 534,
+      "sha256": "bf81d4a7883518340d4ad1fede30ecbf5bbd031ab476e2784958838053a77533",
+      "status": "pass",
+      "records": 1
+    },
+    {
+      "url": "https://files.nordicsemi.com/artifactory/ncs-src-mirror/external/sdk-manager/index.json",
+      "kind": "sdk-source",
+      "scope": null,
+      "content_type": "application/json",
+      "etag": "70b2b7bf371acfe0238f381af9ae814d28fd270a",
+      "last_modified": "Mon, 05 Oct 2026 11:18:39 GMT",
+      "bytes": 32170,
+      "sha256": "d62e75058a1560522e6a7acef21e0bab2b11fcb19c592589fd3cc86788b375a9",
+      "status": "pass",
+      "records": 89
+    },
+    {
+      "url": "https://files.nordicsemi.com/artifactory/NCS/external/bundles/v3/index-linux-x86_64.json",
+      "kind": "toolchain",
+      "scope": "x86_64-unknown-linux-gnu",
+      "content_type": "application/json",
+      "etag": "2f7eacb1a9ea7fa9b83bc563d3c8c64ce8bd2864",
+      "last_modified": "Mon, 05 Oct 2026 14:09:36 GMT",
+      "bytes": 96963,
+      "sha256": "5574c8f5527f5e0b11223506cde6c6eedb1de37c98ea7a396b4568e82c1f2a98",
+      "status": "pass",
+      "records": 239
+    },
+    {
+      "url": "https://files.nordicsemi.com/artifactory/swtools/external/nrfutil/index/x86_64-unknown-linux-gnu/nrfutil-sdk-manager",
+      "kind": "nrfutil-package",
+      "scope": "x86_64-unknown-linux-gnu",
+      "content_type": "application/octet-stream",
+      "etag": "745a6e5414bb0565a6dc318400c21f12d66e398f",
+      "last_modified": "Wed, 29 Jul 2026 12:48:41 GMT",
+      "bytes": 3548,
+      "sha256": "40454d567254e7ea29fef1280cff1dcf8c2f2f0c5ffa6814d5898d63470690bb",
+      "status": "pass",
+      "records": 22
+    },
+    {
+      "url": "https://files.nordicsemi.com/artifactory/NCS/external/bundles/v3/index-linux-aarch64.json",
+      "kind": "toolchain",
+      "scope": "aarch64-unknown-linux-gnu",
+      "content_type": "application/json",
+      "etag": "cd0d4cc32346750408f7d4f5e78ec9a6e5b79a0d",
+      "last_modified": "Mon, 12 Jan 2026 10:53:13 GMT",
+      "bytes": 3,
+      "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "status": "pass",
+      "records": 0
+    },
+    {
+      "url": "https://files.nordicsemi.com/artifactory/swtools/external/nrfutil/index/aarch64-unknown-linux-gnu/nrfutil-sdk-manager",
+      "kind": "nrfutil-package",
+      "scope": "aarch64-unknown-linux-gnu",
+      "content_type": "application/octet-stream",
+      "etag": "24a86483a807b36c1f2d1cd2272b11d5a5be21f1",
+      "last_modified": "Wed, 29 Jul 2026 12:48:41 GMT",
+      "bytes": 2760,
+      "sha256": "1c8307e41181734dfeb0274162d6be65e8df883cdd29b261f6dfd9d224bab94a",
+      "status": "pass",
+      "records": 17
+    }
+  ],
+  "records": 391,
+  "counts": {
+    "configuration": 3,
+    "nrfutil-package": 39,
+    "repositories": 21,
+    "sdk-schema": 3,
+    "sdk-source": 86,
+    "toolchain": 239
+  },
+  "catalog_sha256": "814b0e42b3000136300ccd8025de0443d559970a9a24516836d14e1f62aef813"
+}

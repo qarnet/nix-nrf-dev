@@ -10,3 +10,5 @@ https://github.com/nrfconnect/sdk-nrfxlib/blob/main/LICENSE
 https://github.com/nix-community/zephyr-nix
 https://github.com/adisbladis/west2nix
 https://github.com/MatthewCroughan/nrf-nix
+
+Annotated Nordic udev/toolchain-manager research references: [docs/SOURCES.md](docs/SOURCES.md).

@@ -13,7 +13,7 @@ flashing.
 
 > The nix-nrf-dev project version is **independent from NCS versions**.
 > `nix-nrf --version` reports the nix-nrf-dev project version from
-> `release.json`, e.g. `0.1.0`, while `ncsVersion` (e.g. `v3.3.0`) is the
+> `release.json`, e.g. `0.1.0`, while `ncsVersion` (e.g. `v3.4.1`) is the
 > upstream SDK selection. See [CHANGELOG.md](CHANGELOG.md).
 
 ## What it provides
@@ -28,7 +28,10 @@ flashing.
 
 ## Quick start
 
-Requires Nix with flake support on `x86_64-linux`. [direnv] is optional.
+Requires Nix with flake support on `x86_64-linux` or `aarch64-linux`. [direnv] is optional.
+Repository shells and the initializer select `nrfutil` on amd64 and experimental
+`west` on ARM64. Active baseline is NCS `v3.4.1` on both hosts; Nordic-managed
+toolchain installation is unavailable there. No backend falls back silently.
 
 ### Create a project
 
@@ -57,7 +60,7 @@ Add nix-nrf-dev to your project's `flake.nix`:
     devShells.x86_64-linux.default =
       nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
         backend = "nrfutil";   # default; "west" is experimental
-        ncsVersion = "v3.3.0"; # required, exact release, never "latest"
+        ncsVersion = "v3.4.1"; # required, exact release, never "latest"
       };
   };
 }
@@ -71,6 +74,11 @@ nix-nrf doctor
 
 See [docs/install.md](docs/install.md) for prerequisites, install locations,
 release pins, and backend selection.
+
+For a portable amd64/ARM64 project, generate with `--backend west --ncs-version
+v3.4.1`. Hand-written ARM64 shells must explicitly set `backend = "west"` and
+use `lib.aarch64-linux.mkNrfShell`: the public factory retains its `nrfutil`
+default and rejects it on ARM64.
 
 Already have a project-owned west workspace? Select it with
 `source = { mode = "workspace"; workspace = "."; };` and keep either toolchain
@@ -91,6 +99,11 @@ nix-nrf --version    # print the nix-nrf-dev project version (independent from N
 
 Backend-specific behavior and hardware setup live in
 [docs/backends.md](docs/backends.md) and [docs/hardware.md](docs/hardware.md).
+
+`west` core commands work before SDK setup. General help and `nix-nrf doctor`
+distinguish **core available**, **extensions discovered**, and **command ready**;
+discovering a command does not prove its Python/tools are ready. See
+[three west command states](docs/backends.md#three-west-command-states).
 
 > [!NOTE]
 > Packaged nrfutil includes J-Link and its unfree license even when using a

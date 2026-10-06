@@ -341,6 +341,23 @@ def check_collisions(dest_abs):
             raise InitError(f"refusing to overwrite existing {name} in {dest_abs}")
 
 
+def backend_systems(backend):
+    """Host capability data is injected by the package, not detected by uname."""
+    raw = os.environ.get("NIX_NRF_INIT_BACKEND_SYSTEMS_JSON")
+    if not raw:
+        # Raw-source tests retain their original configuration boundary.
+        return ["x86_64-linux"] if backend == "nrfutil" else ["aarch64-linux", "x86_64-linux"]
+    try:
+        systems = json.loads(raw)[backend]
+    except (ValueError, KeyError, TypeError) as exc:
+        raise InitError("invalid packaged backend/platform configuration") from exc
+    if not isinstance(systems, list) or not systems or not all(
+        isinstance(s, str) and re.fullmatch(r"[a-z0-9_]+-linux", s) for s in systems
+    ):
+        raise InitError("invalid packaged backend/platform configuration")
+    return systems
+
+
 def render(backend, version):
     """Render both complete generated files from the packaged skeleton.
     Placeholders are replaced with json.dumps string literals, each must
@@ -358,15 +375,15 @@ def render(backend, version):
         envrc = Path(envrc_path).read_text(encoding="utf-8")
     except OSError as exc:
         raise InitError(f"cannot read skeleton: {exc}") from exc
-    for placeholder in ("@BACKEND@", "@NCS_VERSION@"):
+    for placeholder in ("@BACKEND@", "@NCS_VERSION@", "@SYSTEMS@"):
         if template.count(placeholder) != 1:
             raise InitError(
                 f"skeleton template must contain exactly one {placeholder} placeholder"
             )
     rendered = template.replace("@BACKEND@", json.dumps(backend)).replace(
         "@NCS_VERSION@", json.dumps(version)
-    )
-    if "@BACKEND@" in rendered or "@NCS_VERSION@" in rendered:
+    ).replace("@SYSTEMS@", "[ " + " ".join(json.dumps(s) for s in backend_systems(backend)) + " ]")
+    if any(p in rendered for p in ("@BACKEND@", "@NCS_VERSION@", "@SYSTEMS@")):
         raise InitError("unresolved placeholder in rendered flake template")
     return {"flake.nix": rendered, ".envrc": envrc}
 
@@ -485,6 +502,13 @@ def create_new(dest_abs, parent, generated):
 
 
 def run(args):
+    if args.backend not in ("nrfutil", "west"):
+        raise UsageError("invalid packaged default backend")
+    host = os.environ.get("NIX_NRF_INIT_HOST_SYSTEM")
+    if host and host not in backend_systems(args.backend):
+        raise UsageError(
+            f"backend '{args.backend}' is unavailable on {host}; select --backend west"
+        )
     # Version syntax validation happens before any resolution or write; a
     # value other than the exact `latest` keyword must be a well-formed
     # release.
@@ -524,8 +548,8 @@ def main(argv=None):
     parser.add_argument(
         "--backend",
         choices=["nrfutil", "west"],
-        default="nrfutil",
-        help="toolchain backend for the generated project (default: nrfutil)",
+        default=os.environ.get("NIX_NRF_INIT_DEFAULT_BACKEND", "nrfutil"),
+        help="toolchain backend (default: nrfutil on amd64, west on arm64)",
     )
     parser.add_argument(
         "--ncs-version",

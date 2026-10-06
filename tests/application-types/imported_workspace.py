@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in local-only application-manifest SDK qualification; four real builds."""
+"""Opt-in local-only application-manifest SDK qualification on native backends."""
 
 import argparse
 import hashlib
@@ -11,6 +11,8 @@ import subprocess
 import sys
 import time
 from typing import Any
+
+from host_platform import native_host
 
 from local_workspace import (
     FixtureError,
@@ -51,11 +53,19 @@ def main():
         parser.error("copy budget must be positive and reserve non-negative")
     if any(name in args.exclude_project for name in ("nrf", "zephyr")):
         parser.error("Nordic/Zephyr source projects cannot be excluded")
+    repo = Path(__file__).resolve().parents[2]
+    host = native_host(repo)
+    backends = host["backends"]
     root = args.output.resolve()
     root.mkdir(mode=0o700, parents=False, exist_ok=False)
-    repo = Path(__file__).resolve().parents[2]
     report: dict[str, Any] = dict(
-        outcome="failed", cases=[], negative_checks=[], commands=[], board=args.board
+        outcome="failed",
+        host=host["system"],
+        backends=backends,
+        cases=[],
+        negative_checks=[],
+        commands=[],
+        board=args.board,
     )
     plan = None
     started = time.monotonic()
@@ -83,7 +93,7 @@ def main():
             SOURCE_MATRIX_VERSION="v" + plan["ncs_version"],
             SOURCE_MATRIX_PYTHON=str(args.python_environment.resolve()),
         )
-        expression = """(builtins.getFlake (builtins.getEnv "SOURCE_MATRIX_REPO")).lib.x86_64-linux.mkNrfShell {
+        expression = """(builtins.getFlake (builtins.getEnv "SOURCE_MATRIX_REPO")).lib.${builtins.currentSystem}.mkNrfShell {
           backend = builtins.getEnv "SOURCE_MATRIX_BACKEND";
           ncsVersion = builtins.getEnv "SOURCE_MATRIX_VERSION";
           autoBootstrap = false;
@@ -108,7 +118,7 @@ def main():
                 log.write(result.stdout)
             return result
 
-        for backend in ("nrfutil", "west"):
+        for backend in backends:
             source = run(backend, ["nix-nrf", "source", "--json"], f"{backend}-source")
             if source.returncode:
                 raise FixtureError(f"{backend} source discovery failed; see source log")
@@ -139,7 +149,7 @@ def main():
         nrf_sha = git(nrf, "rev-parse", "refs/heads/manifest-rev")
         git(nrf, "update-ref", "-d", "refs/heads/manifest-rev")
         try:
-            for backend in ("nrfutil", "west"):
+            for backend in backends:
                 failed = run(
                     backend,
                     ["nix-nrf", "source", "--json"],
@@ -157,7 +167,7 @@ def main():
         finally:
             git(nrf, "update-ref", "refs/heads/manifest-rev", nrf_sha)
 
-        for backend in ("nrfutil", "west"):
+        for backend in backends:
             ready = run(
                 backend, ["nix-nrf", "bootstrap", "--check"], f"{backend}-readiness"
             )

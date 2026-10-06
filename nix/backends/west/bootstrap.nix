@@ -45,6 +45,11 @@ in
       [
         [
           "--set"
+          "NIX_NRF_WEST_PREINSTALL_REQUIREMENTS"
+          (builtins.concatStringsSep "\n" (metadata.preinstallRequirements or []))
+        ]
+        [
+          "--set"
           "NIX_NRF_WEST_PYTHON"
           "${python}/bin/python3"
         ]
@@ -62,6 +67,11 @@ in
           "--set"
           "NIX_NRF_WEST_REQUIREMENTS"
           (builtins.concatStringsSep "\n" metadata.requirements)
+        ]
+        [
+          "--set"
+          "NIX_NRF_WEST_READINESS_IMPORTS"
+          (builtins.concatStringsSep ", " (metadata.readinessImports or []))
         ]
         [
           "--set"

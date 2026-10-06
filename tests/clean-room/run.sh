@@ -6,7 +6,7 @@
 #
 # Proves end-to-end behavior from an empty, isolated Linux home directory:
 #   1. Enter the project shell without inheriting developer nRF Util/NCS state.
-#   2. Run `nix-nrf bootstrap --yes` and install NCS v3.3.0 plus the selected
+#   2. Run `nix-nrf bootstrap --yes` and install NCS v3.4.1 plus the selected
 #      toolchain under the isolated home.
 #   3. Re-enter the shell with the same isolated home.
 #   4. Prove the shell derives ZEPHYR_BASE from the isolated installation.
@@ -317,7 +317,7 @@ cd "$REPO_ROOT"
 # NCS release pinned by devShells.clean-env-test in nix/flake/dev-shells.nix.
 # The test never installs a different release; sdk-manager remains the
 # runtime authority for what the selector resolves to.
-NCS_VERSION="v3.3.0"
+NCS_VERSION="v3.4.1"
 MIN_FREE_GIB="${NIX_NRF_CLEAN_MIN_FREE_GIB:-25}"
 CLEAN_HOME="${NIX_NRF_CLEAN_HOME:-}"
 CREATED_HOME=""

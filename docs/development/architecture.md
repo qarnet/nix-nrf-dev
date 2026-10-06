@@ -7,7 +7,7 @@ live in [nrfutil-backend-status.md](nrfutil-backend-status.md) and
 
 ## Public outputs
 
-- Root `flake.nix` supports `x86_64-linux` and exports per-system outputs.
+- Root `flake.nix` supports `x86_64-linux` and `aarch64-linux` and exports per-system outputs.
 - `lib.<system>.mkNrfShell` creates NCS development shells.
 - `packages.<system>.nix-nrf` is command facade for `nix run .# -- ...`.
 - `apps.<system>.init-project` creates consumer `.envrc` and `flake.nix`.
@@ -20,6 +20,12 @@ live in [nrfutil-backend-status.md](nrfutil-backend-status.md) and
 `nix/flake/per-system.nix` imports configured Nixpkgs, formatter, hooks,
 components, shells, and checks. `nix/flake/components.nix` creates OpenOCD,
 udev rules, nrfutil, `nix-nrf`, west builders, and `mkNrfShell`.
+
+`nix/platforms.nix` owns native host backend capabilities, repository/initializer
+presets, and multilib defaults. It does not describe firmware target architectures.
+The public factory keeps its nrfutil default; ARM64 rejects that backend rather
+than silently selecting west. Per-host sdk-manager assets remain pinned even
+where Nordic-managed firmware workflows are unavailable.
 
 `nix/flake/dev-shells.nix` creates repository default and clean-environment
 shells, plus SDK-free product and hardware-tests shells. Backlog.md and the
@@ -46,6 +52,13 @@ version, requirement path, asset URL, and hash.
 
 Backends do not import each other's implementation. Shared code receives
 backend-specific commands and configuration as explicit arguments.
+
+`nix/backends/west-core.nix` packages SDK-independent core west and registration
+inspection in `bin/commands/nix-nrf-west-core`. Both public wrappers classify
+core requests before bootstrap; workspace-dependent core commands bind selected
+configuration without requiring NCS source/Python readiness. SDK extensions stay
+on their backend's original scoped execution path. The same read-only inspector
+feeds doctor's additive `west` states without importing extension implementations.
 
 `nix/backends/source.nix` packages read-only existing-workspace resolution in
 `bin/commands/nix-nrf-source`. It uses west's manifest API rather than a hard-coded
@@ -109,7 +122,7 @@ body. CI invokes `.github/workflows/release.yml` only after trusted push to
   separately and never provisions dependencies or accesses hardware.
 - `tests/application-types/local_workspace.py` prepares a bounded local-only SDK
   fixture with borrowed Git objects and independent working files/metadata.
-  `imported_workspace.py` qualifies application-owned imports with four opt-in
+   `imported_workspace.py` qualifies application-owned imports with host-supported opt-in
   real builds; `test_local_sdk_fixture.py` verifies preparation/refusals with
   disposable Git repositories in normal CI. Shared clones require retained seed
   object stores; procedures and limits live in `tests/application-types/README.md`.
@@ -137,3 +150,18 @@ body. CI invokes `.github/workflows/release.yml` only after trusted push to
   `renameat2(RENAME_NOREPLACE)` for new destination.
 - Normal checks do not run mutable NCS setup, real hardware work, or live
   Nordic queries. Scheduled/manual latest initializer workflow is exception.
+- Core west never triggers SDK bootstrap. Explicit `init`/`update`/writable
+  `config`/`forall` remain caller-requested operations, not readiness repair.
+
+## CI ownership
+
+`scripts/ci.py` runs source-only formatting, pre-commit, and release-consistency
+checks once in the shared job, including both-host evaluation. The dependent
+native matrix dynamically enumerates every remaining check and all package
+outputs for its own system. `fail-fast: false` preserves independent failures.
+Trusted-main release needs shared and both native entries; PRs do not publish.
+`nix/flake/checks/udev-systemd.nix` backports a same-version rule-stat path fix
+only into the test image. Both boot stages keep correct change detection through
+NixOS's symlinked rules tree. Consumer packages and dependency pins are unchanged.
+The unchanged guest assertions pass on ARM64 without KVM; hosted workflow
+execution is separate from the recorded Pi qualification.

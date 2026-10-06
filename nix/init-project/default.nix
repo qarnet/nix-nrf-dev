@@ -28,10 +28,34 @@
   # JSON key list baked into the wrapper.
   westVersions,
 }: let
+  platforms = import ../platforms.nix;
+  system = pkgs.stdenv.hostPlatform.system;
+  platform = platforms.${system};
+  backendSystems = pkgs.lib.genAttrs ["nrfutil" "west"] (
+    backend:
+      builtins.filter (host: builtins.elem backend platforms.${host}.backends) (
+        builtins.attrNames platforms
+      )
+  );
   sortedNames = builtins.sort builtins.lessThan (builtins.attrNames westVersions);
   # Shell-escaped wrapProgram arguments, mirroring nix/lib/mk-python-command.nix
   # so values with quotes/newlines survive the generated build script.
   wrapperArgs = [
+    [
+      "--set"
+      "NIX_NRF_INIT_HOST_SYSTEM"
+      system
+    ]
+    [
+      "--set"
+      "NIX_NRF_INIT_DEFAULT_BACKEND"
+      platform.defaultBackend
+    ]
+    [
+      "--set"
+      "NIX_NRF_INIT_BACKEND_SYSTEMS_JSON"
+      (builtins.toJSON backendSystems)
+    ]
     [
       "--set"
       "NIX_NRF_INIT_NRFUTIL"

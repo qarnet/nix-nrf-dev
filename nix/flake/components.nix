@@ -54,10 +54,10 @@
   # release-specific literals.
   westBackendVersions = import ../backends/west/versions.nix;
   # Metadata key used by this repository's shells and checks.
-  westBackendNcsVersion = "v3.3.0";
+  westBackendNcsVersion = "v3.4.1";
   westBackendEntry = westBackendVersions.${westBackendNcsVersion};
   # Exact Zephyr SDK package output (also exposed as
-  # packages.west-zephyr-sdk-v3_3_0).
+  # packages.west-zephyr-sdk-v3_4_1).
   westZephyrSdkBuilder = import ../backends/west/zephyr-sdk.nix;
   westZephyrSdk = westZephyrSdkBuilder {
     inherit pkgs;

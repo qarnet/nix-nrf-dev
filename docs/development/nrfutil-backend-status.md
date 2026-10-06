@@ -1,8 +1,8 @@
 # nrfutil backend
 
 `nrfutil` is default backend. Nordic sdk-manager manages SDK and toolchain
-state under `$HOME`. Experimental `west` backend supports NCS `v3.3.0` on
-`x86_64-linux`. See [west-backend-status.md](west-backend-status.md).
+state under `$HOME`. Experimental `west` backend selects NCS `v3.4.1` on
+`x86_64-linux` and `aarch64-linux`. See [west-backend-status.md](west-backend-status.md).
 
 ## Current behavior
 
@@ -29,7 +29,7 @@ state under `$HOME`. Experimental `west` backend supports NCS `v3.3.0` on
   composition is unavailable.
 - CI builds `.#nrfutil`, `.#nix-nrf`, and `.#udev-rules`; it smoke-tests CLI
   help and verifies removed standalone commands are absent.
-- `tests/clean-room/run.sh` manually bootstraps NCS `v3.3.0` in isolated
+- `tests/clean-room/run.sh` manually bootstraps NCS `v3.4.1` in isolated
   `HOME`, re-enters shell, and builds XIAO nRF54L15 sysbuild blinky. Normal PR
   CI never downloads SDK or toolchain bundles.
 

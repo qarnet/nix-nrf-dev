@@ -19,8 +19,9 @@
 # output directly inside double quotes (which would embed literal quote
 # characters into the value).
 #
-# The scoped `west` wrapper requires the shell-specific `nix-nrf bootstrap`
-# readiness to pass (managed setup may mutate with approval; existing sources
+# Core west bypasses SDK readiness. For SDK extensions, the scoped wrapper
+# requires the shell-specific `nix-nrf bootstrap` readiness to pass (managed setup
+# may mutate with approval; existing sources
 # and Python are always check-only), prepends the selected Python bin directory
 # only inside west's process, exports ZEPHYR_BASE /
 # ZEPHYR_TOOLCHAIN_VARIANT / ZEPHYR_SDK_INSTALL_DIR, keeps the project
@@ -49,6 +50,7 @@
   # Shell-specific backend-aware nix-nrf facade (versions/bootstrap/doctor
   # dispatch to the exact west command modules; no nrfutil).
   nixNrf,
+  westCore,
   # Public shell options, propagated from mkNrfShell.
   autoBootstrap ? true,
   name ? "nrf-dev",
@@ -62,9 +64,8 @@
   },
   pythonEnvironment ? null,
 }:
-assert pkgs.stdenv.hostPlatform.system
-== "x86_64-linux"
-|| throw "west backend supports only x86_64-linux; got ${pkgs.stdenv.hostPlatform.system}"; let
+assert builtins.hasAttr pkgs.stdenv.hostPlatform.system metadata.zephyrSdk.assets
+|| throw "west backend has no SDK assets for ${pkgs.stdenv.hostPlatform.system}"; let
   # Escaped metadata values; assigned to shell variables outside double
   # quotes so the shell consumes the quoting and the variables hold raw
   # values that can safely be embedded in double-quoted paths/messages.
@@ -75,7 +76,7 @@ assert pkgs.stdenv.hostPlatform.system
     pkgs.${pythonPackage}
       or (throw "west backend: unknown Python package '${pythonPackage}' for NCS ${metadata.ncsVersion}");
 
-  useMultilib = pkgs.stdenv.isLinux && withMultilib;
+  useMultilib = pkgs.stdenv.hostPlatform.system == "x86_64-linux" && withMultilib;
 
   # Scoped west wrapper: managed workspaces resolve from HOME; existing roots
   # are anchored by the source resolver. The venv
@@ -86,6 +87,11 @@ assert pkgs.stdenv.hostPlatform.system
     # The selected Python environment must not import a caller's unrelated
     # interpreter libraries. Only this child process loses those variables.
     unset PYTHONHOME PYTHONPATH
+    _west_core=${westCore}/libexec/nix-nrf/west-core
+    if [ "$("$_west_core" route -- "$@")" = core ]; then
+      exec "$_west_core" run -- "$@"
+    fi
+    "$_west_core" sdk -- "$@" || exit 1
     _nix_nrf=${nixNrf}/bin/nix-nrf
     _sdk_dir=${sdkPackage}
     _ncs_version=${ncsVersionEsc}

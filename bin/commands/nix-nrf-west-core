@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""SDK-independent west dispatch and read-only command registration diagnostics."""
+
+import argparse
+import json
+import os
+from pathlib import Path
+import shlex
+import sys
+
+import yaml
+from west.app.main import WestApp
+from west.configuration import Configuration
+from west.manifest import Manifest
+from west.version import __version__
+
+
+class ContextError(Exception):
+    pass
+
+
+def invocation(args):
+    """Recognize top-level switches only; command arguments are never reinterpreted."""
+    parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False, exit_on_error=False)
+    parser.add_argument("-z", "--zephyr-base", dest="base")
+    parser.add_argument("-V", "--version", action="store_true")
+    parser.add_argument("-h", "--help", action="store_true")
+    parser.add_argument("-v", "--verbose", action="count")
+    parser.add_argument("-q", "--quiet", action="count")
+    parser.add_argument("command", nargs="?")
+    parser.add_argument("arguments", nargs=argparse.REMAINDER)
+    try:
+        parsed, unknown = parser.parse_known_args(args)
+        if unknown:
+            parsed.command = None
+        return parsed
+    except argparse.ArgumentError:
+        # Let real west print its own usage error without triggering SDK setup.
+        return parser.parse_args([])
+
+
+def help_target(call):
+    if call.help:
+        return call.command
+    if call.command != "help":
+        return None
+    target = call.arguments
+    if target[:1] == ["--"]:
+        target = target[1:]
+    return target[0] if target and not target[0].startswith("-") else None
+
+
+def aliases():
+    # Inspect selected configuration, never a foreign inherited local override.
+    previous = os.environ.pop("WEST_CONFIG_LOCAL", None)
+    try:
+        config = Configuration(topdir=workspace() if (workspace() / ".west/config").is_file() else None)
+    finally:
+        if previous is not None:
+            os.environ["WEST_CONFIG_LOCAL"] = previous
+    return {key[6:]: shlex.split(value) for key, value in config.items() if key.startswith("alias.")}
+
+
+def effective(args):
+    call = invocation(args)
+    if call.command and not call.help and call.command != "help" and not call.version:
+        remaining = aliases()
+        while call.command in remaining:
+            expansion = remaining.pop(call.command)
+            if not expansion:
+                call.command = None
+                break
+            call.command, call.arguments = expansion[0], expansion[1:] + call.arguments
+    return call
+
+
+def route(args):
+    call = effective(args)
+    builtins = WestApp().builtins
+    if call.version or call.command is None:
+        return "core"
+    if call.command == "help" or call.help:
+        target = help_target(call)
+        return "core" if not target or target in builtins or target in aliases() else "sdk"
+    return "core" if call.command in builtins else "sdk"
+
+
+def workspace():
+    if os.environ["NIX_NRF_WEST_SOURCE_MODE"] == "workspace":
+        value = os.environ.get("NIX_NRF_SOURCE_WORKSPACE") or os.environ[
+            "NIX_NRF_WEST_WORKSPACE"
+        ]
+        return Path(value).expanduser().resolve()
+    return Path.home() / "ncs" / os.environ["NIX_NRF_WEST_NCS_VERSION"]
+
+
+def context(args, *, strict):
+    root = workspace()
+    local = os.environ.get("WEST_CONFIG_LOCAL")
+    if strict and local and Path(local).resolve() != root / ".west/config":
+        raise ContextError("WEST_CONFIG_LOCAL conflicts with selected workspace")
+    explicit_base = invocation(args).base
+    if strict:
+        for parent in (Path.cwd().resolve(), *Path.cwd().resolve().parents):
+            if (parent / ".west").is_dir():
+                if parent != root:
+                    raise ContextError(
+                        f"current directory belongs to another west workspace: {parent}; selected {root}"
+                    )
+                break
+        if explicit_base and not Path(explicit_base).expanduser().resolve().is_relative_to(root):
+            raise ContextError(f"explicit Zephyr base conflicts with selected workspace {root}")
+        inherited = os.environ.get("ZEPHYR_BASE")
+        if inherited:
+            for parent in (Path(inherited).expanduser().resolve(), *Path(inherited).expanduser().resolve().parents):
+                if (parent / ".west").is_dir():
+                    if parent != root:
+                        raise ContextError("inherited ZEPHYR_BASE conflicts with selected workspace")
+                    break
+    return root
+
+
+def state():
+    root = workspace()
+    discovered = {
+        "status": "unavailable", "workspace": str(root), "commands": [], "registrations": [], "errors": []
+    }
+    if (root / ".west/config").is_file():
+        try:
+            root = context([], strict=True)
+            config = Configuration(topdir=root)
+            manifest = Manifest.from_topdir(topdir=root, config=config)
+            discovered["manifest"] = str(manifest.path)
+            if not config.getboolean("commands.allow_extensions", default=True):
+                discovered.update(status="disabled", message="workspace extensions disabled by west configuration")
+            else:
+                # West's own loader resolves declarations and removes built-in
+                # collisions/duplicate names. It never calls command factories.
+                app = WestApp()
+                app.config, app.manifest = config, manifest
+                app.load_extension_specs()
+                discovered["commands"] = [
+                    {"name": spec.name, "owner": spec.project.path}
+                    for spec in app.extensions.values()
+                ]
+                seen = set(app.builtins)
+                # West silently omits missing descriptor files. Account for them
+                # and missing implementations without importing any extension code.
+                for project in manifest.projects:
+                    descriptors = project.west_commands or []
+                    if isinstance(descriptors, str):
+                        descriptors = [descriptors]
+                    for descriptor in descriptors:
+                        path = Path(project.abspath) / descriptor
+                        if not path.is_file():
+                            discovered["errors"].append(f"missing command descriptor: {path}")
+                            continue
+                        data = yaml.safe_load(path.read_text())
+                        for entry in data.get("west-commands", []):
+                            implementation = Path(project.abspath) / entry["file"]
+                            for declaration in entry["commands"]:
+                                name = declaration["name"]
+                                registered = name not in seen and name in app.extensions and app.extensions[name].project.path == project.path
+                                discovered["registrations"].append({"name": name, "owner": project.path, "descriptor": str(path), "implementation": str(implementation), "implementation_present": implementation.is_file(), "registered": registered})
+                                if not registered:
+                                    discovered["errors"].append(f"shadowed command registration: {project.path}:{name}")
+                                seen.add(name)
+                            if not implementation.is_file():
+                                discovered["errors"].append(f"missing command implementation: {implementation}")
+                discovered["status"] = "partial" if discovered["errors"] else "pass"
+        except (Exception, SystemExit) as exc:
+            discovered.update(status="fail", message=str(exc))
+    return {
+        "schema": 1,
+        "core_available": {"status": "pass", "version": __version__, "commands": sorted(WestApp().builtins)},
+        "extensions_discovered": discovered,
+        "command_ready": {"status": "unverified", "message": "command-specific imports/tools not checked; use west help <command> for parser/import validation"},
+    }
+
+
+def hint(info):
+    discovered = info["extensions_discovered"]
+    print(
+        "west states: core available; extensions discovered: "
+        f"{discovered['status']} ({len(discovered['commands'])} commands); "
+        "command ready: unverified. Run nix-nrf doctor for selected SDK/Python readiness.",
+        file=sys.stderr,
+    )
+
+
+def validate(args, info):
+    call = effective(args)
+    discovered = info["extensions_discovered"]
+    if discovered["status"] == "disabled":
+        raise ContextError("extensions discovered: disabled; requested SDK command is unavailable")
+    if call.command == "help" or call.help:
+        target = help_target(call)
+        names = {entry["name"] for entry in discovered["commands"]}
+        if target and discovered["status"] in ("pass", "partial") and target not in names:
+            raise ContextError(f"extensions discovered: requested command {target!r} is not registered")
+
+
+def run(args):
+    call = effective(args)
+    command = call.command
+    builtin = WestApp().builtins.get(command)
+    config_local = command == "config" and not any(arg in ("--global", "--system") for arg in call.arguments)
+    strict = bool((builtin and builtin.requires_workspace or config_local) and not call.version and not call.help)
+    root = context(args, strict=strict)
+    if strict and config_local and not (root / ".west/config").is_file():
+        raise ContextError(f"selected workspace has no local configuration: {root}")
+    env = dict(os.environ)
+    for key in ("PYTHONHOME", "PYTHONPATH", "Zephyr_DIR", "ZEPHYR_BASE"):
+        env.pop(key, None)
+    if command != "init" and (root / ".west/config").is_file():
+        # Core workspace discovery needs an anchor, not populated Zephyr/Nordic
+        # repositories or a build Python environment. Preserve caller CWD so
+        # relative command arguments retain their normal west meaning.
+        env["ZEPHYR_BASE"] = str(root)
+        env["WEST_CONFIG_LOCAL"] = str(root / ".west/config")
+    if command == "help" or call.help or (command is None and not call.version):
+        hint(state())
+    os.execve(os.environ["NIX_NRF_WEST_CORE_EXE"], ["west", *args], env)
+
+
+def main():
+    mode, *args = sys.argv[1:]
+    if args[:1] == ["--"]:
+        args = args[1:]
+    try:
+        if mode == "route":
+            print(route(args))
+        elif mode == "state":
+            print(json.dumps(state()))
+        elif mode == "hint":
+            hint(state())
+        elif mode == "sdk":
+            info = state()
+            hint(info)
+            validate(args, info)
+        elif mode == "run":
+            run(args)
+        else:
+            return 2
+        return 0
+    except (ContextError, OSError) as exc:
+        print(f"west core: {exc}; run nix-nrf doctor for command-layer diagnostics", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

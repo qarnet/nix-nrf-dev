@@ -1,4 +1,10 @@
 # Typos configuration. Allow abbreviations used in Tcl examples and tool names.
+[files]
+extend-exclude = ["docs/research/nordic-artifacts/*/catalog.jsonl"] # generated upstream identifiers/hashes
+
 [default.extend-words]
 SER = "SER" # serial-number placeholder in tcl usage examples
 tio = "tio" # serial-console tool
+
+[default.extend-identifiers]
+EXTRAVERSION = "EXTRAVERSION" # literal Nordic/Zephyr VERSION field

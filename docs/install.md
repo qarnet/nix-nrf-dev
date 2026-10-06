@@ -5,7 +5,7 @@ for shorter setup steps.
 
 ## Prerequisites
 
-- Nix with flake support on `x86_64-linux`. Enable the `flakes` and
+- Nix with flake support on `x86_64-linux` or `aarch64-linux`. Enable the `flakes` and
   `nix-command` experimental features (NixOS:
   `nix.settings.experimental-features = [ "nix-command" "flakes" ]`; other
   distros: `experimental-features = nix-command flakes` in `/etc/nix/nix.conf`).
@@ -29,6 +29,12 @@ for shorter setup steps.
 | `nrfutil` | sdk-manager; includes J-Link and its unfree license. See [backends.md#segger--j-link-caveat](backends.md#segger--j-link-caveat) | Nix store |
 | multilib GCC | for Zephyr `native_sim` (`-m32`) host builds on x86_64-linux | shell `PATH` |
 | udev rules package | upstream OpenOCD `60-openocd.rules` | Nix store; activating it is host policy. See [hardware.md](hardware.md) |
+
+On ARM64, use experimental `west` with NCS `v3.4.1`: Nix provides the native
+Zephyr SDK `1.0.1`, host tools, and Python `3.12`; managed sources and `.venv`
+remain under `$HOME/ncs/<version>`. ARM64 has no Nordic-managed toolchain bundle,
+even though native nrfutil/sdk-manager packages exist. Multilib is disabled by
+default and explicit enablement is rejected. See [host boundaries](backends.md#native-host-boundaries).
 
 ## Create a project with `init-project`
 
@@ -66,9 +72,10 @@ nix-nrf doctor      # verify environment and probe access
   sdk-manager for the newest stable remotely installable release; for the
   `west` backend it selects the newest release in the local west
   metadata. Either way the release is written into the generated flake.
-- `--ncs-version v3.3.0` generates offline without a remote query.
-- `--backend nrfutil` (default, recommended) or `--backend west`
-  (experimental). See [backends.md](backends.md) for backend behavior.
+- `--ncs-version v3.4.1` generates offline without a remote query.
+- `--backend nrfutil` (amd64 default) or `--backend west`
+  (experimental, ARM64 default). West-generated projects expose both hosts;
+  nrfutil projects expose amd64 only. See [backends.md](backends.md).
 - `--non-interactive` for scripted use; `nix run
   ...#init-project -- --help` shows the full CLI.
 
@@ -86,6 +93,11 @@ nix run github:qarnet/nix-nrf-dev/v0.1.0#init-project -- ./my-project
 # flake.nix
 inputs.nix-nrf-dev.url = "github:qarnet/nix-nrf-dev/v0.1.0";
 ```
+
+The tag above illustrates pinning, not ARM64 availability. Use a revision or
+release that contains the ARM64 outputs; older tags do not gain new host support.
+Adding host support does not change the selected NCS release or implicitly bump
+the nix-nrf-dev project version.
 
 ### First run
 
@@ -121,14 +133,14 @@ Add nix-nrf-dev to a project that already exists.
        devShells.x86_64-linux.default =
          nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
            backend = "nrfutil";   # default; "west" is experimental
-           ncsVersion = "v3.3.0"; # required, exact release, never "latest"
+           ncsVersion = "v3.4.1"; # required, exact release, never "latest"
          };
      };
    }
    ```
 
    - `backend` selects the NCS toolchain provider: `nrfutil`
-     (default, recommended) or `west` (experimental). See
+      (public factory default, amd64 only) or `west` (experimental, both hosts). See
      [backends.md](backends.md).
    - `ncsVersion` is required in every configuration; there is no
      `"latest"` alias or default.
@@ -141,6 +153,10 @@ Add nix-nrf-dev to a project that already exists.
      [backends.md](backends.md).
 
 4. Enter the shell and provision:
+
+   For a hand-written ARM64 shell, replace both `x86_64-linux` occurrences above
+   with `aarch64-linux` and explicitly set `backend = "west"`. Omitting the
+   backend does not activate the repository's ARM64 preset in the public factory.
 
    ```bash
    nix develop         # or: direnv allow

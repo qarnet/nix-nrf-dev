@@ -28,9 +28,10 @@
     shellHook = "";
   },
 }: let
-  useMultilib = pkgs.stdenv.isLinux && withMultilib;
+  useMultilib = pkgs.stdenv.hostPlatform.system == "x86_64-linux" && withMultilib;
   # ── nrfutil backend shell ───────────────────────────────────────────
   nrfutilShell = let
+    westCore = import ../west-core.nix {inherit pkgs ncsVersion sourceConfig;};
     nrfutilExe = "${nrfutilPackage}/bin/nrfutil";
 
     # Escaped values assigned to shell variables once per generated script, so
@@ -70,23 +71,32 @@
         ;
       openocd = openocd-master;
       sourceCommand = sourceConfig.command;
+      westStateCommand = "${westCore}/libexec/nix-nrf/west-core";
     };
 
-    # `west` wrapper: lazy bootstrap, export ZEPHYR_BASE inside west's process,
+    # Core west bypasses SDK readiness. SDK extensions use lazy bootstrap,
+    # export ZEPHYR_BASE inside west's process,
     # load the NCS toolchain env, then exec the real west from the toolchain
     # (its bin dirs are prepended to PATH by the env script, so the first
     # non-wrapper `west` on PATH is the real one).
     westWrapper = pkgs.writeShellScriptBin "west" ''
+        _west_core=${westCore}/libexec/nix-nrf/west-core
+        if [ "$("$_west_core" route -- "$@")" = core ]; then
+        exec "$_west_core" run -- "$@"
+      fi
+      "$_west_core" sdk -- "$@" || exit 1
       _nix_nrf=${nixNrf}/bin/nix-nrf
-      _ncs_version=${ncsVersionEsc}
-      ${pkgs.lib.optionalString (toolchainBundleId != null) ''
+      _caller_ssl_cert_file="''${SSL_CERT_FILE:-''${NIX_SSL_CERT_FILE:-${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt}}"
+      _caller_ssl_cert_dir="''${SSL_CERT_DIR:-}"
+        _ncs_version=${ncsVersionEsc}
+        ${pkgs.lib.optionalString (toolchainBundleId != null) ''
         _toolchain_bundle_id=${bundleIdEsc}
       ''}
-      # Lazy bootstrap: the shell-specific helper checks the configured NCS SDK
-      # source and selected toolchain. Managed mode can install missing sources;
-      # existing-workspace mode can install only tools, with confirmation.
-      # The returned root does not imply a literal zephyr/ project path.
-      ${
+        # Lazy bootstrap: the shell-specific helper checks the configured NCS SDK
+        # source and selected toolchain. Managed mode can install missing sources;
+        # existing-workspace mode can install only tools, with confirmation.
+        # The returned root does not imply a literal zephyr/ project path.
+        ${
         if autoBootstrap
         then ''
           _sdk_path="$("$_nix_nrf" bootstrap --print-sdk-path)" || {
@@ -103,11 +113,11 @@
           }
         ''
       }
-      if [ -z "$_sdk_path" ] || [ ! -d "$_sdk_path" ]; then
-        echo "west wrapper: invalid SDK path from nix-nrf bootstrap: '$_sdk_path'" >&2
-        exit 1
-      fi
-      ${
+        if [ -z "$_sdk_path" ] || [ ! -d "$_sdk_path" ]; then
+          echo "west wrapper: invalid SDK path from nix-nrf bootstrap: '$_sdk_path'" >&2
+          exit 1
+        fi
+        ${
         if sourceConfig.command == null
         then ''
           export ZEPHYR_BASE="$_sdk_path/zephyr"
@@ -117,40 +127,49 @@
           export ZEPHYR_BASE="$_zephyr_base"
         ''
       }
-      _env="$(${nrfutilExe} sdk-manager toolchain env ${toolchainSelectorArgs} --as-script sh)" || {
-        echo "west wrapper: nrfutil sdk-manager toolchain env ${toolchainSelectorArgs} failed" >&2
-        echo "Selected toolchain: ${toolchainSelectorDesc}" >&2
-        echo "Run: nix-nrf bootstrap" >&2
-        exit 1
-      }
+        _env="$(${nrfutilExe} sdk-manager toolchain env ${toolchainSelectorArgs} --as-script sh)" || {
+          echo "west wrapper: nrfutil sdk-manager toolchain env ${toolchainSelectorArgs} failed" >&2
+          echo "Selected toolchain: ${toolchainSelectorDesc}" >&2
+          echo "Run: nix-nrf bootstrap" >&2
+          exit 1
+        }
       eval "$_env"
-      ${pkgs.lib.optionalString (sourceConfig.command != null) ''
+      # Bundled Python/libgit2 may use Ubuntu certificate defaults absent on
+      # NixOS. Keep caller CA selection or Nix's trust store scoped to this
+      # child; never disable TLS verification or change the parent environment.
+      export SSL_CERT_FILE="$_caller_ssl_cert_file"
+      if [ -n "$_caller_ssl_cert_dir" ]; then
+        export SSL_CERT_DIR="$_caller_ssl_cert_dir"
+      else
+        unset SSL_CERT_DIR
+      fi
+        ${pkgs.lib.optionalString (sourceConfig.command != null) ''
         # Bind package discovery after loading tools; no global registry export
         # and no application-specific HINTS declaration is required.
         export ZEPHYR_BASE="$_zephyr_base"
         export Zephyr_DIR="$_zephyr_base/share/zephyr-package/cmake"
       ''}
-      ${pkgs.lib.optionalString useMultilib ''
+        ${pkgs.lib.optionalString useMultilib ''
         # Keep multilib GCC ahead of the toolchain's host gcc so native_sim
         # -m32 builds work.
         export PATH="${pkgs.gccMultiStdenv.cc}/bin:$PATH"
       ''}
-      # Keep project OpenOCD ahead of anything the toolchain bundle might ship.
-      # The west OpenOCD runner must use the openocd-master build.
-      export PATH="${openocd-master}/bin:$PATH"
+        # Keep project OpenOCD ahead of anything the toolchain bundle might ship.
+        # The west OpenOCD runner must use the openocd-master build.
+        export PATH="${openocd-master}/bin:$PATH"
 
-      self="$(readlink -f "$0")"
-      while IFS= read -r cand; do
-        if [ "$(readlink -f "$cand")" != "$self" ]; then
-          ${
+        self="$(readlink -f "$0")"
+        while IFS= read -r cand; do
+          if [ "$(readlink -f "$cand")" != "$self" ]; then
+            ${
         if sourceConfig.command == null
         then ''exec "$cand" "$@"''
         else ''exec "$cand" -z "$_zephyr_base" "$@"''
       }
-        fi
-      done < <(type -aP west)
-      echo "west wrapper: real west not found in the NCS toolchain env" >&2
-      exit 1
+          fi
+        done < <(type -aP west)
+        echo "west wrapper: real west not found in the NCS toolchain env" >&2
+        exit 1
     '';
   in
     pkgs.mkShell {

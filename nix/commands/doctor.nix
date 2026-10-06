@@ -32,6 +32,7 @@
   sourceCommand ? null,
   toolchainProvider ? "nrfutil",
   toolchainBundleId ? null,
+  westStateCommand ? null,
 }: let
   mkPythonCommand = import ../lib/mk-python-command.nix {inherit pkgs;};
 in
@@ -58,6 +59,13 @@ in
         [
           "--unset"
           "PYTHONHOME"
+        ]
+      ]
+      ++ pkgs.lib.optionals (westStateCommand != null) [
+        [
+          "--set"
+          "NIX_NRF_DOCTOR_WEST_STATE"
+          westStateCommand
         ]
       ]
       ++ pkgs.lib.optionals (udevRules != null) [

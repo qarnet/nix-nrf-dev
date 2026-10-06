@@ -100,14 +100,14 @@ echo "OK: nRF54L15 probe serial: $SER54L"
 # ── 3. Build four artifacts from NCS ────────────────────────────────────────
 # The west wrapper loads the NCS toolchain env. If NCS v3.3.0 is not
 # installed, west fails with a clear message. run.sh surfaces it.
-NCS_ROOT="${ZEPHYR_BASE:-$HOME/ncs/v3.3.0/zephyr}/.."
-BLINKY_SRC="${ZEPHYR_BASE:-$HOME/ncs/v3.3.0/zephyr}/samples/basic/blinky"
+NCS_ROOT="${ZEPHYR_BASE:-$HOME/ncs/v3.4.1/zephyr}/.."
+BLINKY_SRC="${ZEPHYR_BASE:-$HOME/ncs/v3.4.1/zephyr}/samples/basic/blinky"
 NCS_EMPTY_SRC="$NCS_ROOT/nrf/samples/basic/empty"
 if [ ! -d "$BLINKY_SRC" ]; then
-  fail "blinky-src" "blinky sample not found at $BLINKY_SRC. Is ZEPHYR_BASE set or NCS v3.3.0 installed?"
+  fail "blinky-src" "blinky sample not found at $BLINKY_SRC. Is ZEPHYR_BASE set or NCS v3.4.1 installed?"
 fi
 if [ ! -d "$NCS_EMPTY_SRC" ]; then
-  fail "empty-src" "empty sample not found at $NCS_EMPTY_SRC. Is ZEPHYR_BASE set or NCS v3.3.0 installed?"
+  fail "empty-src" "empty sample not found at $NCS_EMPTY_SRC. Is ZEPHYR_BASE set or NCS v3.4.1 installed?"
 fi
 
 BUILD_DIR_53="$(mktemp -d -t nrf53-blinky-XXXXXX)"

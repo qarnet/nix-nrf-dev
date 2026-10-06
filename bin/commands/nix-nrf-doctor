@@ -456,7 +456,7 @@ def remediation(candidates, sdk, user):
     return items
 
 
-def render_human(sdk, user, hardware, remediation_items):
+def render_human(sdk, user, hardware, remediation_items, west=None):
     out = []
     out.append(environment_label())
     out.append(f"  status: {sdk['status']}")
@@ -478,6 +478,24 @@ def render_human(sdk, user, hardware, remediation_items):
         if selection["bundle_id"]:
             out.append(f"  configured Nordic bundle: {selection['bundle_id']}")
     out.append("")
+
+    if west is not None:
+        out.append("West command states")
+        if west.get("status") == "fail":
+            out.append(f"  inspection failed: {west['message']}")
+            out.append("")
+            west = None
+    if west is not None:
+        out.append(f"  core available: {west['core_available']['status']}")
+        extensions = west["extensions_discovered"]
+        out.append(f"  extensions discovered: {extensions['status']} ({len(extensions['commands'])} commands)")
+        for error in extensions.get("errors", []):
+            out.append(f"    {error}")
+        if extensions.get("message"):
+            out.append(f"    {extensions['message']}")
+        ready = west["command_ready"]
+        out.append(f"  command ready: {ready['status']}; {ready['message']}")
+        out.append("")
 
     out.append("User access")
     name = user["name"] if user["name"] is not None else "unknown"
@@ -589,10 +607,26 @@ def main(argv=None):
         "remediation": items,
     }
 
+    west = None
+    state_command = os.environ.get("NIX_NRF_DOCTOR_WEST_STATE")
+    if state_command:
+        try:
+            probe = subprocess.run([state_command, "state"], capture_output=True, text=True, timeout=30)
+            if probe.returncode:
+                raise ValueError(probe.stderr.strip())
+            west = json.loads(probe.stdout)
+            west["command_ready"]["environment_ready"] = sdk["status"] == "pass"
+            if sdk["status"] != "pass":
+                west["command_ready"].update(status="blocked", message="selected SDK/Python environment not ready; core commands remain available; run nix-nrf bootstrap --check")
+            result["west"] = west
+        except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+            west = {"status": "fail", "message": f"cannot inspect west states: {exc}"}
+            result["west"] = west
+
     if args.json:
         print(json.dumps(result))
     else:
-        print(render_human(sdk, user, hardware, items))
+        print(render_human(sdk, user, hardware, items, west))
     return 0 if ok else 1
 
 

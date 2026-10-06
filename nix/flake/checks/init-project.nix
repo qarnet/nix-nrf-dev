@@ -12,6 +12,7 @@
   # Real west backend version metadata (nix/backends/west/versions.nix); its
   # sorted key list is baked into the packaged initializer.
   westBackendVersions,
+  nix-nrf,
 }: let
   initProjectBuilder = import ../../init-project/default.nix;
 
@@ -68,12 +69,22 @@ in {
       export NIX_NRF_INIT_TEST_WEST_VERSIONS_JSON='["v3.3.0","v3.3.4","v3.4.0-rc1","v2.7.0"]'
       python3 test_nix_nrf_init_project.py
 
+      export PLATFORM_HOST=${pkgs.stdenv.hostPlatform.system}
+      export PLATFORM_DEFAULT_BACKEND=${
+        (import ../../platforms.nix).${pkgs.stdenv.hostPlatform.system}.defaultBackend
+      }
+      export PLATFORM_INIT="$initProject/bin/nix-nrf-init-project"
+      export PLATFORM_NIX_NRF=${nix-nrf}/bin/nix-nrf
+      python3 ${../../../tests/unit/test_host_platform.py} -v
+
       # Packaged initializer: same suite against the packaged public binary
       # with the fake as nrfutilPackage and the real west metadata baked in.
       export NIX_NRF_INIT_PROJECT_COMMAND="$initProject/bin/nix-nrf-init-project"
       unset NIX_NRF_INIT_PROJECT_SCRIPT NIX_NRF_INIT_TEST_FIXTURE NIX_NRF_INIT_TEST_SKELETON
       export NIX_NRF_INIT_TEST_WEST_VERSIONS_JSON="$westVersionsJson"
-      python3 test_nix_nrf_init_project.py
+      ${pkgs.lib.optionalString (
+        pkgs.stdenv.hostPlatform.system == "x86_64-linux"
+      ) "python3 test_nix_nrf_init_project.py"}
 
       echo "init-project tests passed" >&2
       mkdir -p "$out"

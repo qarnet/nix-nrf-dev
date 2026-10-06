@@ -16,7 +16,7 @@
 #     `bootstrapCommand` store path instead (its west-workspace/venv bootstrap
 #     module). `ncsVersion`/`toolchainBundleId` defaults are null here
 #     (explicit `--ncs-version` required at runtime), so `nix run .# --
-#     bootstrap --ncs-version v3.3.0 --check` works; `mkNrfShell` passes its
+#     bootstrap --ncs-version v3.4.1 --check` works; `mkNrfShell` passes its
 #     selected values so the shell's `nix-nrf bootstrap` works with no
 #     arguments.
 #     With sourceCommand, existing sources are validated independently:
@@ -76,6 +76,7 @@
   nrfutilPackage ? null,
   # Exact existing-workspace resolver; null preserves managed command surface.
   sourceCommand ? null,
+  westStateCommand ? null,
 }:
 assert versionsCommand
 != null
@@ -113,6 +114,7 @@ assert bootstrapCommand
       }
     }/libexec/nix-nrf/bootstrap";
   nrfDoctor = import ./doctor.nix {
+    inherit westStateCommand;
     inherit toolchainBundleId;
     toolchainProvider =
       if bootstrapCommand != null

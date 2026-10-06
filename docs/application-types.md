@@ -7,15 +7,22 @@ layout. Choose **tools** with `backend`, then choose **SDK sources** with `sourc
 | Choice | Meaning |
 | --- | --- |
 | `backend = "nrfutil"` | Use Nordic's selected toolchain bundle, scoped to west and its children |
-| `backend = "west"` | Use the Nix-packaged compiler SDK and a prepared Python environment; experimental, NCS v3.3.0 only |
+| `backend = "west"` | Use the Nix-packaged compiler SDK and a prepared Python environment; experimental, active NCS v3.4.1 baseline |
 | `source.mode = "managed"` | Let the backend manage its SDK workspace; current default |
 | `source.mode = "workspace"` | Use an existing workspace that you own; do not download or update its sources |
 
-Host regression tests cover source routing through both backends with real west
+Host choice is separate too: `nrfutil` firmware workflows require
+`x86_64-linux`; experimental `west` supports `x86_64-linux` and `aarch64-linux`.
+For ARM64, use `lib.aarch64-linux.mkNrfShell` and explicitly set
+`backend = "west"`. Source ownership, relative workspace strings, and check-only
+Python behavior do not change with host architecture.
+
+Host regression tests cover source routing through supported backends with real west
 and CMake. A separate [16-case firmware matrix](development/application-source-status.md)
-passed for NCS v3.3.0 and `xiao_nrf54l15/nrf54l15/cpuapp`, covering all layouts and
+passed on amd64 for NCS v3.3.0 and `xiao_nrf54l15/nrf54l15/cpuapp`, covering all layouts and
 single-image/sysbuild with both backends. Other boards, releases, and arbitrary
 consumer manifests are not inferred from those results.
+These v3.3.0 results are historical evidence, not acceptance of the v3.4.1 baseline.
 The opt-in [firmware matrix](../tests/application-types/README.md) records actual
 source/compiler/module selections with already prepared application fixtures.
 An additional four-build qualification covers a locally cloned, independent
@@ -30,7 +37,7 @@ Existing configurations need no changes:
 ```nix
 nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
   backend = "nrfutil";
-  ncsVersion = "v3.3.0";
+  ncsVersion = "v3.4.1";
   # source = { mode = "managed"; }; # optional; this is the default
 }
 ```
@@ -40,6 +47,14 @@ nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
 for provisioning, approval, and release restrictions.
 
 ## Use your own existing workspace
+
+Application location does not choose the command layer. Core west commands run
+before build readiness; resolved manifest imports choose Zephyr/Nordic extension
+registrations; selected SDK/Python then determines whether a particular command
+can load and execute. General help and doctor distinguish these states. See
+[three west command states](backends.md#three-west-command-states). A Zephyr-only
+manifest can expose Zephyr registrations without Nordic registrations, but does
+not satisfy this library's NCS-source/build-readiness contract.
 
 Example layout, with the flake at the workspace root:
 
@@ -64,7 +79,7 @@ Use Nordic tools without requiring another sdk-manager SDK source installation:
 ```nix
 nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
   backend = "nrfutil";
-  ncsVersion = "v3.3.0";
+  ncsVersion = "v3.4.1";
   source = {
     mode = "workspace";
     workspace = ".";
@@ -77,7 +92,7 @@ Use the same sources with Nix compiler tools:
 ```nix
 nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
   backend = "west";
-  ncsVersion = "v3.3.0";
+  ncsVersion = "v3.4.1";
   source = {
     mode = "workspace";
     workspace = ".";
@@ -100,7 +115,7 @@ Nonstandard paths such as `vendor/rtos` are resolved from the manifest. Zephyr a
 Nordic source projects, including resolved symlink targets, must stay inside the
 selected workspace. Missing imports or source files fail without fetching them.
 Source-path resolution does not override upstream module naming. Stock NCS
-v3.3.0 Nordic module metadata derives its name from its directory basename;
+v3.4.1 Nordic module metadata derives its name from its directory basename;
 retain `nrf` (for example `sdk/nrf`) when relocating those unmodified sources.
 
 `ncsVersion` remains the explicit source/toolchain compatibility baseline.
@@ -122,25 +137,24 @@ repair a venv or run pip. The default location is `<workspace>/.venv`.
 resolve from the workspace root, not the application directory. This option is
 only valid with the west backend and workspace source mode.
 
-For a conventional NCS v3.3.0 workspace, enter its west-backend shell, confirm the
+For a conventional NCS v3.4.1 workspace, enter its west-backend shell, confirm the
 provided Python version, and then prepare dependencies explicitly:
 
 > These commands create a Python environment and download/install packages.
 > Review them before running. They do not initialize or update source repositories.
 
 ```bash
-python3 --version              # this backend provides Python 3.12 for NCS v3.3.0
+python3 --version              # this backend provides Python 3.12 for NCS v3.4.1
 env -u PYTHONHOME -u PYTHONPATH python3 -m venv .venv
 env -u PYTHONHOME -u PYTHONPATH .venv/bin/python -m pip install \
-  -r zephyr/scripts/requirements-base.txt \
-  -r nrf/scripts/requirements-base.txt \
-  -r nrf/scripts/requirements-build.txt \
+  -r zephyr/scripts/requirements.txt \
+  -r nrf/scripts/requirements.txt \
   -r bootloader/mcuboot/scripts/requirements.txt \
   'cbor2==5.9.0' 'west==1.5.0'
 nix-nrf bootstrap --check
 ```
 
-These are build profiles; the two explicit pins match NCS v3.3.0's fixed
+These are the managed backend's baseline requirement files; the two explicit pins match NCS v3.4.1's fixed
 requirements. Use your SDK's own versions for another release. Clearing foreign
 Python variables applies only to pip's child process, not the surrounding shell.
 For the larger SDK-wide pinned environment, install
@@ -154,7 +168,7 @@ environment; every west build receives its selected toolchain.
 ## Build any application layout
 
 All examples below use the same selected SDK workspace. Choose a board supported
-by your sources; these examples use the repository's NCS v3.3.0 baseline.
+by your sources; these examples use the repository's NCS v3.4.1 baseline.
 
 ```bash
 # Zephyr repository application:
@@ -175,7 +189,7 @@ relocate the SDK projects, use their actual paths in commands. For new productio
 projects, prefer a workspace application rather than adding files to a shared
 sdk-manager installation.
 
-NCS v3.3.0 enables sysbuild by default. Explicit `--sysbuild`/`--no-sysbuild` makes
+Explicit `--sysbuild`/`--no-sysbuild` makes
 your intended workflow clear. Use fresh build directories when changing source
 workspaces. This wrapper rejects detected conflicting caches rather than deleting
 them, even if `-p always` is requested. With a templated `build.dir-fmt`, specify

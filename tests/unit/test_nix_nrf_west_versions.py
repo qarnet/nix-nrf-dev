@@ -72,14 +72,14 @@ class WestVersionsTestCase(unittest.TestCase):
 
     # 1. No arguments: one supported version per line.
     def test_text_lists_versions_one_per_line(self):
-        expected = "v3.3.0\n" if PACKAGED else "v3.3.0\nv2.7.0\n"
+        expected = "v3.4.1\n" if PACKAGED else "v3.3.0\nv2.7.0\n"
         proc = self.run_versions()
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(proc.stdout, expected)
 
     # 2. --json: exactly one JSON string array on stdout.
     def test_json_emits_string_array(self):
-        expected = ["v3.3.0"] if PACKAGED else ["v2.7.0", "v3.3.0"]
+        expected = ["v3.4.1"] if PACKAGED else ["v2.7.0", "v3.3.0"]
         proc = self.run_versions("--json")
         self.assertEqual(proc.returncode, 0)
         data = json.loads(proc.stdout)
@@ -111,12 +111,12 @@ class WestVersionsTestCase(unittest.TestCase):
     def test_packaged_command_reports_metadata_versions(self):
         proc = self.run_versions()
         self.assertEqual(proc.returncode, 0)
-        self.assertEqual(proc.stdout, "v3.3.0\n")
+        self.assertEqual(proc.stdout, "v3.4.1\n")
 
         proc = self.run_versions("--json")
         self.assertEqual(proc.returncode, 0)
         data = json.loads(proc.stdout)
-        self.assertEqual(data, ["v3.3.0"])
+        self.assertEqual(data, ["v3.4.1"])
 
 
 if __name__ == "__main__":

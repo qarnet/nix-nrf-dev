@@ -93,7 +93,7 @@
   # Cheap metadata schema gate: asserts every nix/backends/west
   # versions.nix entry has the required shape (ncsVersion matches its
   # key, testedWestVersion/python/pythonPackage/requirements strings,
-  # zephyrSdk version/targets/assets with x86_64-linux URLs + fixed
+  # zephyrSdk version/targets/assets with every supported host's URLs + fixed
   # hashes, sorted attr names so the versions command output is
   # deterministic). Pure Nix evaluation fetches and builds nothing.
   westBackendMetadataCheck = let
@@ -108,15 +108,18 @@
       && isString e.zephyrSdk.version
       && isStringList e.zephyrSdk.targets
       && builtins.length e.zephyrSdk.targets > 0
-      && (e.zephyrSdk.assets ? "x86_64-linux")
-      && isString e.zephyrSdk.assets."x86_64-linux".minimal.url
-      && isString e.zephyrSdk.assets."x86_64-linux".minimal.sha256
-      && builtins.isList e.zephyrSdk.assets."x86_64-linux".toolchains
-      && builtins.length e.zephyrSdk.assets."x86_64-linux".toolchains > 0
       && builtins.all (
-        t: isString t.target && isString t.url && isString t.sha256
-      )
-      e.zephyrSdk.assets."x86_64-linux".toolchains
+        host:
+          builtins.hasAttr host e.zephyrSdk.assets
+          && isString e.zephyrSdk.assets.${host}.minimal.url
+          && isString e.zephyrSdk.assets.${host}.minimal.sha256
+          && builtins.isList e.zephyrSdk.assets.${host}.toolchains
+          && builtins.length e.zephyrSdk.assets.${host}.toolchains > 0
+          && builtins.all (
+            t: isString t.target && isString t.url && isString t.sha256
+          )
+          e.zephyrSdk.assets.${host}.toolchains
+      ) (builtins.attrNames (import ../../platforms.nix))
       && isStringList e.requirements
       && builtins.length e.requirements > 0
       && isStringList (e.pipConstraints or []);
@@ -160,7 +163,7 @@
   # (only attrs beginning `test` run; the return value is the list of
   # failures, each with `name`/`expected`/`result`). For every supported
   # release each declared `zephyrSdk.targets` entry must have a matching
-  # x86_64-linux toolchain archive target, and each listed toolchain
+  # toolchain archive target on each published host, and each listed toolchain
   # archive target must be declared. This checks membership, not
   # list-order equality (metadata order stays meaningful for packaging,
   # but coverage must not depend on matching order). A nonempty failure
@@ -169,20 +172,34 @@
   # affected releases stay visible. Pure evaluation: fetches and builds
   # nothing.
   westTargetToolchainConsistency = let
-    archiveTargetsOf = entry: map (t: t.target) entry.zephyrSdk.assets."x86_64-linux".toolchains;
+    hostEntries = builtins.listToAttrs (
+      builtins.concatMap (
+        release:
+          map (host: {
+            name = "${release}/${host}";
+            value = {
+              entry = westBackendVersions.${release};
+              inherit host;
+            };
+          }) (builtins.attrNames westBackendVersions.${release}.zephyrSdk.assets)
+      ) (builtins.attrNames westBackendVersions)
+    );
+    archiveTargetsOf = value: map (t: t.target) value.entry.zephyrSdk.assets.${value.host}.toolchains;
     # Per release: declared targets absent from the archive targets.
     missingArchives =
       pkgs.lib.mapAttrs (
-        _: entry: builtins.filter (t: !(builtins.elem t (archiveTargetsOf entry))) entry.zephyrSdk.targets
+        _: value:
+          builtins.filter (t: !(builtins.elem t (archiveTargetsOf value))) value.entry.zephyrSdk.targets
       )
-      westBackendVersions;
+      hostEntries;
     # Per release: archive targets absent from the declared targets.
     undeclaredArchives =
       pkgs.lib.mapAttrs (
-        _: entry: builtins.filter (t: !(builtins.elem t entry.zephyrSdk.targets)) (archiveTargetsOf entry)
+        _: value:
+          builtins.filter (t: !(builtins.elem t value.entry.zephyrSdk.targets)) (archiveTargetsOf value)
       )
-      westBackendVersions;
-    emptyPerRelease = pkgs.lib.mapAttrs (_: _: []) westBackendVersions;
+      hostEntries;
+    emptyPerRelease = pkgs.lib.mapAttrs (_: _: []) hostEntries;
     failures = pkgs.lib.debug.runTests {
       testEveryDeclaredTargetHasToolchainArchive = {
         expr = missingArchives;
@@ -234,8 +251,8 @@
   # quote artifact and the default workspace path stays
   # `$HOME/ncs/v3.3.0`.
   westBackendQuotingCheck = let
-    nastyNcsVersion = "v3.3.0 with 'quote' and spaces";
-    nastySdkVersion = "0.17.0'sdk";
+    nastyNcsVersion = "v3.4.1 with 'quote' and spaces";
+    nastySdkVersion = "1.0.1'sdk";
     nastyPython = "3.12'py";
     nastyMetadata =
       westBackendEntry
@@ -281,7 +298,7 @@
     };
     cleanShell = mkNrfShell {
       backend = "west";
-      ncsVersion = "v3.3.0";
+      ncsVersion = "v3.4.1";
       name = "west-quoting-clean";
       autoBootstrap = false;
     };
@@ -324,7 +341,7 @@
       HOME="$PWD/home" bash -c '
       set -eu
       source "$1"
-      [ "$_workspace" = "$HOME/ncs/v3.3.0" ] || { echo "FAIL: default workspace mismatch: $_workspace" >&2; exit 1; }
+      [ "$_workspace" = "$HOME/ncs/v3.4.1" ] || { echo "FAIL: default workspace mismatch: $_workspace" >&2; exit 1; }
       echo "clean shell hook check OK: $_workspace" >&2
       ' bash clean-hook.sh
 
@@ -335,8 +352,8 @@
       # fake boundaries.
       python3 "$fixture" --workspace "$PWD/home/ncs/$nastyNcsVersion" --mode stdout
 
-      HOME="$PWD/home" "$nastyWest/bin/west" list --format=json > wrapper.out
-      grep -F "FAKE_WEST argv=list --format=json ZEPHYR_BASE=$PWD/home/ncs/$nastyNcsVersion/zephyr" wrapper.out >/dev/null || {
+      HOME="$PWD/home" "$nastyWest/bin/west" build --help > wrapper.out
+      grep -F "FAKE_WEST argv=build --help ZEPHYR_BASE=$PWD/home/ncs/$nastyNcsVersion/zephyr" wrapper.out >/dev/null || {
       echo "FAIL: wrapper did not reach the venv west with the correct ZEPHYR_BASE" >&2
       cat wrapper.out >&2
       exit 1
@@ -367,7 +384,7 @@
     };
     westShell = mkNrfShell {
       backend = "west";
-      ncsVersion = "v3.3.0";
+      ncsVersion = "v3.4.1";
       name = "west-boundary-check";
       packages = [pkgs.hello];
       extraShellHook = "export NIX_NRF_BOUNDARY_MARKER=set";
@@ -376,7 +393,7 @@
     };
     westNoAutoShell = mkNrfShell {
       backend = "west";
-      ncsVersion = "v3.3.0";
+      ncsVersion = "v3.4.1";
       name = "west-boundary-no-auto";
       autoBootstrap = false;
     };
@@ -388,7 +405,10 @@
     nixNrfPkg = builtins.head (builtins.filter (p: p.name == "nix-nrf") shellPackages);
     westPkg = builtins.head (builtins.filter (p: p.name == "west") shellPackages);
     noAutoWest = westNoAutoShell.passthru.westWrapper;
-    multilibOutPath = pkgs.gccMultiStdenv.cc.outPath;
+    multilibOutPath =
+      if pkgs.stdenv.hostPlatform.system == "x86_64-linux"
+      then pkgs.gccMultiStdenv.cc.outPath
+      else "unsupported-multilib";
     boundaryHasMultilib = builtins.any (p: p ? outPath && p.outPath == multilibOutPath) shellPackages;
     noAutoHasMultilib = builtins.any (p: p ? outPath && p.outPath == multilibOutPath) noAutoPackages;
     hasHello = builtins.any (p: p ? pname && p.pname == "hello") shellPackages;
@@ -410,7 +430,7 @@
     westDoctorModule = import ../../commands/doctor.nix {
       inherit pkgs;
       udevRules = nrfUdevRules;
-      ncsVersion = "v3.3.0";
+      ncsVersion = "v3.4.1";
       bootstrapCommand = "${westBootstrapModule}/libexec/nix-nrf/bootstrap";
       environmentLabel = "west workspace/Zephyr SDK";
     };
@@ -445,7 +465,7 @@
       # creates the ready workspace structure (manifest, requirement roots,
       # fake venv python/pip/west); log mode matches the boundary gate's
       # venv.log boundaries.
-      ws="$HOME/ncs/v3.3.0"
+      ws="$HOME/ncs/v3.4.1"
       python3 "$fixture" --workspace "$ws" --mode log
 
       # Shell hook: read-only, exact workspace, and caller options.
@@ -469,8 +489,8 @@
       hook_out="$(HOME="$HOME" bash -c '
       set -eu
       source "$1"
-      [ "$_workspace" = "$HOME/ncs/v3.3.0" ] || { echo "FAIL: workspace quote artifact: $_workspace" >&2; exit 1; }
-      [ "$ZEPHYR_BASE" = "$HOME/ncs/v3.3.0/zephyr" ] || { echo "FAIL: ZEPHYR_BASE not derived: $ZEPHYR_BASE" >&2; exit 1; }
+      [ "$_workspace" = "$HOME/ncs/v3.4.1" ] || { echo "FAIL: workspace quote artifact: $_workspace" >&2; exit 1; }
+      [ "$ZEPHYR_BASE" = "$HOME/ncs/v3.4.1/zephyr" ] || { echo "FAIL: ZEPHYR_BASE not derived: $ZEPHYR_BASE" >&2; exit 1; }
       [ "$NIX_NRF_BOUNDARY_MARKER" = "set" ] || { echo "FAIL: extraShellHook did not propagate" >&2; exit 1; }
       echo "shell hook boundary check OK" >&2
       ' bash hook.sh 2>&1)"
@@ -489,12 +509,12 @@
 
       # ── nix-nrf versions: text, JSON, help ──────────────────────────
       "$nixNrfPkg/bin/nix-nrf" versions > versions.txt
-      grep -qx "v3.3.0" versions.txt || { echo "FAIL: versions text missing v3.3.0" >&2; cat versions.txt >&2; exit 1; }
+      grep -qx "v3.4.1" versions.txt || { echo "FAIL: versions text missing v3.4.1" >&2; cat versions.txt >&2; exit 1; }
       "$nixNrfPkg/bin/nix-nrf" versions --json > versions.json
       python3 - <<'PYEOF'
       import json
       data = json.load(open("versions.json"))
-      assert data == ["v3.3.0"], data
+      assert data == ["v3.4.1"], data
       PYEOF
       "$nixNrfPkg/bin/nix-nrf" versions --help >/dev/null
 
@@ -506,7 +526,7 @@
 
       # ── nix-nrf bootstrap --check --print-sdk-path: exact workspace ─
       "$nixNrfPkg/bin/nix-nrf" bootstrap --check --quiet --print-sdk-path > sdk-path.txt
-      [ "$(cat sdk-path.txt)" = "$HOME/ncs/v3.3.0" ] || {
+      [ "$(cat sdk-path.txt)" = "$HOME/ncs/v3.4.1" ] || {
       echo "FAIL: unexpected SDK path: $(cat sdk-path.txt)" >&2
       exit 1
       }
@@ -523,7 +543,7 @@
       data = json.load(open("doctor.json"))
       sdk = data["sdk"]
       assert sdk["status"] == "pass", sdk
-      assert sdk["path"] == os.environ["HOME"] + "/ncs/v3.3.0", sdk
+      assert sdk["path"] == os.environ["HOME"] + "/ncs/v3.4.1", sdk
       assert sdk["message"].startswith("NCS"), sdk
       assert data["hardware"]["status"] == "fail", data["hardware"]
       PYEOF
@@ -531,13 +551,13 @@
       # ── Scoped west: exact venv west, expected exports ──────────────
       # No approval needed: a ready workspace must short-circuit the
       # bootstrap without approval or mutation (nrfutil parity).
-      "$westPkg/bin/west" list --format=json > wrapper.out
-      grep -F "argv=list --format=json ZEPHYR_BASE=$HOME/ncs/v3.3.0/zephyr ZEPHYR_TOOLCHAIN_VARIANT=zephyr ZEPHYR_SDK_INSTALL_DIR=$expectedSdk PATH=" "$HOME/venv.log" >/dev/null || {
+      "$westPkg/bin/west" build --help > wrapper.out
+      grep -F "argv=build --help ZEPHYR_BASE=$HOME/ncs/v3.4.1/zephyr ZEPHYR_TOOLCHAIN_VARIANT=zephyr ZEPHYR_SDK_INSTALL_DIR=$expectedSdk PATH=" "$HOME/venv.log" >/dev/null || {
       echo "FAIL: scoped west did not reach the venv west with the expected environment" >&2
       cat "$HOME/venv.log" >&2
       exit 1
       }
-      line="$(grep -F "argv=list --format=json" "$HOME/venv.log" | tail -1)"
+      line="$(grep -F "argv=build --help" "$HOME/venv.log" | tail -1)"
       path_part="''${line##*PATH=}"
       first="''${path_part%%:*}"
       case "$first" in
@@ -548,7 +568,7 @@
       ;;
       esac
       case ":''${path_part}:" in
-      *":$HOME/ncs/v3.3.0/.venv/bin:"*) ;;
+      *":$HOME/ncs/v3.4.1/.venv/bin:"*) ;;
       *)
       echo "FAIL: version-local venv not on west PATH: $path_part" >&2
       exit 1
@@ -559,7 +579,7 @@
       # ── autoBootstrap = false: missing state refuses, no mutation ──
       empty_home="$PWD/home-empty"
       mkdir -p "$empty_home"
-      HOME="$empty_home" "$noAutoWest/bin/west" list > no-auto.out 2> no-auto.err || true
+      HOME="$empty_home" "$noAutoWest/bin/west" build --help > no-auto.out 2> no-auto.err || true
       grep -F "automatic bootstrap is disabled (autoBootstrap = false)" no-auto.err >/dev/null || {
       echo "FAIL: no-auto wrapper did not report disabled bootstrap" >&2
       cat no-auto.err >&2
@@ -574,7 +594,9 @@
 
       # ── Absence + propagation gates (Nix-side) ──────────────────────
       [ -z "$boundaryHasMultilib" ] || { echo "FAIL: withMultilib = false still added multilib gcc" >&2; exit 1; }
-      [ "$noAutoHasMultilib" = "1" ] || { echo "FAIL: default withMultilib did not add multilib gcc" >&2; exit 1; }
+      [ "$noAutoHasMultilib" = "${
+        pkgs.lib.optionalString (pkgs.stdenv.hostPlatform.system == "x86_64-linux") "1"
+      }" ] || { echo "FAIL: default multilib does not match host capability" >&2; exit 1; }
       [ "$hasHello" = "1" ] || { echo "FAIL: caller packages did not propagate" >&2; exit 1; }
       [ "$hasRipgrep" = "1" ] || { echo "FAIL: inputsFrom did not propagate" >&2; exit 1; }
       [ "$noNrfutil" = "1" ] || { echo "FAIL: nrfutil found in west shell packages" >&2; exit 1; }
@@ -598,6 +620,32 @@
       mkdir -p "$out"
     '';
 in {
+  # Execute native SDK programs and inspect real cross-compiled ELF objects.
+  # This is compiler qualification, not firmware execution or GDB Python parity.
+  west-sdk-native-probes =
+    pkgs.runCommand "west-sdk-native-probes"
+    {
+      probe = pkgs.writeText "native-compiler-probe.c" ''
+        #include <stdint.h>
+        uint32_t native_compiler_probe(uint32_t value) { return value + 1; }
+      '';
+    }
+    ''
+      mkdir -p "$out"
+      arm=${westZephyrSdk}/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi
+      riscv=${westZephyrSdk}/gnu/riscv64-zephyr-elf/bin/riscv64-zephyr-elf
+      "$arm-gcc" --version > "$out/arm-gcc.txt"
+      "$riscv-gcc" --version > "$out/riscv-gcc.txt"
+      "$arm-gcc" -mcpu=cortex-m33 -mthumb -mfloat-abi=soft -c "$probe" -o "$out/arm.o"
+      "$riscv-gcc" -march=rv32imac -mabi=ilp32 -c "$probe" -o "$out/riscv.o"
+      "$arm-readelf" -h "$out/arm.o" > "$out/arm-elf.txt"
+      "$riscv-readelf" -h "$out/riscv.o" > "$out/riscv-elf.txt"
+      grep -E 'Class: +ELF32' "$out/arm-elf.txt"
+      grep -E 'Machine: +ARM' "$out/arm-elf.txt"
+      grep -E 'Class: +ELF32' "$out/riscv-elf.txt"
+      grep -E 'Machine: +RISC-V' "$out/riscv-elf.txt"
+      "$arm-gdb" --batch -nx -ex 'show version' > "$out/arm-gdb.txt"
+    '';
   west-bootstrap-tests = westBootstrapTests;
   west-versions-tests = westVersionsTests;
   west-backend-metadata = westBackendMetadataCheck;

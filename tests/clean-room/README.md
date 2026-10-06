@@ -5,7 +5,7 @@ Nordic downloads.
 
 1. Enters `nix develop .#clean-env-test` with `--ignore-env` and isolated
    `HOME`.
-2. Runs `nix-nrf bootstrap --yes` for NCS `v3.3.0` and selected toolchain.
+2. Runs `nix-nrf bootstrap --yes` for NCS `v3.4.1` and selected toolchain.
 3. Re-enters shell and checks that `ZEPHYR_BASE` comes from isolated install.
 4. Builds Zephyr basic blinky for `xiao_nrf54l15/nrf54l15/cpuapp` with
    sysbuild, then checks `zephyr.elf` and `domains.yaml`.

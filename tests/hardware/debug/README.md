@@ -6,12 +6,12 @@ acceptance requires explicit approval and a test-owned XIAO nRF54L15.
 
 ## Build only
 
-An already provisioned NCS v3.3.0 SDK/toolchain is required. This expression
+An already provisioned NCS v3.4.1 SDK/toolchain is required. This expression
 disables automatic bootstrap. It does not update or download an SDK:
 
 ```bash
 nix develop --impure --expr \
-  '(builtins.getFlake (toString ./.)).lib.x86_64-linux.mkNrfShell { ncsVersion = "v3.3.0"; autoBootstrap = false; }' \
+  '(builtins.getFlake (toString ./.)).lib.x86_64-linux.mkNrfShell { ncsVersion = "v3.4.1"; autoBootstrap = false; }' \
   -c west build --no-sysbuild -b xiao_nrf54l15/nrf54l15/cpuapp \
   -d /tmp/opencode/pb004-build "$PWD/tests/firmware/debug-fixture"
 ```

@@ -25,10 +25,23 @@
     shellHook = "";
   },
   pythonEnvironment ? null,
+  pythonRequirementGroups ? [],
 }: let
   # ── west backend shell ─────────────────────────────────────────────────────
   westShell = let
-    metadata = westVersions.${ncsVersion};
+    westCore = import ../west-core.nix {inherit pkgs ncsVersion sourceConfig;};
+    baseMetadata = westVersions.${ncsVersion};
+    groups = map (name: baseMetadata.requirementGroups.${name}) (
+      pkgs.lib.unique pythonRequirementGroups
+    );
+    metadata =
+      baseMetadata
+      // {
+        requirements = baseMetadata.requirements ++ pkgs.lib.concatMap (group: group.requirements) groups;
+        readinessImports =
+          (baseMetadata.readinessImports or []) ++ pkgs.lib.concatMap (group: group.imports) groups;
+        preinstallRequirements = pkgs.lib.concatMap (group: group.preinstallRequirements or []) groups;
+      };
     pythonPackage =
       metadata.pythonPackage
           or (throw "mkNrfShell: west backend metadata for '${ncsVersion}' has no pythonPackage attribute");
@@ -64,6 +77,7 @@
       versionsCommand = "${versionsCommand}/libexec/nix-nrf/versions";
       bootstrapCommand = "${westBootstrap}/libexec/nix-nrf/bootstrap";
       doctorEnvironmentLabel = "west workspace/Zephyr SDK";
+      westStateCommand = "${westCore}/libexec/nix-nrf/west-core";
       sourceCommand = sourceConfig.command;
     };
   in
@@ -82,6 +96,7 @@
         inputsFrom
         sourceConfig
         pythonEnvironment
+        westCore
         ;
       openocd = openocd-master;
       nixNrf = westNixNrf;
