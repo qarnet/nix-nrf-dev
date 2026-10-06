@@ -26,7 +26,7 @@ in {
   # Dogfood shell for hacking on this repo / ad-hoc probe work.
   # Composes mkNrfShell with pre-commit hooks (packages + shellHook).
   # autoBootstrap defaults to true: lazy SDK/toolchain bootstrap on
-  # the first `west` invocation.
+  # the first SDK-extension `west` invocation; core commands remain SDK-independent.
   default = mkNrfShell {
     backend = platform.defaultBackend;
     ncsVersion = "v3.4.1";

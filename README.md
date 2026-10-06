@@ -31,7 +31,7 @@ flashing.
 Requires Nix with flake support on `x86_64-linux` or `aarch64-linux`. [direnv] is optional.
 Repository shells and the initializer select `nrfutil` on amd64 and experimental
 `west` on ARM64. Active baseline is NCS `v3.4.1` on both hosts; Nordic-managed
-toolchain installation is unavailable there. No backend falls back silently.
+toolchain installation is unavailable on ARM64. No backend falls back silently.
 
 ### Create a project
 
@@ -126,6 +126,8 @@ access. See [docs/hardware.md](docs/hardware.md).
 - [docs/install.md](docs/install.md) covers installation and release pins.
 - [CHANGELOG.md](CHANGELOG.md) records project releases.
 - [docs/backends.md](docs/backends.md) explains backends and bootstrap.
+- [docs/support-matrix.md](docs/support-matrix.md) records qualified capabilities,
+  known unavailable tools and precise SUIT/DFU/debug verification limits.
 - [docs/application-types.md](docs/application-types.md) explains independent tool
   and source selection for repository, workspace, and freestanding applications.
 - [docs/hardware.md](docs/hardware.md) covers probes, flashing, and recovery.

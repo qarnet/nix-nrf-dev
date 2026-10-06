@@ -1,6 +1,6 @@
 # Work session checkpoint
 
-## Current PR preparation state
+## Current draft PR validation state
 
 User authorized committing, pushing, opening a draft PR linked to issue #11, and
 full PR/manual Pi validation. Merge, release-version bump, flashing, recovery,
@@ -31,10 +31,27 @@ Preservation passes. This remaining upstream defect is not a migration failure o
 a waived parser case. Current evidence and limitations are canonical in
 `west-backend-status.md#v341-qualification` and product item notes.
 
-No hardware operations, commits or publication occurred. PB-030/031/032/033
-remain future work; the full upstream-derived Python lock generator is not part
-of this completed migration. Earlier pause snapshot below is historical and its
-resume prohibition no longer applies.
+Initial implementation is published as commit
+`ca3adc160000cec6311a7b9452d94ed65692e12a` in draft
+[PR #13](https://github.com/qarnet/nix-nrf-dev/pull/13), linked to issue #11.
+[Hosted run 37537793047](https://github.com/qarnet/nix-nrf-dev/actions/runs/37537793047)
+passes shared checks and both native CI entries; release is skipped. A separate
+clean checkout of that commit passes the full Pi flake gate in 751.87s
+(`state/pr13-clean-native-gates.json`), without throttling.
+
+Manual Pi SMP/MCUboot compile/sign/package qualification passes in 351.61s.
+Offline verification confirms the debug-key signature, ZIP CRCs, packaged-image
+byte identity and rejection of a payload-bit flip. Both ARM/RISC-V Python-enabled
+GDBs initialize on amd64 and ARM64. These observations do not qualify production
+signing, device transfer, target attachment or recovery. Evidence and safety
+limits are in [the support matrix](../support-matrix.md#manual-pr-validation).
+
+No hardware operations occurred. PB-030/031/032/033 remain future work; the full
+upstream-derived Python lock generator is not part of this completed migration.
+Full branch-scoped documentation audit and follow-up publication/CI verification
+remain to finish. Earlier pause snapshot below is historical and its resume
+prohibition no longer applies. All remaining sections describe that pause state,
+not current instructions or acceptance.
 
 ## Historical pause snapshot (not current instructions)
 

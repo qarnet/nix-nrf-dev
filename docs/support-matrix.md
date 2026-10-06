@@ -13,15 +13,43 @@ and physical device behavior are separate verification boundaries.
 | Application-owned imported workspace/module | qualified | qualified | qualified | Selected source/compiler/Python and linked module; original source/config/Git state unchanged |
 | Stock extension registry/parser audit | 38/39 load | 38/39 load | 38/39 load | All 39 declarations accounted for across four layouts; missing suit-manifest retained as failure |
 | `west suit-manifest` | unavailable | unavailable | unavailable | Upstream descriptor references removed Python implementation |
-| MCUboot signing/update package creation | not separately qualified | not separately qualified | not separately qualified | Hello-world builds/parser help do not establish signing/package correctness |
+| MCUboot signing/update package creation | not separately qualified | not separately qualified | offline sample qualified | One nRF52840 SMP/MCUboot configuration, public debug key, package bytes and tamper rejection; not production signing policy |
 | MCUboot/SMP transport, install, rollback/recovery | not qualified | not qualified | not qualified | Requires separately approved hardware/transport acceptance |
-| Python-enabled GDB integration | not qualified here | not qualified here | not qualified here | Library patching/plain-GDB execution does not establish Python-GDB behavior |
+| Python-enabled GDB integration | not separately tested | offline initialization smoke passes | offline initialization smoke passes | ARM/RISC-V GDB imports Python/gdb; no remote target or debug lifecycle qualification |
 | Nordic-managed ARM64 firmware bundle | not applicable | not applicable | unavailable | Public Nordic Linux ARM64 bundle index empty; use experimental west explicitly |
 | x86 `native_sim` multilib on ARM64 | not applicable | not applicable | unavailable | Architecture-specific `-m32` workflow; explicit `withMultilib = true` rejected |
 
 Manual PR validation can add narrower successful observations below without
 promoting an entire row to universal runtime support. Current build/parser
 evidence is in [west backend qualification](development/west-backend-status.md#v341-qualification).
+
+### Manual PR validation
+
+PR #13 initial commit `ca3adc160000cec6311a7b9452d94ed65692e12a` passes
+[hosted run 37537793047](https://github.com/qarnet/nix-nrf-dev/actions/runs/37537793047):
+shared checks and both native CI entries; release job is skipped for a PR.
+A separate clean checkout of that exact commit passes the complete ARM64 Pi
+flake gate (751.87s), not just the earlier dirty-worktree/cache qualification.
+Report: Pi `~/nix-nrf-experiments/state/pr13-clean-native-gates.json`.
+
+An offline Pi build of `zephyr/samples/subsys/mgmt/mcumgr/smp_svr` for
+`nrf52840dk/nrf52840`, `--sysbuild`, `EXTRA_CONF_FILE=bt.conf` and
+`SB_CONFIG_PARTITION_MANAGER=n` (DTS partitioning)
+produced MCUboot/app ELFs, `zephyr.signed.bin`, and `dfu_application.zip` (351.61s).
+Existing SDK imgtool verifies the signature with its public debug P-256 key.
+The package contains a byte-identical signed image and passes ZIP CRC checks.
+Flipping a payload byte makes verification fail; original image is unchanged.
+Report: Pi `~/nix-nrf-experiments/pr-smp-sign-package-verified/result.json`.
+
+This sample uses a public debug signing key and enables insecure demonstration
+settings (including unrestricted MCUmgr filesystem access). It is not production
+firmware. No image was flashed or run, and no BLE/USB/serial transfer, rollback,
+recovery or device security/lifecycle behavior is established by this test.
+
+Both ARM and RISC-V `gdb-py` executables initialize embedded Python 3.12.13 and
+import `gdb` on amd64 and ARM64 with foreign `PYTHONHOME`/`PYTHONPATH` cleared.
+This narrows the old unqualified-host-tool gap; it does not prove attachment,
+breakpoints, flashing or integration with a debugger client.
 
 ## Missing suit-manifest: precise loss
 

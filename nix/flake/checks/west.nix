@@ -249,7 +249,7 @@
   # hook with a fake HOME and run the real scoped wrapper against a
   # fake-ready workspace, asserting every composed value contains no
   # quote artifact and the default workspace path stays
-  # `$HOME/ncs/v3.3.0`.
+  # `$HOME/ncs/v3.4.1`.
   westBackendQuotingCheck = let
     nastyNcsVersion = "v3.4.1 with 'quote' and spaces";
     nastySdkVersion = "1.0.1'sdk";

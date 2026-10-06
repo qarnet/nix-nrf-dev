@@ -51,8 +51,10 @@ approval, and is not part of normal CI.
 ## Constraints
 
 - SDK 1.0.1 Python-enabled GDB links Python 3.12; the package now supplies that
-  library. Compiler and plain-GDB executable probes are separate from Python-GDB
-  integration qualification, which is not claimed here.
+  library. Manual ARM/RISC-V `gdb-py` initialization and `import gdb` pass on both
+  native hosts. Compiler/plain-GDB CI probes and this offline Python smoke do not
+  qualify target attachment or debugger-client integration. See the
+  [support matrix](../support-matrix.md#manual-pr-validation).
 - Workspace readiness resolves `-r` includes and accepts any west version that
   satisfies all constraints. It does not require initial `1.5.0` after
   requirements installation.
