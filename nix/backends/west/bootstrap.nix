@@ -45,6 +45,11 @@ in
       [
         [
           "--set"
+          "NIX_NRF_WEST_REQUIREMENT_PROBE"
+          "${../../../bin/backends/west/check-python-requirements.py}"
+        ]
+        [
+          "--set"
           "NIX_NRF_WEST_PREINSTALL_REQUIREMENTS"
           (builtins.concatStringsSep "\n" (metadata.preinstallRequirements or []))
         ]

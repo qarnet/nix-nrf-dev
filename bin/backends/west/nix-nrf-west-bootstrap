@@ -46,7 +46,7 @@
 # stdout stays empty unless --print-sdk-path succeeds, so command
 # substitution stays machine-readable. All status and prompts go to stderr.
 #
-# Timeout policy: only read-only checks (venv imports, west --version) get a
+# Timeout policy: read-only readiness probes get a
 # timeout; long installs (pip, west init/update) never do.
 
 import argparse
@@ -279,8 +279,8 @@ def west_version_ok(venv_west, workspace, requirement_paths=None):
 
 def readiness(workspace, source_info=None):
     """Return the list of problems; empty list means ready. Read-only: no
-    mutation, no network, no pip/west invocation except venv import and
-    west --version checks."""
+    mutation or network; probes imports, versions, selected requirements and
+    installed dependency consistency."""
     problems = []
 
     if source_info is None and not (workspace / ".west" / "config").is_file():
@@ -337,52 +337,22 @@ def readiness(workspace, source_info=None):
         problems.append("venv west version does not satisfy workspace requirements")
     # pip check cannot detect missing requested roots. Evaluate selected SDK
     # files against this interpreter's actual distribution metadata.
-    requirement_probe = r'''
-import importlib.metadata as metadata
-import json
-from pathlib import Path
-import shlex
-import sys
-from packaging.requirements import Requirement
-
-root = Path(sys.argv[1]).resolve()
-seen = set()
-errors = []
-def check_file(path, depth=0):
-    path = Path(path).resolve()
-    if not path.is_relative_to(root) or depth > 16:
-        raise ValueError("requirement include escapes workspace or exceeds depth limit")
-    if path in seen:
-        return
-    seen.add(path)
-    for raw in path.read_text().splitlines():
-        line = raw.strip().split(" #", 1)[0]
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith(("-r ", "--requirement ", "--requirement=")):
-            included = line.split("=", 1)[1] if line.startswith("--requirement=") else shlex.split(line)[1]
-            check_file(path.parent / included, depth + 1)
-            continue
-        if line.startswith(("--index-url", "--extra-index-url", "--find-links", "--trusted-host")):
-            continue
-        requirement = Requirement(line)
-        if requirement.marker and not requirement.marker.evaluate():
-            continue
-        try:
-            installed = metadata.version(requirement.name)
-        except metadata.PackageNotFoundError:
-            errors.append(f"{requirement.name}: not installed (requested by {path})")
-            continue
-        if requirement.specifier and not requirement.specifier.contains(installed, prereleases=True):
-            errors.append(f"{requirement.name}: installed {installed}, requires {requirement.specifier}")
-for path in json.loads(sys.argv[2]):
-    check_file(path)
-if errors:
-    print("\n".join(errors))
-    sys.exit(1)
-'''
+    requirement_probe = os.environ.get(
+        "NIX_NRF_WEST_REQUIREMENT_PROBE",
+        str(Path(__file__).with_name("check-python-requirements.py")),
+    )
     try:
-        selected = subprocess.run([str(venv_python), "-c", requirement_probe, str(workspace), json.dumps([str(workspace / req) for req in requirement_paths])], capture_output=True, text=True, timeout=CHECK_TIMEOUT)
+        selected = subprocess.run(
+            [
+                str(venv_python),
+                requirement_probe,
+                str(workspace),
+                json.dumps([str(workspace / req) for req in requirement_paths]),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=CHECK_TIMEOUT,
+        )
         if selected.returncode:
             detail = selected.stdout.strip() or selected.stderr.strip()
             problems.append("selected Python requirements not satisfied: " + detail)
@@ -505,7 +475,7 @@ def run_setup(args, workspace):
         )
         created_venv = True
 
-    # Pip constraints (release-specific, e.g. cbor2==5.9.0 for NCS v3.3.0) are
+    # Pip constraints (release-specific, e.g. cbor2==5.9.0 for NCS v3.4.1) are
     # written into the venv before any pip invocation and applied via `-c`.
     constraints_path = write_constraints(workspace, pip_constraints())
 

@@ -40,7 +40,8 @@
   in
     pkgs.runCommand "nix-nrf-west-bootstrap-tests"
     {
-      nativeBuildInputs = [pkgs.python3];
+      nativeBuildInputs = [(pkgs.python3.withPackages (ps: [ps.packaging]))];
+      NIX_NRF_WEST_REQUIREMENT_PROBE = ../../../bin/backends/west/check-python-requirements.py;
       inherit module;
       setupScript = ../../../bin/backends/west/nix-nrf-west-bootstrap;
       testFile = ../../../tests/unit/test_nix_nrf_west_bootstrap.py;
@@ -52,6 +53,7 @@
       chmod +x nix-nrf-west-bootstrap
       cp "$testFile" test_nix_nrf_west_bootstrap.py
       NIX_NRF_WEST_BOOTSTRAP_SCRIPT="$PWD/nix-nrf-west-bootstrap" python3 test_nix_nrf_west_bootstrap.py
+      python3 -B ${../../../tests/unit/test_python_requirements_probe.py}
       cp "$fixtureTest" test_west_workspace_fixture.py
       NIX_NRF_WEST_FIXTURE="$fixture" python3 test_west_workspace_fixture.py
       [ -x "$module/libexec/nix-nrf/bootstrap" ] || {
@@ -321,7 +323,7 @@
 
       # ── Shell hook with quote-containing metadata ───────────────────
       # Exact matches catch the defect directly: without the variable
-      # composition, `$_workspace` would be `$HOME/ncs/'v3.3.0 with
+      # composition, `$_workspace` would be `$HOME/ncs/'v3.4.1 with
       # 'quote' and spaces'` (literal escape quotes embedded) and fail
       # both the equality and the missing-value assertions below.
       printf '%s\n' "$shellHook" > hook.sh
@@ -363,7 +365,7 @@
     '';
 
   # Public west shell boundary gate: instantiates `mkNrfShell { backend
-  # = "west"; ncsVersion = "v3.3.0"; }` (the public API) with caller
+  # = "west"; ncsVersion = "v3.4.1"; }` (the public API) with caller
   # name/packages/extraShellHook/withMultilib/inputsFrom and runs its
   # public `nix-nrf` and scoped `west` against a fake-ready workspace
   # plus fake venv executables. It runs no network, west update, pip, or workspace
