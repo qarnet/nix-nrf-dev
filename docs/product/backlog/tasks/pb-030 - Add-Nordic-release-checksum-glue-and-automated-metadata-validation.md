@@ -31,7 +31,7 @@ Implement checksum glue and validation first. Preserve upstream byte order/newli
 
 ### Technical context
 
-Tagged scripts/print_toolchain_checksum.sh hashes requirements-fixed.txt then platform tools YAML. v3.4.1 Linux calculation yields8285d8ad56 and matches current published amd64 mapping. Index has mixed schema1/schema2 records, multiple selectors can share bundle, source-mirroring action supports mapping overrides. docs/development/nordic-artifact-metadata-research.md records exact evidence.
+Tagged scripts/print_toolchain_checksum.sh hashes requirements-fixed.txt then platform tools YAML. v3.4.1 Linux calculation yields8285d8ad56 and matches the inspected published amd64 mapping. Index has mixed schema1/schema2 records, multiple selectors can share bundle, source-mirroring action supports mapping overrides. docs/product/research/nordic-release-metadata.md records source evidence.
 
 ### Open questions
 

@@ -34,9 +34,9 @@ Channel listing/selection, matching-ELF control-block lookup, explicit address o
 
 ### Technical context
 
-nix/commands/default.nix; nix/hardware/openocd.nix; docs/development/rtt-debug-research.md#rtt-capture. Up-channel consumption writes target read offsets; generic raw transport cannot infer firmware drops or acknowledge durable host storage. Receiver prj.conf enables UART shell; offload statistics use RTT to mean round-trip time, not SEGGER RTT.
+nix/commands/default.nix; nix/hardware/openocd.nix; docs/product/research/debug-tooling.md#observation-and-evidence-limits. Up-channel consumption writes target read offsets; generic raw transport cannot infer firmware drops or acknowledge durable host storage. Receiver prj.conf enables UART shell; offload statistics use RTT to mean round-trip time, not SEGGER RTT.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 

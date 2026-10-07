@@ -123,7 +123,8 @@ firmware qualification is opt-in with prepared sources/Python; its portable
 procedure lives in `tests/application-types/README.md`. ARM64 KVM VM results do
 not prove software-emulated startup. The forced-TCG Pi qualification now passes
 the original assertions with the test-image-only systemd 261.1 stat-key repair;
-details and limits live in `docs/development/linux-host-platform-plan.md`.
+implementation and limits live in `nix/flake/checks/udev-{systemd,vm}.nix`.
+Lasting host/backend policy is recorded in `docs/adr/0001-select-native-backends-explicitly.md`.
 
 ## Clean-room bootstrap test
 

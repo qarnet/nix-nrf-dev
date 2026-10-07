@@ -33,7 +33,7 @@ Build on checksum/mapping validation. Record SDK Git identity, source digests, d
 
 ### Technical context
 
-Current nix/backends/west/versions.nix holds active v3.4.1 metadata. Fixed requirements contain extras and --index-url, so cannot be used unchanged with pip -c. Nordic tools YAML west1.4.0 differs from fixed/observed1.5.0. Compiler SDK1.0.1 changed GNU archive layout. See docs/development/nordic-artifact-metadata-research.md; PB-030 supplies checksum validation.
+Current nix/backends/west/versions.nix holds active v3.4.1 metadata. Fixed requirements contain extras and --index-url, so cannot be used unchanged with pip -c. Nordic tools YAML west1.4.0 differs from fixed/observed1.5.0. Compiler SDK1.0.1 changed GNU archive layout. See docs/product/research/nordic-release-metadata.md; PB-030 supplies checksum validation.
 
 ### Open questions
 

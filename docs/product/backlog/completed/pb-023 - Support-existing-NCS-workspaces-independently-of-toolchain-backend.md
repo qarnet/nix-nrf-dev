@@ -14,7 +14,7 @@ labels:
   - 'area:documentation'
 dependencies: []
 documentation:
-  - docs/development/application-types-research.md
+  - docs/adr/0002-separate-source-and-toolchain-ownership.md
 priority: p2
 type: feature
 ordinal: 23000

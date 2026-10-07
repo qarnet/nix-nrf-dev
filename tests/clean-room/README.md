@@ -14,7 +14,8 @@ It never flashes hardware.
 
 ## Requirements
 
-- Linux with working Nix installation. `clean-env-test` shell and packaged
+- `x86_64-linux` with working Nix installation. This nrfutil-only harness requires
+  the `clean-env-test` shell and packaged
   nrfutil must build or come from cache.
 - Network access to Nordic endpoints. Download is several GiB.
 - At least 25 GiB free on isolated-home filesystem unless configured otherwise.

@@ -31,7 +31,7 @@ Research relevant SDK/toolchain discovery, installation and environment-manageme
 
 ### Technical context
 
-Source https://github.com/nordicsemi/pc-nrfconnect-toolchain-manager/tree/main; recorded in docs/SOURCES.md. Upstream README identifies an nRF Connect for Desktop application. Compare with nix/backends/nrfutil/ and nix/backends/west/ while distinguishing desktop implementation from the pinned nrfutil sdk-manager CLI.
+Source https://github.com/nordicsemi/pc-nrfconnect-toolchain-manager/tree/main; recorded in sources.md. Upstream README identifies an nRF Connect for Desktop application. Compare with nix/backends/nrfutil/ and nix/backends/west/ while distinguishing desktop implementation from the pinned nrfutil sdk-manager CLI.
 
 ### Open questions
 

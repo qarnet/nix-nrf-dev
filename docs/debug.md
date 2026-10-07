@@ -3,7 +3,7 @@
 `nix-nrf session` owns one foreground OpenOCD process for an explicitly selected
 CMSIS-DAP v2 probe and nRF54L15 CPUAPP. It is independent of the selected SDK
 backend and never bootstraps, builds, flashes, unlocks, or recovers a device.
-FLPR run control is not provided. See [FLPR research](development/flpr-debug-capabilities.md).
+FLPR run control is not provided. See [product research](product/research/debug-tooling.md#flpr-capabilities).
 
 Host lifecycle and actual OpenOCD Tcl transport are tested without hardware.
 Running/halted target preservation and combined physical RTT/GDB operation
@@ -121,14 +121,10 @@ usbreset SN:SERIAL
 
 This is a logical USB reset, not a guarantee of target reset or power removal.
 It is deliberately outside `session start` and is not a capture fallback.
-It succeeded on XIAO serial EF0E3B64 without root, but did not restore that
-board's post-flash SWD access. See the
-[physical validation record](development/pb002-pb004-hardware.md).
-
 Reliable remote power cycling requires verified per-port switching. Target
 reset can instead use reset-capable probe firmware or a separate controlled
-reset line. The XIAO schematic has a PA04/Q2 reset circuit; see the
-[probe-firmware investigation](development/xiao-probe-reset-research.md) for
-the missing mapping found in a published stock image. Do not cycle an entire USB controller/hub,
+reset line. A board reset circuit does not prove its probe firmware exposes it.
+PB-002/PB-004 retain the physical-access blocker; probe-firmware diagnosis
+belongs to the separate `xiao-samd11-debug-probe` project. Do not cycle an entire USB controller/hub,
 assume a stale bus/device number still identifies the board, or run mass erase
 because a logical reset failed.

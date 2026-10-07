@@ -128,6 +128,21 @@ approval; backlog priority is not that approval.
 
 ## Ownership
 
+Documentation has separate roles:
+
+- User guides in `docs/` describe current public behavior and limits.
+- `docs/development/architecture.md` maps maintained source ownership.
+- `docs/adr/` records accepted architectural choices and their consequences.
+- Product items retain plans, execution history and acceptance evidence;
+  `docs/product/research/` keeps concise source-backed findings needed by them.
+
+Do not commit session checkpoints, implementation handoffs or progress diaries
+as contributor guides. Temporary evidence paths may identify a historical local
+run in product notes, but are not public documentation or durable team artifacts.
+Older product notes referring to removed development reports describe the file
+at the recorded revision; [the pre-cleanup tree](https://github.com/qarnet/nix-nrf-dev/tree/82f7440ddbdc2c34221379db308c3fb134d17562/docs/development)
+retains those historical reports. Use current guides/ADRs for current behavior.
+
 Product-owned fields are title, priority, type, intended behavior, scope,
 non-goals, and acceptance text. Do not silently change them during execution.
 Execution owns plans, notes, summaries, checkbox state, and evidence. Status
@@ -150,11 +165,8 @@ Keep upstream's Nixpkgs pin: serial-mcp documents an install-check incompatibili
 when replacing it with a newer consumer Nixpkgs. This repository adds the tool
 only to contributor shells, not `mkNrfShell` consumer packages.
 
-The initial [RTT/debug research](../development/rtt-debug-research.md) was
-converted into PB-001 through PB-022 after inspecting le-audio-receiver.
-The research document retains sources, receiver evidence, and a coverage map;
-the task files own current priorities, dependencies, scope, and acceptance.
-Use the CLI for current status. Receiver tooling and FLPR investigation are
-near-term work; profiling and SWO/trace remain later research. The older
-[roadmap](../development/roadmap.md) retains unrelated proposals rather than
-duplicating migrated item status.
+Initial RTT/debug research became PB-001 through PB-022 after inspecting
+le-audio-receiver. [Source-backed findings](research/debug-tooling.md) retain
+debug/FLPR constraints without duplicating scope or status. Use the CLI for
+current priorities, dependencies and acceptance. Unadopted implementation plans
+are not architectural decisions.

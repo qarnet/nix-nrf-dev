@@ -1,9 +1,9 @@
 # Repository architecture
 
 Maintainer reference for source ownership and construction. User-facing backend
-behavior lives in [backends.md](../backends.md). Backend implementation notes
-live in [nrfutil-backend-status.md](nrfutil-backend-status.md) and
-[west-backend-status.md](west-backend-status.md).
+behavior lives in [backends.md](../backends.md). Lasting design rationale lives
+in [architecture decision records](../adr/README.md); execution history and
+acceptance evidence belong in [the product backlog](../product/README.md).
 
 ## Public outputs
 
@@ -160,8 +160,12 @@ checks once in the shared job, including both-host evaluation. The dependent
 native matrix dynamically enumerates every remaining check and all package
 outputs for its own system. `fail-fast: false` preserves independent failures.
 Trusted-main release needs shared and both native entries; PRs do not publish.
+Branch protection must require their reported names: `Shared source checks`,
+`Native (x86_64-linux)` and `Native (aarch64-linux)`, not the internal job ID
+`check`.
 `nix/flake/checks/udev-systemd.nix` backports a same-version rule-stat path fix
 only into the test image. Both boot stages keep correct change detection through
 NixOS's symlinked rules tree. Consumer packages and dependency pins are unchanged.
-The unchanged guest assertions pass on ARM64 without KVM; hosted workflow
-execution is separate from the recorded Pi qualification.
+ARM64 permits QEMU TCG and uses bounded device-only coldplug and startup waits.
+It does not qualify subsystem/driver-event stress. Original guest assertions
+remain intact; amd64 retains its KVM requirement.

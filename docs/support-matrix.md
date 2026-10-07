@@ -19,37 +19,21 @@ and physical device behavior are separate verification boundaries.
 | Nordic-managed ARM64 firmware bundle | not applicable | not applicable | unavailable | Public Nordic Linux ARM64 bundle index empty; use experimental west explicitly |
 | x86 `native_sim` multilib on ARM64 | not applicable | not applicable | unavailable | Architecture-specific `-m32` workflow; explicit `withMultilib = true` rejected |
 
-Manual PR validation can add narrower successful observations below without
-promoting an entire row to universal runtime support. Current build/parser
-evidence is in [west backend qualification](development/west-backend-status.md#v341-qualification).
+PB-001 and PB-026 retain source revisions and acceptance evidence. Repeatable
+[qualification procedures](../tests/application-types/README.md) use prepared
+sources/Python and keep registry, parser and firmware results separate. They do
+not establish arbitrary boards, manifests or optional SDK features.
 
-### Manual PR validation
+Offline signing covers the SDK's nRF52840 `smp_svr` sample with `--sysbuild`,
+`EXTRA_CONF_FILE=bt.conf` and `SB_CONFIG_PARTITION_MANAGER=n`: debug P-256
+signature verification, package CRCs/byte identity and tamper rejection.
+The public debug key and insecure demonstration settings, including unrestricted
+MCUmgr filesystem access, are not production security policy. No BLE/USB/serial
+transfer, install, rollback, recovery or device lifecycle behavior is qualified.
 
-PR #13 initial commit `ca3adc160000cec6311a7b9452d94ed65692e12a` passes
-[hosted run 37537793047](https://github.com/qarnet/nix-nrf-dev/actions/runs/37537793047):
-shared checks and both native CI entries; release job is skipped for a PR.
-A separate clean checkout of that exact commit passes the complete ARM64 Pi
-flake gate (751.87s), not just the earlier dirty-worktree/cache qualification.
-Report: Pi `~/nix-nrf-experiments/state/pr13-clean-native-gates.json`.
-
-An offline Pi build of `zephyr/samples/subsys/mgmt/mcumgr/smp_svr` for
-`nrf52840dk/nrf52840`, `--sysbuild`, `EXTRA_CONF_FILE=bt.conf` and
-`SB_CONFIG_PARTITION_MANAGER=n` (DTS partitioning)
-produced MCUboot/app ELFs, `zephyr.signed.bin`, and `dfu_application.zip` (351.61s).
-Existing SDK imgtool verifies the signature with its public debug P-256 key.
-The package contains a byte-identical signed image and passes ZIP CRC checks.
-Flipping a payload byte makes verification fail; original image is unchanged.
-Report: Pi `~/nix-nrf-experiments/pr-smp-sign-package-verified/result.json`.
-
-This sample uses a public debug signing key and enables insecure demonstration
-settings (including unrestricted MCUmgr filesystem access). It is not production
-firmware. No image was flashed or run, and no BLE/USB/serial transfer, rollback,
-recovery or device security/lifecycle behavior is established by this test.
-
-Both ARM and RISC-V `gdb-py` executables initialize embedded Python 3.12.13 and
-import `gdb` on amd64 and ARM64 with foreign `PYTHONHOME`/`PYTHONPATH` cleared.
-This narrows the old unqualified-host-tool gap; it does not prove attachment,
-breakpoints, flashing or integration with a debugger client.
+Python-GDB coverage is initialization and `import gdb` only, with foreign Python
+variables cleared. Target attachment, breakpoints, flashing and debugger-client
+integration are not qualified.
 
 ## Missing suit-manifest: precise loss
 

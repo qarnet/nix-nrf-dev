@@ -33,9 +33,9 @@ Evaluate channel pairing, console encoding versus binary framing, buffering, mul
 
 ### Technical context
 
-Pinned src/server/rtt_server.c forwards socket input down-channel and has no receive-only switch; docs/development/rtt-debug-research.md#rtt-capture. Initial capture client must remain application receive-only.
+Pinned src/server/rtt_server.c forwards socket input down-channel and has no receive-only switch; docs/product/research/debug-tooling.md#observation-and-evidence-limits. Initial capture client must remain application receive-only.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 

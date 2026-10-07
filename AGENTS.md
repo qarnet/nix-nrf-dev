@@ -18,7 +18,7 @@ NCS v3.4.1 has a west-version metadata discrepancy: `tools-versions-linux.yml`
 lists 1.4.0, while `requirements-fixed.txt` pins 1.5.0 and the observed Nordic
 bundle `8285d8ad56` contains 1.5.0. Keep declared tool versions, Python resolution,
 and observed binaries distinct; do not silently rewrite one to match another.
-History and evidence: `docs/development/nordic-artifact-metadata-research.md`.
+History and evidence: `docs/product/research/nordic-release-metadata.md`.
 
 `source.mode = "workspace"` selects existing SDK sources, not application type.
 Workspace strings anchor at shell entry; never replace them with Nix paths that

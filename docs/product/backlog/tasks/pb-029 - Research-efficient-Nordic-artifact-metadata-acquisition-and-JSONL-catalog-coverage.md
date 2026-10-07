@@ -34,7 +34,7 @@ Compare Nordic published SDK/toolchain/package indexes, PyPI Simple metadata, JF
 
 ### Technical context
 
-Initial scripts/nordic_artifact_catalog.py prototype captured nine public metadata sources as docs/research/nordic-artifacts/2026-10-06/catalog.jsonl: 391 records, source-level provenance/digests in manifest.json. Published indexes avoid broad recursive crawling; sdk-manager metadata is already JSONL. Nordic PyPI Simple endpoints returned HTML despite JSON negotiation. Anonymous basic Storage works, bulk list returned403, AQL/export require privileges. Evidence: docs/development/nordic-artifact-metadata-research.md and docs/research/nordic-artifacts/README.md.
+Initial scripts/nordic_artifact_catalog.py prototype captured nine public metadata sources as docs/research/nordic-artifacts/2026-10-06/catalog.jsonl: 391 records, source-level provenance/digests in manifest.json. Published indexes avoid broad recursive crawling; sdk-manager metadata is already JSONL. Nordic PyPI Simple endpoints returned HTML despite JSON negotiation. Anonymous basic Storage works, bulk list returned403, AQL/export require privileges. Evidence: docs/product/research/nordic-release-metadata.md and docs/research/nordic-artifacts/README.md.
 
 ### Open questions
 

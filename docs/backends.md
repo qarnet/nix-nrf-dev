@@ -61,7 +61,7 @@ toolchain bundle under your home directory (for example
 - `nix-nrf bootstrap --print-sdk-path` prints absolute SDK root on
   success.
 
-`autoBootstrap` defaults to `true`. The west wrapper checks on each invocation
+`autoBootstrap` defaults to `true`. The west wrapper checks on each SDK-extension invocation
 and installs only missing, approved components. With `autoBootstrap = false`,
 the wrapper only checks and prints `nix-nrf bootstrap` when something is missing.
 
@@ -174,9 +174,7 @@ selection, generated-Nix drift, evaluation/shell failure, or any mutation
 fails workflow. Normal PR and CI checks stay deterministic, never contact
 Nordic, and test explicit `v3.4.1`.
 
-## Scoped toolchain environment
-
-### Optional west Python tooling
+## Optional west Python tooling
 
 Baseline SDK requirement files are always installed by approved managed
 bootstrap. Additional Nordic groups are opt-in:
@@ -216,7 +214,7 @@ identify this as the last release branch supporting nRF52, including nRF52840;
 future v3.4 patch releases remain possible. Earlier v3.3.0 qualification is
 historical evidence, not acceptance of the new baseline.
 
-### Three west command states
+## Three west command states
 
 See [qualified capabilities and known limitations](support-matrix.md) for exact
 support boundaries, missing suit-manifest functionality and separate DFU/signing
@@ -264,6 +262,8 @@ can create a new caller-owned workspace. `west update`, writable `config`, and
 `forall` remain explicit mutations. No core request silently installs SDK sources
 or Python packages. Extension requests retain managed bootstrap approval and
 existing-workspace check-only ownership.
+
+## Scoped toolchain environment
 
 Nordic bundled Python/libgit2 may use Ubuntu certificate defaults absent on
 NixOS. The nrfutil child preserves explicit caller CA settings or uses the Nix

@@ -32,7 +32,7 @@ Use maintainer generator and checksum validation, record exact requested revisio
 
 ### Technical context
 
-PB-031 is the generator stage; existing .github/workflows/ci.yml and scripts/ci.py separate shared prerequisites from native Linux matrix. docs/development/nordic-artifact-metadata-research.md defines consumer/maintainer separation.
+PB-031 is the generator stage; existing .github/workflows/ci.yml and scripts/ci.py separate shared prerequisites from native Linux matrix. docs/product/research/nordic-release-metadata.md records consumer/maintainer separation.
 
 ### Open questions
 

@@ -187,5 +187,6 @@ Normal CI runs the SDK-free, real disposable Git/west preparation tests with:
 nix build -L .#checks.x86_64-linux.local-sdk-fixture-tests
 ```
 
-Real builds remain opt-in and hardware-free. Pinned results and limits live in
-[application-source-status.md](../../docs/development/application-source-status.md).
+Real builds remain opt-in and hardware-free. Current boundaries live in the
+[support matrix](../../docs/support-matrix.md); product items retain acceptance
+history. Save each run's report with its source and tool revisions.

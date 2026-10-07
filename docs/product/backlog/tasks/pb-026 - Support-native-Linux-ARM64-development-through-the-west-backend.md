@@ -38,7 +38,7 @@ Two Linux hosts; per-host pinned sdk-manager 1.16.1/Zephyr SDK 1.0.1 assets; hos
 
 ### Technical context
 
-Issue https://github.com/qarnet/nix-nrf-dev/issues/11; docs/development/linux-host-platform-plan.md and docs/development/west-toolchain-research.md record source/API/publisher metadata and Pi evidence. Main base 78df6f5. Native experimental packages and single/sysbuild imported-module firmware builds passed on thomas-rpi4; 30/33 checks passed, remaining assumptions identified. Exact constructors/guards: flake.nix, nix/backends/default.nix, nix/backends/nrfutil/package.nix, nix/backends/west/{versions,shell,zephyr-sdk}.nix; initializer skeleton; checks and CI. Approved Pi resources and prepared source/Python fixtures retained under ~/nix-nrf-experiments.
+Issue https://github.com/qarnet/nix-nrf-dev/issues/11; docs/adr/0001-select-native-backends-explicitly.md records native backend policy. Native build and failed Nordic toolchain experiments informed this item; Notes retain their outcomes. Exact constructors/guards: flake.nix, nix/backends/default.nix, nix/backends/nrfutil/package.nix, nix/backends/west/{versions,shell,zephyr-sdk}.nix; initializer skeleton; checks and CI. Main base 78df6f5.
 
 ### Open questions
 

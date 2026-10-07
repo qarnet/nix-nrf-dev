@@ -17,18 +17,12 @@ For ARM64, use `lib.aarch64-linux.mkNrfShell` and explicitly set
 `backend = "west"`. Source ownership, relative workspace strings, and check-only
 Python behavior do not change with host architecture.
 
-Host regression tests cover source routing through supported backends with real west
-and CMake. A separate [16-case firmware matrix](development/application-source-status.md)
-passed on amd64 for NCS v3.3.0 and `xiao_nrf54l15/nrf54l15/cpuapp`, covering all layouts and
-single-image/sysbuild with both backends. Other boards, releases, and arbitrary
-consumer manifests are not inferred from those results.
-These v3.3.0 results are historical evidence, not acceptance of the v3.4.1 baseline.
-The opt-in [firmware matrix](../tests/application-types/README.md) records actual
-source/compiler/module selections with already prepared application fixtures.
-An additional four-build qualification covers a locally cloned, independent
-application-owned imported workspace with relocated SDK sources and a
-manifest-owned module. See the same procedure for local-only setup and limits;
-this does not qualify arbitrary imports or excluded SDK features.
+Host regression tests cover source routing with real west and CMake. Opt-in
+[firmware qualification](../tests/application-types/README.md) records actual
+source/compiler/module selection, including imported workspaces and linked
+manifest-owned modules. See [support limits](support-matrix.md) for the active
+baseline. Build success does not qualify arbitrary imports, SDK features or
+hardware execution. Completed PB-023/PB-024 retain earlier acceptance history.
 
 ## Keep the current managed workflow
 

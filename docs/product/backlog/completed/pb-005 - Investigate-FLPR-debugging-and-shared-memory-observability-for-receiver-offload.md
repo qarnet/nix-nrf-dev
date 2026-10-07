@@ -14,7 +14,7 @@ labels:
   - 'size:M'
 dependencies: []
 documentation:
-  - docs/development/flpr-debug-capabilities.md
+  - docs/product/research/debug-tooling.md
 priority: p1
 type: research
 ordinal: 5000
@@ -39,7 +39,7 @@ Inspect silicon debug architecture, access/security/aliases, pinned and newer Op
 
 nix/hardware/openocd.nix and pinned target/nordic/nrf54l.cfg expose Cortex-M AP0 and mem_ap AP1. Receiver src/audio_offload.c:5-37,61-95; src/flpr_runtime.c:5-41,89-108; src/flpr_ring.h; boards/nrf54l15dk_nrf54l15_cpuapp.overlay. CPUAPP may reload execution SRAM and restart FLPR after a timeout.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 

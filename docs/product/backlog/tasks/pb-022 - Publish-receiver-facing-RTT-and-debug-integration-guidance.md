@@ -38,7 +38,7 @@ Document version-pinned adoption, board/ELF selection, UART handoff, observe ver
 
 README.md; docs/hardware.md; docs/backends.md; saved research. Receiver flake.nix:24-30 pins NCS v3.3.0, scripts/bin/fw-flash-54l15:107 uses legacy nrf-probes, and scripts/hil/serial_io.py owns serial lifecycle. Current public discovery is nix-nrf probes.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 

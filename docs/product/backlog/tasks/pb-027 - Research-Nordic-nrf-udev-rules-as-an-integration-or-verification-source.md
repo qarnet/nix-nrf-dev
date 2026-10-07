@@ -31,7 +31,7 @@ Research device coverage, permission policy, serial/ModemManager behavior, packa
 
 ### Technical context
 
-Source https://github.com/NordicSemiconductor/nrf-udev; recorded in docs/SOURCES.md. Current rule ownership: nix/hardware/udev-rules.nix, public nixosModules.udevRules, nix/flake/checks/udev-vm.nix. Upstream README explicitly warns that its rules permit all users to read/write Nordic devices.
+Source https://github.com/NordicSemiconductor/nrf-udev; recorded in sources.md. Current rule ownership: nix/hardware/udev-rules.nix, public nixosModules.udevRules, nix/flake/checks/udev-vm.nix. Upstream README explicitly warns that its rules permit all users to read/write Nordic devices.
 
 ### Open questions
 

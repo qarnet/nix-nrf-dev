@@ -134,6 +134,7 @@ access. See [docs/hardware.md](docs/hardware.md).
 - [docs/debug.md](docs/debug.md) covers shared sessions and their hardware
   validation limits.
 - [CONTRIBUTING.md](CONTRIBUTING.md) explains repository work.
+- [docs/adr/README.md](docs/adr/README.md) records lasting architecture decisions.
 - [docs/product/README.md](docs/product/README.md) defines the product backlog
   and its SDK-free contributor tooling.
 

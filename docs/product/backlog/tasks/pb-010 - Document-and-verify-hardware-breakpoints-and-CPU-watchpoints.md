@@ -34,7 +34,7 @@ Application-core hardware breakpoints, CPU read/write/access watchpoints, remova
 
 Pinned src/target/cortex_m.c implements DWT comparators and maskisr modes. Receiver src/flpr_ring.h contains CPU-owned ring indices and shared-memory ordering; stopping CPU can trigger offload deadlines/recovery elsewhere.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 

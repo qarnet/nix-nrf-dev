@@ -145,7 +145,8 @@ Add nix-nrf-dev to a project that already exists.
    - `ncsVersion` is required in every configuration; there is no
      `"latest"` alias or default.
    - `autoBootstrap` defaults to `true`. `west` wrapper bootstraps
-     lazily on first `west` invocation (with confirmation). Set
+      lazily on the first SDK-extension invocation (with confirmation). Core west
+      commands never trigger SDK bootstrap. Set
      `autoBootstrap = false` to make the wrapper check-only and print the
      exact `nix-nrf bootstrap` remediation when something is missing.
    - Other options include `packages`, `extraShellHook`, `inputsFrom`, and

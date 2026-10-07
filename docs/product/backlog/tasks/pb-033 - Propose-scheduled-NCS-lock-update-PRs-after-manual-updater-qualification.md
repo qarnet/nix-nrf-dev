@@ -32,7 +32,7 @@ Later stage after manual updater qualification. Define eligible release/LTS poli
 
 ### Technical context
 
-PB-032 supplies manual workflow; PB-031 supplies candidate generator; PB-030 validates checksum/mapping provenance. docs/development/nordic-artifact-metadata-research.md records staged automation and fixed consumer inputs.
+PB-032 supplies manual workflow; PB-031 supplies candidate generator; PB-030 validates checksum/mapping provenance. docs/product/research/nordic-release-metadata.md records fixed consumer inputs and the automation boundary.
 
 ### Open questions
 

@@ -34,9 +34,9 @@ Address/length validation, target/core and ELF/build metadata, explicit output p
 
 ### Technical context
 
-docs/development/rtt-debug-research.md#memory-snapshots-and-fault-inspection; OpenOCD dump_image/read_memory. Receiver overlay reserves IPC 0x20028000..0x20030000 and PCM rings at 0x2002C000/0x2002E000; src/flpr_runtime.c asserts execution SRAM 0x20030000..0x20040000. Addresses are consumer evidence, not generic defaults.
+docs/product/research/debug-tooling.md#observation-and-evidence-limits; OpenOCD dump_image/read_memory. Receiver overlay reserves IPC 0x20028000..0x20030000 and PCM rings at 0x2002C000/0x2002E000; src/flpr_runtime.c asserts execution SRAM 0x20030000..0x20040000. Addresses are consumer evidence, not generic defaults.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 

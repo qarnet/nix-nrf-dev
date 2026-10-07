@@ -33,7 +33,7 @@ Deferred feature; no implementation in the current Linux ARM64 work. Define supp
 
 ### Technical context
 
-Research: docs/development/west-toolchain-research.md; existing backend dispatch in nix/backends/default.nix and child-process toolchain scoping in nix/backends/nrfutil/shell.nix. Official ghcr.io/nrfconnect/sdk-nrf-toolchain v3.3.0 image digest sha256:f24d8932ff081ebcd8da9c248f4449bdabe461c0620a7a4ac9e95eb577ba2276 is linux/amd64. Public registry research found no runnable ARM64 image among 145 tags. Latest currently points to preview, so pin image digest and SDK source revision.
+Native-backend decision: docs/adr/0001-select-native-backends-explicitly.md; existing backend dispatch in nix/backends/default.nix and child-process toolchain scoping in nix/backends/nrfutil/shell.nix. Official ghcr.io/nrfconnect/sdk-nrf-toolchain v3.3.0 image digest sha256:f24d8932ff081ebcd8da9c248f4449bdabe461c0620a7a4ac9e95eb577ba2276 is linux/amd64. Public registry inspection on 2026-10-04 found no runnable ARM64 image among 145 tags and latest pointed to a preview. Pin image digest and SDK source revision; metadata inspection is not container runtime qualification.
 
 ### Open questions
 

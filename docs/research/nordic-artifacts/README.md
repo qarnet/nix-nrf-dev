@@ -54,4 +54,4 @@ jq -c 'select(.kind == "toolchain" and .data.key == "v3.4.1")' \
 ```
 
 Broader acquisition/export alternatives and maintainer/consumer policy are in
-[Nordic artifact metadata research](../../development/nordic-artifact-metadata-research.md).
+[Nordic release metadata research](../../product/research/nordic-release-metadata.md).

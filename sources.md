@@ -1,4 +1,4 @@
-https://github.com/NordicSemiconductor/nrf-udev
+https://github.com/NordicSemiconductor/nrf-udev (PB-027; not adopted device policy)
 https://github.com/nrfconnect/sdk-nrf/blob/main/doc/nrf/test_and_optimize/test_framework/running_unit_tests.rst
 https://github.com/nrfconnect/sdk-nrf/blob/main/doc/nrf/installation/install_ncs.rst
 https://github.com/nrfconnect/sdk-nrf/blob/main/doc/nrf/installation/updating.rst
@@ -11,4 +11,6 @@ https://github.com/nix-community/zephyr-nix
 https://github.com/adisbladis/west2nix
 https://github.com/MatthewCroughan/nrf-nix
 
-Annotated Nordic udev/toolchain-manager research references: [docs/SOURCES.md](docs/SOURCES.md).
+https://github.com/nordicsemi/pc-nrfconnect-toolchain-manager (PB-028; desktop manager, not sdk-manager CLI)
+
+Release metadata evidence: [product research](docs/product/research/nordic-release-metadata.md).

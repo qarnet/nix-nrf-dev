@@ -35,7 +35,7 @@ Use the pinned OpenOCD, explicit serial/core/speed and configurable local ports.
 
 nix/hardware/openocd.nix; nix/commands/default.nix; bin/commands/nix-nrf-probes; tests/hardware/preflight_xiao.py; tcl/nrf54l_flash.tcl. Pinned target reserves 16 KiB at 0x20000000 without backup; default gdb-attach halts. Receiver src/flpr_runtime.c restarts FLPR independently of CPUAPP.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 
