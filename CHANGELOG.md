@@ -9,6 +9,7 @@ All notable changes to the nix-nrf-dev project (and its `nix-nrf` CLI).
 
 | Version | Date | Highlights |
 |---|---|---|
+| [0.2.0](#020) | 2026-10-08 | Native Linux ARM64 west development; NCS v3.4.1 baseline; SDK-independent west core and command diagnostics; explicit Python tooling groups |
 | [0.1.3](#013) | 2026-10-03 | Independent SDK workspace sources; experimental shared OpenOCD sessions and verification fixtures; pinned product backlog tooling |
 | [0.1.2](#012) | 2026-09-12 | Documentation refresh; fixed fresh-shell default `nrfutil` bootstrap with content-pinned sdk-manager `1.16.1` supply |
 | [0.1.1](#011) | 2026-08-17 | Documentation: install section split into automated (`init-project`) and manual (hand-written `flake.nix`) quick start methods; new detailed install guide (`docs/install.md`) |
@@ -16,13 +17,79 @@ All notable changes to the nix-nrf-dev project (and its `nix-nrf` CLI).
 
 ## [Unreleased]
 
-### Testing
+## [0.2.0]
 
-- Added local-only independent SDK fixtures and seven disposable Git/west
-  lifecycle tests. Qualified four additional single-image/sysbuild builds through
-  both backends with an application-owned imported NCS v3.3.0 manifest, relocated
-  SDK sources, and a manifest-owned linked module. Source-preservation and negative
-  import/conflict checks passed; no downloads or hardware execution involved.
+### Added
+
+- Native `aarch64-linux` packages, apps, shells and library outputs alongside
+  `x86_64-linux`. Experimental west provides native ARM/RISC-V cross-compilers on
+  both hosts. Per-host sdk-manager 1.16.1 archives remain content-pinned.
+- Host-aware repository/initializer presets and portable west-generated projects.
+  Public `mkNrfShell` retains its nrfutil default; unsupported ARM64 Nordic
+  toolchain requests and explicit ARM64 multilib fail without fallback or acquisition.
+- SDK-independent core west commands and separate resolved-registry/parser
+  diagnostics. General help and doctor distinguish core availability, extension
+  discovery and command readiness without importing arbitrary extensions in doctor.
+- Optional west Python requirement groups `ncs-extra` and `ncs-ci`, joint
+  dependency resolution, selected-root/version checks and read-only `pip check`.
+  Caller-owned workspace Python remains check-only, including `--yes`.
+- Bounded maintainer-only Nordic advertised-metadata catalog with source
+  provenance and explicit coverage limits. It is not a package lock, full mirror
+  or consumer-time network dependency; lock/update automation remains future work.
+
+### Changed
+
+- Active development/qualification baseline moves to NCS v3.4.1, Zephyr SDK 1.0.1
+  GNU layout and Python 3.12. West metadata/package output replaces v3.3.0 with
+  `west-zephyr-sdk-v3_4_1`. West consumers needing v3.3.0 must retain a prior
+  nix-nrf-dev revision; explicit consumer SDK pins are not automatically migrated.
+- CI runs shared source gates followed by independent native amd64/ARM64 checks,
+  packages and generated-consumer smoke tests. Both native entries gate
+  trusted-main release publication; normal PR CI never provisions mutable SDKs.
+
+### Fixed
+
+- Managed west setup clears inherited source/CMake/west configuration before
+  workspace initialization. Nordic child processes preserve caller CA settings
+  or use the Nix trust store without disabling TLS verification.
+- Public core/help/alias routing and workspace configuration guards preserve
+  selected workspace ownership without requiring build readiness.
+- Session regression client consumes complete OpenOCD Tcl frames rather than
+  assuming one socket read contains a reply.
+- ARM64 udev VM tests support bounded software emulation. A test-image-only
+  systemd 261.1 rule-stat path repair fixes false reload detection while retaining
+  original guest assertions; consumer systemd and dependency pins are unchanged.
+
+### Refactored
+
+- Selected Python requirement checking is a separate packaged script executed
+  under workspace Python, with subprocess tests and unchanged read-only semantics.
+
+### Documentation
+
+- Replace development plans, status diaries and checkpoints with concise current
+  guides, source ownership and accepted backend/source-ownership ADRs. Product
+  items retain history; public support documentation no longer cites local
+  temporary evidence paths. Reconcile retired references and stale source comments.
+
+### Testing and limitations
+
+- Fresh v3.4.1 compile/link qualification passes 12 amd64 baseline cases and six
+  ARM64 cases across nRF52840, nRF5340 CPUAPP/CPUNET and nRF54L15 CPUAPP/FLPR.
+  Imported-manifest/module qualification passes four amd64 and two ARM64 builds
+  with original inputs preserved. These are host/build results, not device execution.
+- SDK-independent routing, workspace/Python ownership, initializer refusals,
+  metadata acquisition and selected-requirement parsing have hardware-free gates.
+  Full native CI and separate Raspberry Pi ARM64 verification pass.
+- Offline nRF52840 SMP/MCUboot debug-key signing/package/tamper checks and ARM/RISC-V
+  Python-GDB initialization pass. Production signing, device DFU, recovery and
+  debugger attachment remain unqualified.
+- Stock NCS v3.4.1 still declares missing `suit-manifest` implementation: strict
+  parser qualification records eight failures among 312 amd64 cases and four
+  among 156 ARM64 cases. No SDK patch or silent skip hides this upstream defect.
+  See [support limits](docs/support-matrix.md); PB-026 remains Blocked on disposition.
+- Nordic-managed Linux ARM64 toolchain installation remains unavailable. West is
+  experimental and does not promise complete Nordic bundle, Python or hardware parity.
 
 ## [0.1.3]
 
@@ -72,6 +139,11 @@ All notable changes to the nix-nrf-dev project (and its `nix-nrf` CLI).
   build success is not hardware execution proof.
 - Added session process/native-Tcl and fixture binary-protocol checks. Physical
   RTT emission, running/halted preservation, and combined RTT/GDB remain unverified.
+- Added local-only independent SDK fixtures and seven disposable Git/west
+  lifecycle tests. Qualified four additional single-image/sysbuild builds through
+  both backends with an application-owned imported NCS v3.3.0 manifest, relocated
+  SDK sources, and a manifest-owned linked module. Source-preservation and negative
+  import/conflict checks passed; no downloads or hardware execution involved.
 
 ## [0.1.2]
 
