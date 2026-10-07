@@ -8,8 +8,8 @@
 #
 # Internal backend command: installed by nix/backends/west/bootstrap.nix at
 # $out/libexec/nix-nrf/bootstrap (no standalone $out/bin command) and wrapped
-# with the exact Nix Python interpreter and metadata defaults:
-#   NIX_NRF_WEST_PYTHON                 exact Nix Python executable
+# with the venv-creation interpreter and metadata defaults:
+#   NIX_NRF_WEST_PYTHON                 exact Nix Python for venv creation
 #   NIX_NRF_WEST_NCS_VERSION            NCS release (workspace/venv version)
 #   NIX_NRF_WEST_TESTED_WEST_VERSION    west pinned before workspace creation
 #   NIX_NRF_WEST_REQUIREMENTS           newline-separated requirement paths,

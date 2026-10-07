@@ -14,6 +14,9 @@ Keep Nordic's toolchain environment scoped to child processes. Contributor
 tools must not leak into consumer `mkNrfShell` packages. NCS version and the
 nix-nrf-dev release version are independent.
 
+Public `mkNrfShell` keeps the nrfutil default and rejects it on ARM64; only
+repository and initializer presets choose west automatically. No fallback.
+
 NCS v3.4.1 has a west-version metadata discrepancy: `tools-versions-linux.yml`
 lists 1.4.0, while `requirements-fixed.txt` pins 1.5.0 and the observed Nordic
 bundle `8285d8ad56` contains 1.5.0. Keep declared tool versions, Python resolution,

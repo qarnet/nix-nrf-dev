@@ -324,7 +324,6 @@ class DoctorTestCase(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         return json.loads(lines[0])
 
-    # 1. No candidate -> hardware fail / exit 1.
     def test_west_inspection_failure_is_visible_in_human_and_json(self):
         extra = {"NIX_NRF_DOCTOR_WEST_STATE": str(self.root / "missing-inspector")}
         human = self.run_doctor(env_extra=extra)
@@ -335,6 +334,7 @@ class DoctorTestCase(unittest.TestCase):
         self.assertEqual(data["west"]["status"], "fail")
         self.assertIn("cannot inspect west states", data["west"]["message"])
 
+    # No candidate -> hardware fail / exit 1.
     def test_no_candidate_hardware_fail(self):
         proc = self.run_doctor()
         self.assertEqual(proc.returncode, 1)

@@ -77,8 +77,8 @@ in {
       export PLATFORM_NIX_NRF=${nix-nrf}/bin/nix-nrf
       python3 ${../../../tests/unit/test_host_platform.py} -v
 
-      # Packaged initializer: same suite against the packaged public binary
-      # with the fake as nrfutilPackage and the real west metadata baked in.
+      # The legacy two-backend suite runs packaged on amd64. Native host tests
+      # above cover ARM64 presets/refusals without bypassing platform guards.
       export NIX_NRF_INIT_PROJECT_COMMAND="$initProject/bin/nix-nrf-init-project"
       unset NIX_NRF_INIT_PROJECT_SCRIPT NIX_NRF_INIT_TEST_FIXTURE NIX_NRF_INIT_TEST_SKELETON
       export NIX_NRF_INIT_TEST_WEST_VERSIONS_JSON="$westVersionsJson"

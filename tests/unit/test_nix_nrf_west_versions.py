@@ -103,7 +103,7 @@ class WestVersionsTestCase(unittest.TestCase):
         self.assertEqual(proc.returncode, 2)
         self.assertIn("too many options", proc.stderr)
 
-    # 6. Packaged module (real metadata): reports exactly v3.3.0, sorted,
+    # 6. Packaged module (real metadata): reports exactly v3.4.1, sorted,
     #    text and parseable JSON. It never invokes nrfutil.
     @unittest.skipUnless(
         PACKAGED, "packaged module not supplied by the check derivation"

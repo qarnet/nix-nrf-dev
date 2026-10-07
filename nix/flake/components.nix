@@ -50,8 +50,8 @@
   # Version metadata lives entirely in nix/backends/west/versions.nix;
   # the wiring below only selects the metadata key and hands the
   # builders to the public dispatcher (nix/backends/default.nix), which
-  # forwards them to the west backend constructor. Builders contain no
-  # release-specific literals.
+  # forwards them to the west backend constructor. Host ABI dependencies remain
+  # the compiler package's responsibility.
   westBackendVersions = import ../backends/west/versions.nix;
   # Metadata key used by this repository's shells and checks.
   westBackendNcsVersion = "v3.4.1";

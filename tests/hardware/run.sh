@@ -39,7 +39,7 @@
 #
 # Runs inside the nix dev shell (provided by the hardware workflow's
 # cachix/install-nix-action + the flake's devShells.default). The runner
-# must have NCS v3.3.0 installed via nrfutil sdk-manager.
+# must have NCS v3.4.1 installed via nrfutil sdk-manager.
 #
 # Usage: bash tests/hardware/run.sh
 # Exit codes: 0 = all steps passed; non-zero = the first failing step.
@@ -98,7 +98,7 @@ SER54L="$(nix-nrf probes --find nrf54l)" || fail "find-nrf54l" "no unique nRF54L
 echo "OK: nRF54L15 probe serial: $SER54L"
 
 # ── 3. Build four artifacts from NCS ────────────────────────────────────────
-# The west wrapper loads the NCS toolchain env. If NCS v3.3.0 is not
+# The west wrapper loads the NCS toolchain env. If NCS v3.4.1 is not
 # installed, west fails with a clear message. run.sh surfaces it.
 NCS_ROOT="${ZEPHYR_BASE:-$HOME/ncs/v3.4.1/zephyr}/.."
 BLINKY_SRC="${ZEPHYR_BASE:-$HOME/ncs/v3.4.1/zephyr}/samples/basic/blinky"

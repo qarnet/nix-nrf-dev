@@ -277,7 +277,6 @@ class WestBootstrapTestCase(unittest.TestCase):
         for name in ("mutations.log", "probes.log"):
             (self.fake_dir / name).write_text("")
 
-    # 1. Missing workspace --check: exit 1, no mutation, no probes.
     def test_setup_ignores_foreign_source_context(self):
         result = self.run_bootstrap(
             "--yes",
@@ -316,6 +315,7 @@ class WestBootstrapTestCase(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.mutations(), [])
 
+    # Missing workspace --check: exit 1, no mutation, no probes.
     def test_check_missing_workspace_exits_1_no_mutation(self):
         proc = self.run_bootstrap("--check")
         self.assertEqual(proc.returncode, 1)

@@ -1,76 +1,8 @@
-# mkNrfShell is the devShell factory for nRF Connect SDK projects.
-#
-# Two backends provide the NCS toolchain environment:
-#
-# nrfutil (default): provides openocd-master (wrapped), the nix-nrf CLI
-# facade (which owns the internal `nix-nrf probes`, `nix-nrf bootstrap`, and
-# `nix-nrf doctor` command modules), the packaged nrfutil with the sdk-manager
-# extension, multilib GCC (for native_sim -m32 builds), a scoped-env `west`
-# wrapper with lazy SDK/toolchain bootstrap, and managed-source ZEPHYR_BASE derivation. The
-# shell-specific `nix-nrf doctor` carries the exact udev-rules package path
-# (internal `udevRules` closure wiring from nix/flake/components.nix).
-#
-#   Scoped toolchain env: Nordic's `nrfutil sdk-manager toolchain env` script
-#   exports PYTHONHOME, PYTHONPATH, LD_LIBRARY_PATH, GIT_EXEC_PATH, and other
-#   variables that break any non-toolchain tool run from the same shell (nix
-#   itself fails to load shared libraries, nix-store pythons pick up the
-#   wrong stdlib, git may misbehave). Instead of eval'ing that script into
-#   the whole shell, the `west` wrapper evals it only inside west's process
-#   tree. Builds still see the full
-#   toolchain because cmake/ninja/gcc are spawned by west.
-#
-#   Lazy bootstrap: the `west` wrapper invokes the shell-specific
-#   `nix-nrf bootstrap --print-sdk-path` on every call. That checks the
-#   configured NCS SDK source and selected toolchain. Managed mode installs only when
-#   something is missing (with interactive confirmation unless
-#   NIX_NRF_BOOTSTRAP_YES=1 / `--yes`), and returns the absolute SDK root for
-#   ZEPHYR_BASE. With `autoBootstrap = false` it only checks and, when anything
-#   is missing, reports that automatic bootstrap is disabled plus the exact
-#   `nix-nrf bootstrap` remediation. It never mutates. The shell hook itself
-#   stays non-mutating (read-only `--check` path). Existing-workspace mode instead
-#   validates caller-owned sources and can install only the selected toolchain.
-#
-# west (experimental; v3.4.1 on both Linux hosts): Nix owns the exact Zephyr
-# SDK package, host tools, and the metadata-selected Python interpreter; the
-# managed mutable west workspace and a version-local venv own the NCS source,
-# west, and workspace Python requirements (see nix/backends/west/). No
-# nrfutil/sdk-manager participates. `nix-nrf versions`, `nix-nrf bootstrap`,
-# and `nix-nrf doctor` become backend-aware via exact west command modules.
-# `toolchainBundleId` and non-default `nrfutilPackage` overrides are rejected
-# for west; `autoBootstrap`, `name`, `packages`, `withMultilib`,
-# `extraShellHook`, and `inputsFrom` behave like the nrfutil backend. Existing
-# workspace sources and prepared Python environments remain caller-owned and
-# check-only, regardless of autoBootstrap.
-#
-# The NCS release is a required argument for both backends: every caller
-# selects a release explicitly (no "latest" alias or default).
-#
-# Usage from a consumer flake:
-#   devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
-#     backend = "nrfutil";
-#     ncsVersion = "v3.4.1";
-#   };
-#
-# West backend (experimental, metadata-supported releases only):
-#   devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
-#     backend = "west";
-#     ncsVersion = "v3.4.1";
-#   };
-#
-# Advanced callers may replace the composed nrfutil derivation (which must
-# still provide `nrfutil` with the sdk-manager extension):
-#   devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
-#     backend = "nrfutil";
-#     ncsVersion = "v3.4.1";
-#     nrfutilPackage = myNrfutil;
-#   };
-#
-# Hybrid consumers may compose additional derivations via inputsFrom:
-#   devShells.default = nix-nrf-dev.lib.${system}.mkNrfShell {
-#     backend = "nrfutil";
-#     ncsVersion = "v3.4.1";
-#     inputsFrom = [ myPackage ];
-#   };
+# Public mkNrfShell factory: validate caller options before backend construction.
+# Backend selects tools; source selects ownership. Unsupported host/backend
+# requests must fail without silently changing either selection.
+# Caller examples and provisioning contracts: docs/backends.md and
+# docs/application-types.md. Construction ownership: docs/development/architecture.md.
 {
   pkgs,
   openocd-master,
@@ -85,8 +17,7 @@
   # West backend constructors, always supplied by nix/flake/components.nix at the module
   # import: the version metadata attrset and the builder imports. The west
   # branch of this module constructs per-shell SDK/venv/bootstrap/versions
-  # instances from the selected metadata; the builders contain no
-  # release-specific literals.
+  # instances from the selected metadata.
   westVersions,
   westZephyrSdkBuilder,
   westBootstrapBuilder,
@@ -119,7 +50,7 @@ in
     },
     # Workspace-mode west only: null selects <workspace>/.venv. A non-empty
     # string selects an existing environment, absolute or relative to workspace.
-    # Neither shell entry nor bootstrap repairs it or runs pip.
+    # Readiness may run pip check; neither entry nor bootstrap installs or repairs it.
     pythonEnvironment ? null,
     # Optional version-defined SDK Python requirement groups for west only.
     # Managed bootstrap installs them with approval; existing Python is check-only.
@@ -129,8 +60,8 @@ in
     # `ncsVersion` (via --ncs-version); a non-null value selects that exact
     # bundle (via --toolchain-bundle-id). Rejected for `backend = "west"`.
     toolchainBundleId ? null,
-    # Managed-source lazy SDK/toolchain bootstrap: `west` checks on every
-    # invocation and installs only when something is missing (with
+    # Managed-source lazy SDK/toolchain bootstrap: SDK extensions check readiness
+    # and install only when something is missing (with
     # confirmation). false switches west to check-only with exact manual
     # remediation; shell entry stays non-mutating either way. Existing workspace
     # sources are never provisioned; its west Python environment is check-only.

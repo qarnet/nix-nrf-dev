@@ -47,8 +47,9 @@ entry uses read-only bootstrap check. `bootstrap.nix` packages internal
 
 `nix/backends/west/` owns experimental hybrid backend. Nix provides Zephyr SDK,
 host tools, and Python. Mutable west workspace and version-local venv contain
-NCS source and Python requirements. `versions.nix` holds every release-specific
-version, requirement path, asset URL, and hash.
+NCS source and Python requirements. `versions.nix` owns release selection,
+requirements and compiler asset URLs/hashes; `zephyr-sdk.nix` supplies the
+supported SDK executables' host ABI libraries, including Python-enabled GDB.
 
 Backends do not import each other's implementation. Shared code receives
 backend-specific commands and configuration as explicit arguments.

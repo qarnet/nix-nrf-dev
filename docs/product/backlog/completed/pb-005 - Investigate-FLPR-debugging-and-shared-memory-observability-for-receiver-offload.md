@@ -79,7 +79,7 @@ Hardware blocker: no probe/target operation authorized; silicon identity, securi
 ## Final Summary
 
 <!-- SECTION:FINAL_SUMMARY:BEGIN -->
-Completed source-backed research in docs/development/flpr-debug-capabilities.md. No public tool, SDK pin, receiver firmware, or hardware state changed.
+Completed source-backed FLPR research; concise findings and pinned sources are retained in docs/product/research/debug-tooling.md. No public tool, SDK pin, receiver firmware, or hardware state changed.
 AC1: revision-pinned capability matrix and SDK register/security evidence distinguish defined silicon mechanisms, stock transport gaps, and untested board behavior.
 AC2: inspected receiver recovery_work_fn, FLPR SRAM reload, rings, deadline and epochs; documented evidence destruction and independent-core halt risks.
 AC3: fulfilled the explicit blocker alternative, not hardware proof. No probe operations authorized; actual board/probe firmware, loaded images and security state unmeasured. Report specifies reviewed-status readback, heartbeat, RTT, halt/register/step and breakpoint experiments on a test fixture.

@@ -13,24 +13,9 @@
   nrfutil,
   nrfUdevRules,
 }: let
-  # Fake-boundary west bootstrap test gate: runs
-  # tests/unit/test_nix_nrf_west_bootstrap.py against temporary fake
-  # python/venv/west/pip boundaries with sandboxed Python stdlib.
-  # Proves readiness, approval (--yes / NIX_NRF_BOOTSTRAP_YES, old
-  # NIX_NRF_WEST_SETUP_YES ignored), command order, requirement order,
-  # re-run behavior, incompatible-workspace rejection, failure
-  # propagation, --check non-mutation, --print-sdk-path stdout, and
-  # the public `nix-nrf bootstrap` program prefix. No network or real
-  # venv, no real west workspace. Also builds the packaged bootstrap
-  # module and asserts it installs only $out/libexec/nix-nrf/bootstrap
-  # (no standalone $out/bin/nix-nrf-west-* command), and runs the
-  # shared fake-west-workspace fixture unit suite
-  # (tests/unit/test_west_workspace_fixture.py) covering the
-  # tests/fixtures/west-workspace.py safety contract: stdout/log mode
-  # structure and executable behavior, plus filesystem-root, current-HOME,
-  # existing-non-empty-directory (sentinel preserved), symlink-escape
-  # (target preserved), and non-directory refusals via the public
-  # subprocess CLI in temp roots.
+  # Bootstrap lifecycle uses fake provisioning boundaries; requirement-parser
+  # subprocess tests read real distribution metadata. Fixture safety tests use
+  # disposable directories. No SDK download, real venv setup or hardware access.
   westBootstrapTests = let
     module = import ../../backends/west/bootstrap.nix {
       inherit pkgs;
@@ -237,7 +222,7 @@
   # OUTSIDE double quotes and compose paths/messages from those
   # variables. Never interpolate an escapeShellArg output directly
   # inside double quotes (which would embed literal quote characters
-  # into the value, e.g. `$HOME/ncs/'v3.3.0'`).
+  # into the value, e.g. `$HOME/ncs/'v3.4.1'`).
   #
   # The gate instantiates the PUBLIC `mkNrfShell` with `backend =
   # "west"` (the same module the flake exports). The nasty instance
@@ -371,7 +356,7 @@
   # plus fake venv executables. It runs no network, west update, pip, or workspace
   # downloads because fake boundaries absorb the bootstrap's mutating
   # steps). Proves: the shell hook is read-only and free of quote
-  # artifacts; `nix-nrf versions` reports v3.3.0 (text + parseable
+  # artifacts; `nix-nrf versions` reports v3.4.1 (text + parseable
   # JSON); `nix-nrf bootstrap --check --print-sdk-path` returns the
   # exact workspace; `nix-nrf doctor` checks the west bootstrap and
   # reports the ready SDK (fake sysfs/dev roots, no hardware); the

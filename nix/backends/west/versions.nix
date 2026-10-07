@@ -1,12 +1,12 @@
 # nix/backends/west/versions.nix contains version metadata for the west backend
 # prototype. Plain attrset keyed by NCS release. This file owns every
-# release-specific version, requirement path, asset URL, and hash; builder
-# files (zephyr-sdk.nix, shell.nix) and the setup-helper wrapper select
-# metadata by key and contain no release-specific literals.
+# release selection, requirement paths, asset URLs and hashes. Builders select
+# this metadata by key; zephyr-sdk.nix separately supplies supported host ABI
+# libraries for the SDK executables.
 #
 # Zephyr SDK asset hashes are verified against the official v1.0.1 release
 # sha256.sum (https://github.com/zephyrproject-rtos/sdk-ng/releases/download/
-# v1.0.1/sha256.sum). See docs/development/west-backend-status.md.
+# v1.0.1/sha256.sum). Public qualification limits: docs/support-matrix.md.
 #
 # Active baseline supports both declared Linux hosts.
 {

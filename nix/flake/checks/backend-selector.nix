@@ -6,23 +6,9 @@
 }: let
   platform = (import ../../platforms.nix).${pkgs.stdenv.hostPlatform.system};
   nrfutilSupported = builtins.elem "nrfutil" platform.backends;
-  # Evaluation-level regression gate for the backend selector:
-  # - omitted backend still equals the explicit nrfutil shell
-  #   (identical derivations),
-  # - omitted backend plus explicit ncsVersion evaluates,
-  # - explicit "nrfutil" plus explicit ncsVersion evaluates,
-  # - west + v3.4.1 evaluates,
-  # - west + unknown release does not evaluate,
-  # - missing ncsVersion fails evaluation (ncsVersion is required),
-  # - unsupported "sdk-nrf" does not evaluate,
-  # - west + non-null toolchainBundleId does not evaluate,
-  # - west + non-default nrfutilPackage does not evaluate,
-  # - an explicit non-null toolchainBundleId evaluates (nrfutil),
-  # - omitted/explicit autoBootstrap (true/false) values evaluate for
-  #   both backends,
-  # - exact toolchainBundleId evaluates in either bootstrap mode.
-  # Pure Nix evaluation via builtins.tryEval builds no SDK and runs no
-  # network bootstrap. Note: builtins.tryEval cannot catch "called
+  # Supported hosts retain the public nrfutil default; unsupported hosts reject
+  # it rather than falling back. Options are evaluated without SDK acquisition.
+  # builtins.tryEval cannot catch "called
   # without required argument" errors, so required-ness is checked with
   # builtins.functionArgs, which marks arguments *with* a default
   # `true` (so a required argument reads `false`).

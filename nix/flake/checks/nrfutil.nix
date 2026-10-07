@@ -14,7 +14,7 @@
   # Fake-boundary bootstrap test gate: runs
   # tests/unit/test_nix_nrf_bootstrap.py against a temporary fake
   # nrfutil executable/state directory with sandboxed Python stdlib.
-  # Covers every lifecycle branch: ready selection, --check, approval,
+  # Covers bootstrap lifecycle cases: ready selection, --check, approval,
   # install matrix, exact-bundle behavior, malformed state, failed and
   # incomplete installs, missing version. It uses no network or real SDK,
   # and no real nrfutil state.
@@ -87,7 +87,7 @@
   # (for the on-demand env-failure scenario), and emits a shell-safe
   # toolchain env script that prepends a fake real-west bin dir and sets the
   # FAKE_TOOLCHAIN_ENV / PYTHONHOME / GIT_EXEC_PATH markers. Unexpected argv
-  # clears stderr and exits nonzero.
+  # reports an error on stderr and exits nonzero.
   fakeNrfutil = pkgs.writeTextFile {
     name = "fake-nrfutil";
     destination = "/bin/nrfutil";
