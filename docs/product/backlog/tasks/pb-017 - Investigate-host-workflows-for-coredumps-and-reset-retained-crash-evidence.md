@@ -30,9 +30,9 @@ Evaluate Zephyr coredump formats, matching-ELF analysis, retained-RAM export, re
 
 ### Technical context
 
-docs/development/rtt-debug-research.md#firmware-recorder-evaluation-retained-as-consumer-guidance; receiver boards/nrf54l15dk_nrf54l15_cpuapp.conf documents SRAM pressure. No configured coredump path was established during receiver inspection.
+docs/product/research/debug-tooling.md#observation-and-evidence-limits; receiver boards/nrf54l15dk_nrf54l15_cpuapp.conf documents SRAM pressure. No configured coredump path was established during receiver inspection.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 

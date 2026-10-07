@@ -4,10 +4,11 @@
 # public invocation is only `nix-nrf bootstrap` (via the shell-specific
 # backend-aware nix-nrf facade).
 #
-# The wrapper pins the exact Nix Python interpreter (selected by the
-# release-specific `pythonPackage` metadata name from
-# nix/backends/west/versions.nix) and the metadata defaults as environment
-# variables. It never uses ambient PATH lookup and unsets PYTHONHOME/PYTHONPATH
+# The wrapper pins the venv-creation Python through NIX_NRF_WEST_PYTHON, selected
+# by release metadata, and supplies metadata defaults as environment variables.
+# Readiness probes run under the selected workspace Python; the bootstrap script
+# itself uses the command packager's Python. No interpreter uses ambient PATH
+# lookup. The wrapper unsets PYTHONHOME/PYTHONPATH
 # like the other command modules, because NCS toolchain shells export them
 # for their own python.
 #
@@ -45,6 +46,16 @@ in
       [
         [
           "--set"
+          "NIX_NRF_WEST_REQUIREMENT_PROBE"
+          "${../../../bin/backends/west/check-python-requirements.py}"
+        ]
+        [
+          "--set"
+          "NIX_NRF_WEST_PREINSTALL_REQUIREMENTS"
+          (builtins.concatStringsSep "\n" (metadata.preinstallRequirements or []))
+        ]
+        [
+          "--set"
           "NIX_NRF_WEST_PYTHON"
           "${python}/bin/python3"
         ]
@@ -62,6 +73,11 @@ in
           "--set"
           "NIX_NRF_WEST_REQUIREMENTS"
           (builtins.concatStringsSep "\n" metadata.requirements)
+        ]
+        [
+          "--set"
+          "NIX_NRF_WEST_READINESS_IMPORTS"
+          (builtins.concatStringsSep ", " (metadata.readinessImports or []))
         ]
         [
           "--set"

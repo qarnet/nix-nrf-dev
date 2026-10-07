@@ -13,6 +13,9 @@ import subprocess
 import tempfile
 import time
 import unittest
+import zipfile
+
+BACKENDS = os.environ.get("SOURCE_TEST_BACKENDS", "nrf west").split()
 
 
 class SourceWorkspaceTests(unittest.TestCase):
@@ -52,7 +55,7 @@ class Build(WestCommand):
 set(ZEPHYR_BASE "${ZEPHYR_BASE}" CACHE PATH "Synthetic source package")
 set(Zephyr_FOUND TRUE)
 """,
-            "vendor/nordic/VERSION": "3.3.0\n",
+            "vendor/nordic/VERSION": "VERSION_MAJOR = 3\nVERSION_MINOR = 4\nPATCHLEVEL = 1\nVERSION_TWEAK = 0\nEXTRAVERSION =\nVERSION_METADATA = lts\n",
             "vendor/nordic/Kconfig.nrf": "# synthetic NCS source sentinel\n",
         }
         for name in (
@@ -128,9 +131,95 @@ set(Zephyr_FOUND TRUE)
             if path.is_file() and ".venv" not in path.parts
         }
 
+    def test_selected_group_checks_missing_requested_package_not_only_imports(self):
+        library = self.root / "fixture-python"
+        library.mkdir()
+        for module in ("zcbor", "nrfregtool"):
+            (library / f"{module}.py").write_text(
+                "# SDK import fixture, not boundary under test\n"
+            )
+        real_python = os.environ["SOURCE_REQUIREMENT_PYTHON"]
+        python = self.ws / ".venv/bin/python"
+        python.write_text(
+            f'#!/bin/sh\nexport PYTHONPATH="{library}"\nexec "{real_python}" "$@"\n'
+        )
+        python.chmod(0o755)
+        (self.nrf / "scripts/requirements-ci.txt").write_text("pyusb\nwget>=3.2\n")
+        unselected = self.ws / "module-tests/scripts"
+        unselected.mkdir(parents=True)
+        (unselected / "requirements.txt").write_text("fixture-unselected-test-tool\n")
+        manifest = self.ws / "manifest/west.yml"
+        manifest.write_text(
+            manifest.read_text()
+            + "    - name: unselected-tests\n      path: module-tests\n      url: https://example.invalid/unselected-tests\n"
+        )
+        self.assert_ok(self.run_shell("west", ["nix-nrf", "bootstrap", "--check"]))
+        self.assert_ok(
+            subprocess.run(
+                [str(python), "-c", "import usb.core"], capture_output=True, text=True
+            )
+        )
+        self.assert_ok(
+            subprocess.run(
+                [str(python), "-m", "pip", "check"], capture_output=True, text=True
+            )
+        )
+        before = self.source_snapshot()
+        packages = subprocess.check_output(
+            [str(python), "-m", "pip", "list", "--format=json"], text=True
+        )
+        for option in ("--check", "--yes"):
+            failed = self.run_shell("west_group", ["nix-nrf", "bootstrap", option])
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("wget: not installed", failed.stderr)
+        self.assertEqual(self.source_snapshot(), before)
+        self.assertEqual(
+            subprocess.check_output(
+                [str(python), "-m", "pip", "list", "--format=json"], text=True
+            ),
+            packages,
+        )
+        # Caller explicitly provisions a local test-owned wheel. No network or
+        # readiness repair participates in this actual installation boundary.
+        wheel = self.root / "wget-3.2-py3-none-any.whl"
+        with zipfile.ZipFile(wheel, "w") as archive:
+            archive.writestr("wget.py", "# test-owned requested tool fixture\n")
+            archive.writestr(
+                "wget-3.2.dist-info/METADATA",
+                "Metadata-Version: 2.1\nName: wget\nVersion: 3.2\n",
+            )
+            archive.writestr(
+                "wget-3.2.dist-info/WHEEL",
+                "Wheel-Version: 1.0\nGenerator: fixture\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            )
+            archive.writestr(
+                "wget-3.2.dist-info/RECORD",
+                "wget.py,,\nwget-3.2.dist-info/METADATA,,\nwget-3.2.dist-info/WHEEL,,\nwget-3.2.dist-info/RECORD,,\n",
+            )
+        installed = subprocess.run(
+            [
+                str(python),
+                "-m",
+                "pip",
+                "install",
+                "--no-index",
+                "--no-deps",
+                "--target",
+                str(library),
+                str(wheel),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assert_ok(installed)
+        self.assert_ok(
+            self.run_shell("west_group", ["nix-nrf", "bootstrap", "--check"])
+        )
+        self.assertEqual(self.source_snapshot(), before)
+
     def test_source_and_real_west_select_manifest_paths_without_mutation(self):
         before = self.source_snapshot()
-        for backend in ("nrf", "west"):
+        for backend in BACKENDS:
             with self.subTest(backend=backend):
                 result = self.run_shell(backend, ["nix-nrf", "source", "--json"])
                 self.assert_ok(result)
@@ -146,8 +235,356 @@ set(Zephyr_FOUND TRUE)
                 self.assertFalse((self.home / ".cmake").exists())
                 self.assertFalse((self.home / "ncs").exists())
 
+    def test_core_queries_work_without_workspace_or_sdk_python(self):
+        shutil.rmtree(self.ws / ".west")
+        shutil.rmtree(self.ws / ".venv")
+        for backend in BACKENDS:
+            for args in (
+                ["--version"],
+                ["--help"],
+                ["help", "init"],
+                ["help", "update"],
+                ["help", "--help"],
+            ):
+                result = self.run_shell(backend, ["west", *args])
+                self.assert_ok(result)
+                self.assertIn("west", result.stdout.lower())
+            result = self.run_shell(backend, ["west", "topdir"])
+            self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.root / "toolchain.jsonl").exists())
+        self.assertFalse((self.home / "ncs").exists())
+
+    def test_core_workspace_queries_ignore_build_readiness_and_bind_freestanding_cwd(
+        self,
+    ):
+        shutil.rmtree(self.ws / ".venv")
+        (self.root / "missing-toolchain").touch()
+        outside = self.root / "outside"
+        outside.mkdir()
+        before = self.source_snapshot()
+        for backend in BACKENDS:
+            result = self.run_shell(
+                backend, ["west", "topdir"], after_hook=f'cd "{outside}";'
+            )
+            self.assert_ok(result)
+            self.assertEqual(result.stdout.strip(), str(self.ws))
+            self.assert_ok(
+                self.run_shell(backend, ["west", "list", "zephyr", "-f", "{abspath}"])
+            )
+            self.assert_ok(self.run_shell(backend, ["west", "manifest", "--validate"]))
+            failed = self.run_shell(backend, ["west", "help", "build"])
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("core available", failed.stderr)
+            self.assertIn("doctor", failed.stderr)
+        self.assertEqual(before, self.source_snapshot())
+
+    def test_global_switches_help_and_aliases_preserve_command_layer(self):
+        config = self.ws / ".west/config"
+        config.write_text(config.read_text() + "\n[alias]\nqtop = topdir\n")
+        for backend in BACKENDS:
+            for args in (
+                ["help", "--", "build"],
+                [f"-vz{self.zephyr}", "build", "--help"],
+            ):
+                result = self.run_shell(backend, ["west", *args])
+                self.assert_ok(result)
+                self.assertIn("usage:", result.stdout.lower())
+        shutil.rmtree(self.ws / ".venv")
+        (self.root / "missing-toolchain").touch()
+        foreign = self.root / "foreign"
+        (foreign / ".west").mkdir(parents=True)
+        (foreign / ".west/config").write_text("[fixture]\nidentity = foreign\n")
+        for backend in BACKENDS:
+            result = self.run_shell(backend, ["west", "qtop"])
+            self.assert_ok(result)
+            self.assertEqual(result.stdout.strip(), str(self.ws))
+            self.assert_ok(self.run_shell(backend, ["west", "help", "qtop"]))
+            for args in (["help", "list"], ["-h", "list"]):
+                self.assert_ok(
+                    self.run_shell(
+                        backend, ["west", *args], after_hook=f'cd "{foreign}";'
+                    )
+                )
+            result = self.run_shell(
+                backend,
+                ["west", f"-vz{self.zephyr}", "topdir"],
+                after_hook=f'cd "{foreign}";',
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("another west workspace", result.stderr)
+
+    def test_local_config_never_falls_through_to_foreign_workspace(self):
+        foreign = self.root / "foreign"
+        (foreign / ".west").mkdir(parents=True)
+        config = foreign / ".west/config"
+        config.write_text("[fixture]\nidentity = foreign\n")
+        shutil.rmtree(self.ws / ".west")
+        before = config.read_bytes()
+        for backend in BACKENDS:
+            for args in (
+                ["--local", "fixture.identity"],
+                ["--local", "fixture.identity", "changed"],
+                ["fixture.identity", "changed"],
+            ):
+                result = self.run_shell(
+                    backend, ["west", "config", *args], after_hook=f'cd "{foreign}";'
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("another west workspace", result.stderr)
+            self.assert_ok(
+                self.run_shell(
+                    backend,
+                    ["west", "config", "--global", "fixture.identity", "global"],
+                    after_hook=f'cd "{foreign}";',
+                )
+            )
+        self.assertEqual(config.read_bytes(), before)
+
+    def add_layer(self, project, name):
+        (project / "probe.yml").write_text(
+            f"west-commands:\n  - file: probe.py\n    commands:\n      - name: {name}\n        class: Probe\n        help: layer identity probe\n"
+        )
+        (project / "probe.py").write_text(f"""import json
+from pathlib import Path
+from west.commands import WestCommand
+class Probe(WestCommand):
+    def __init__(self):
+        super().__init__({name!r}, 'layer identity probe', 'test-owned command')
+    def do_add_parser(self, adder):
+        return adder.add_parser(self.name)
+    def do_run(self, args, unknown):
+        print(json.dumps({{'owner': str(Path(__file__).parent), 'workspace': self.topdir, 'command': self.name}}))
+""")
+
+    def test_all_application_layouts_activate_distinct_extension_layers(self):
+        self.add_layer(self.zephyr, "zephyr-probe")
+        self.add_layer(self.nrf, "ncs-probe")
+        manifest = self.ws / "manifest/west.yml"
+        manifest.write_text(
+            manifest.read_text()
+            .replace(
+                "path: vendor/rtos\n",
+                "path: vendor/rtos\n      west-commands: probe.yml\n",
+            )
+            .replace(
+                "path: vendor/nordic\n",
+                "path: vendor/nordic\n      west-commands: probe.yml\n",
+            )
+        )
+        for cwd in (self.zephyr, self.nrf, self.ws / "app", self.root / "freestanding"):
+            cwd.mkdir(exist_ok=True)
+            for backend in BACKENDS:
+                help_result = self.run_shell(
+                    backend, ["west", "--help"], after_hook=f'cd "{cwd}";'
+                )
+                self.assert_ok(help_result)
+                self.assertIn("zephyr-probe", help_result.stdout)
+                self.assertIn("ncs-probe", help_result.stdout)
+                for name, owner in (
+                    ("zephyr-probe", self.zephyr),
+                    ("ncs-probe", self.nrf),
+                ):
+                    self.assert_ok(
+                        self.run_shell(
+                            backend, ["west", "help", name], after_hook=f'cd "{cwd}";'
+                        )
+                    )
+                    executed = self.run_shell(
+                        backend, ["west", name], after_hook=f'cd "{cwd}";'
+                    )
+                    self.assert_ok(executed)
+                    identity = json.loads(executed.stdout)
+                    self.assertEqual(identity["owner"], str(owner))
+                    self.assertEqual(identity["workspace"], str(self.ws))
+        manifest.write_text(
+            manifest.read_text().replace("      west-commands: probe.yml\n", "", 1)
+        )
+        absent = self.run_shell(BACKENDS[0], ["west", "help", "zephyr-probe"])
+        self.assertNotEqual(absent.returncode, 0)
+        self.assert_ok(self.run_shell(BACKENDS[0], ["west", "help", "ncs-probe"]))
+
+    def test_disabled_extensions_and_missing_import_dependency_are_explicit(self):
+        config = self.ws / ".west/config"
+        config.write_text(
+            config.read_text() + "\n[commands]\nallow_extensions = false\n"
+        )
+        result = self.run_shell(BACKENDS[0], ["west", "--help"])
+        self.assert_ok(result)
+        self.assertIn("extensions discovered: disabled", result.stderr)
+        self.assertNotEqual(
+            self.run_shell(BACKENDS[0], ["west", "help", "build"]).returncode, 0
+        )
+        config.write_text(
+            config.read_text().replace(
+                "allow_extensions = false", "allow_extensions = true"
+            )
+        )
+        module = self.ws / "manifest/commands.py"
+        previous = module.read_text()
+        module.write_text("import fixture_dependency_that_does_not_exist\n" + previous)
+        for backend in BACKENDS:
+            self.assert_ok(self.run_shell(backend, ["west", "--version"]))
+            failed = self.run_shell(backend, ["west", "help", "build"])
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("command ready: unverified", failed.stderr)
+        module.write_text(previous)
+        self.assert_ok(self.run_shell(BACKENDS[0], ["west", "help", "build"]))
+
+    def test_zephyr_only_manifest_does_not_borrow_nordic_registration(self):
+        self.add_layer(self.zephyr, "zephyr-probe")
+        self.add_layer(self.nrf, "ncs-probe")
+        (self.ws / "manifest/west.yml").write_text(
+            "manifest:\n  projects:\n    - name: zephyr\n      path: vendor/rtos\n      url: https://example.invalid/zephyr\n      west-commands: probe.yml\n"
+        )
+        for backend in BACKENDS:
+            result = self.run_shell(backend, ["west", "--help"])
+            self.assert_ok(result)
+            self.assertIn("zephyr-probe", result.stdout)
+            self.assertNotIn("ncs-probe", result.stdout)
+            absent = self.run_shell(backend, ["west", "help", "ncs-probe"])
+            self.assertNotEqual(absent.returncode, 0)
+            self.assertIn("not registered", absent.stderr)
+            info = json.loads(
+                self.run_shell(backend, ["nix-nrf", "doctor", "--json"]).stdout
+            )
+            self.assertEqual(info["west"]["extensions_discovered"]["status"], "pass")
+            self.assertEqual(info["west"]["command_ready"]["status"], "blocked")
+
+    def test_doctor_reports_three_states_without_importing_extensions(self):
+        descriptor = self.ws / "manifest/commands.yml"
+        descriptor.write_text(
+            descriptor.read_text().replace("commands.py", "danger.py")
+        )
+        (self.ws / "manifest/danger.py").write_text(
+            f'from pathlib import Path\nPath({str(self.root / "imported")!r}).write_text("must not run")\n'
+        )
+        for backend in BACKENDS:
+            result = self.run_shell(
+                backend,
+                ["nix-nrf", "doctor", "--json"],
+                extra={
+                    "NIX_NRF_DOCTOR_SYSFS_ROOT": str(self.root / "no-usb"),
+                    "NIX_NRF_DOCTOR_DEV_ROOT": str(self.root / "no-dev"),
+                },
+            )
+            data = json.loads(result.stdout)
+            self.assertEqual(data["west"]["core_available"]["status"], "pass")
+            self.assertEqual(data["west"]["extensions_discovered"]["status"], "pass")
+            self.assertEqual(data["west"]["command_ready"]["status"], "unverified")
+            self.assertTrue(data["west"]["command_ready"]["environment_ready"])
+        self.assertFalse((self.root / "imported").exists())
+        (self.ws / "manifest/danger.py").unlink()
+        data = json.loads(
+            self.run_shell(BACKENDS[0], ["nix-nrf", "doctor", "--json"]).stdout
+        )
+        self.assertEqual(data["west"]["extensions_discovered"]["status"], "partial")
+        self.assertIn(
+            "missing command implementation",
+            data["west"]["extensions_discovered"]["errors"][0],
+        )
+
+    def test_resolved_registry_matches_west_shadowing_without_imports(self):
+        self.add_layer(self.zephyr, "layer-probe")
+        self.add_layer(self.nrf, "layer-probe")
+        descriptor = self.nrf / "probe.yml"
+        descriptor.write_text(
+            descriptor.read_text()
+            + "      - name: topdir\n        class: Probe\n        help: forbidden builtin shadow\n"
+        )
+        manifest = self.ws / "manifest/west.yml"
+        manifest.write_text(
+            manifest.read_text()
+            .replace(
+                "path: vendor/rtos\n",
+                "path: vendor/rtos\n      west-commands: probe.yml\n",
+            )
+            .replace(
+                "path: vendor/nordic\n",
+                "path: vendor/nordic\n      west-commands: probe.yml\n",
+            )
+        )
+        for backend in BACKENDS:
+            data = json.loads(
+                self.run_shell(backend, ["nix-nrf", "doctor", "--json"]).stdout
+            )
+            discovery = data["west"]["extensions_discovered"]
+            self.assertEqual(discovery["status"], "partial")
+            self.assertEqual(discovery["manifest"], str(manifest))
+            self.assertEqual(
+                discovery["commands"],
+                [
+                    {"name": "build", "owner": "manifest"},
+                    {"name": "layer-probe", "owner": "vendor/rtos"},
+                ],
+            )
+            rejected = {
+                (entry["owner"], entry["name"])
+                for entry in discovery["registrations"]
+                if not entry["registered"]
+            }
+            self.assertEqual(
+                rejected,
+                {("vendor/nordic", "layer-probe"), ("vendor/nordic", "topdir")},
+            )
+            executed = self.run_shell(backend, ["west", "layer-probe"])
+            self.assert_ok(executed)
+            self.assertEqual(json.loads(executed.stdout)["owner"], str(self.zephyr))
+            topdir = self.run_shell(backend, ["west", "topdir"])
+            self.assert_ok(topdir)
+            self.assertEqual(topdir.stdout.strip(), str(self.ws))
+
+    def test_local_core_init_update_before_sdk_readiness(self):
+        seed = self.root / "local-project"
+        seed.mkdir()
+        self.git(seed, "init", "--initial-branch=main")
+        self.git(seed, "config", "user.email", "fixture@example.invalid")
+        self.git(seed, "config", "user.name", "Fixture")
+        (seed / "sentinel").write_text("local-only payload")
+        self.git(seed, "add", ".")
+        self.git(seed, "commit", "-m", "local fixture")
+        manifest = self.root / "local-manifest"
+        manifest.mkdir()
+        (manifest / "west.yml").write_text(
+            f"manifest:\n  projects:\n    - name: payload\n      url: {seed}\n      revision: main\n  self:\n    path: local-manifest\n"
+        )
+        shutil.rmtree(self.ws / ".venv")
+        (self.root / "missing-toolchain").touch()
+        for backend in BACKENDS:
+            dest = self.root / f"new-{backend}"
+            local_manifest = dest / "local-manifest"
+            local_manifest.mkdir(parents=True)
+            shutil.copyfile(manifest / "west.yml", local_manifest / "west.yml")
+            self.assert_ok(
+                self.run_shell(
+                    backend,
+                    ["west", "init", "-l", str(local_manifest)],
+                    after_hook=f'cd "{dest}";',
+                )
+            )
+            # Selected workspace is explicitly rebound for this new local-only
+            # operation. No SDK/source readiness or toolchain bootstrap runs.
+            result = self.run_shell(
+                backend,
+                ["west", "update"],
+                extra={
+                    "NIX_NRF_SOURCE_WORKSPACE": str(dest),
+                },
+                after_hook=f'export NIX_NRF_SOURCE_WORKSPACE="{dest}"; cd "{dest}";',
+            )
+            self.assert_ok(result)
+            self.assertEqual(
+                (dest / "payload/sentinel").read_text(), "local-only payload"
+            )
+        self.assertFalse((self.root / "toolchain.jsonl").exists())
+
+    @staticmethod
+    def git(path, *args):
+        return subprocess.check_output(
+            ["git", "-C", str(path), *args], text=True, stderr=subprocess.STDOUT
+        )
+
     def test_all_topologies_configure_correct_package_after_changing_cwd(self):
-        for backend in ("nrf", "west"):
+        for backend in BACKENDS:
             for topology, app in (
                 ("repository", self.nrf / "samples/demo"),
                 ("workspace", self.ws / "apps/demo"),
@@ -176,10 +613,12 @@ file(WRITE "${CMAKE_BINARY_DIR}/selected.txt" "${ZEPHYR_BASE}")
         self.assertEqual((build / "selected.txt").read_text(), str(self.zephyr))
 
     def test_conflicting_environment_configuration_and_cache_fail(self):
-        for backend in ("nrf", "west"):
+        for backend in BACKENDS:
             for variable in ("ZEPHYR_BASE", "Zephyr_DIR"):
                 result = self.run_shell(
-                    backend, ["west", "--version"], extra={variable: "/wrong/source"}
+                    backend,
+                    ["west", "help", "build"],
+                    extra={variable: "/wrong/source"},
                 )
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn("conflicts", result.stderr)
@@ -193,21 +632,21 @@ file(WRITE "${CMAKE_BINARY_DIR}/selected.txt" "${ZEPHYR_BASE}")
             self.assert_ok(self.run_shell(backend, ["west", "help", "build"]))
         config = self.ws / ".west/config"
         config.write_text(config.read_text().replace("vendor/rtos", "wrong"))
-        result = self.run_shell("nrf", ["nix-nrf", "source", "--json"])
+        result = self.run_shell(BACKENDS[0], ["nix-nrf", "source", "--json"])
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("conflicts", result.stderr)
 
     def test_foreign_workspace_and_explicit_overrides_are_rejected(self):
         foreign = self.root / "foreign"
         (foreign / ".west").mkdir(parents=True)
-        for backend in ("nrf", "west"):
+        for backend in BACKENDS:
             result = self.run_shell(
-                backend, ["west", "--version"], after_hook=f'cd "{foreign}";'
+                backend, ["west", "topdir"], after_hook=f'cd "{foreign}";'
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("another west workspace", result.stderr)
             for args in (
-                ["-z", "/wrong", "--version"],
+                ["-z", "/wrong", "help", "build"],
                 ["build", ".", "--", "-DZEPHYR_BASE:PATH=/wrong"],
                 ["build", ".", "--", "-D", "Zephyr_DIR:PATH=/wrong"],
             ):
@@ -218,11 +657,11 @@ file(WRITE "${CMAKE_BINARY_DIR}/selected.txt" "${ZEPHYR_BASE}")
     def test_missing_sources_version_and_imports_do_not_trigger_installation(self):
         version = self.nrf / "VERSION"
         version.write_text("9.9.9\n")
-        result = self.run_shell("nrf", ["nix-nrf", "bootstrap", "--yes"])
+        result = self.run_shell(BACKENDS[0], ["nix-nrf", "bootstrap", "--yes"])
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("does not match", result.stderr)
         self.assertFalse((self.root / "toolchain.jsonl").exists())
-        version.write_text("3.3.0\n")
+        version.write_text("3.4.1\n")
         manifest = self.ws / "manifest/west.yml"
         manifest.write_text(
             manifest.read_text().replace(
@@ -235,24 +674,27 @@ file(WRITE "${CMAKE_BINARY_DIR}/selected.txt" "${ZEPHYR_BASE}")
         self.assertFalse((self.home / "ncs").exists())
 
     def test_toolchain_only_approval_and_existing_python_readiness(self):
-        (self.root / "missing-toolchain").touch()
-        result = self.run_shell("nrf", ["nix-nrf", "bootstrap", "--check"])
-        self.assertNotEqual(result.returncode, 0)
-        result = self.run_shell("nrf", ["nix-nrf", "bootstrap"])
-        self.assertEqual(result.returncode, 2)
-        result = self.run_shell("nrf", ["nix-nrf", "bootstrap", "--yes"])
-        self.assert_ok(result)
-        actions = [
-            json.loads(line)
-            for line in (self.root / "toolchain.jsonl").read_text().splitlines()
-        ]
-        self.assertTrue(any(argv[1:3] == ["toolchain", "install"] for argv in actions))
-        self.assertTrue(
-            all(
-                argv[1:3] in (["toolchain", "env"], ["toolchain", "install"])
-                for argv in actions
+        if "nrf" in BACKENDS:
+            (self.root / "missing-toolchain").touch()
+            result = self.run_shell("nrf", ["nix-nrf", "bootstrap", "--check"])
+            self.assertNotEqual(result.returncode, 0)
+            result = self.run_shell("nrf", ["nix-nrf", "bootstrap"])
+            self.assertEqual(result.returncode, 2)
+            result = self.run_shell("nrf", ["nix-nrf", "bootstrap", "--yes"])
+            self.assert_ok(result)
+            actions = [
+                json.loads(line)
+                for line in (self.root / "toolchain.jsonl").read_text().splitlines()
+            ]
+            self.assertTrue(
+                any(argv[1:3] == ["toolchain", "install"] for argv in actions)
             )
-        )
+            self.assertTrue(
+                all(
+                    argv[1:3] in (["toolchain", "env"], ["toolchain", "install"])
+                    for argv in actions
+                )
+            )
         (self.ws / ".venv/bin/python").unlink()
         result = self.run_shell("west", ["nix-nrf", "bootstrap", "--yes"])
         self.assertNotEqual(result.returncode, 0)
@@ -260,7 +702,7 @@ file(WRITE "${CMAKE_BINARY_DIR}/selected.txt" "${ZEPHYR_BASE}")
         self.assertFalse((self.ws / ".venv/bin/python").exists())
 
     def test_doctor_source_metadata_and_parent_environment(self):
-        for backend in ("nrf", "west"):
+        for backend in BACKENDS:
             result = self.run_shell(backend, ["nix-nrf", "doctor", "--json"])
             self.assertEqual(
                 json.loads(result.stdout)["sdk"]["source"]["workspace"], str(self.ws)
@@ -291,7 +733,7 @@ file(WRITE "${CMAKE_BINARY_DIR}/selected.txt" "${ZEPHYR_BASE}")
         self.assertEqual(python.read_text(), "#!/bin/sh\nexit 1\n")
 
     def test_child_errors_propagate_and_matrix_requires_opt_in(self):
-        for backend in ("nrf", "west"):
+        for backend in BACKENDS:
             result = self.run_shell(backend, ["west", "unrecognized-command"])
             self.assertEqual(result.returncode, 2)
         output = self.root / "matrix-output"
@@ -323,7 +765,7 @@ file(WRITE "${CMAKE_BINARY_DIR}/selected.txt" "${ZEPHYR_BASE}")
         (other / "vendor/nordic/Kconfig.nrf").write_text(
             "# same-version modified source\n"
         )
-        for backend in ("nrf", "west"):
+        for backend in BACKENDS:
             result = self.run_shell(backend, ["nix-nrf", "source", "--json"], cwd=other)
             self.assert_ok(result)
             self.assertEqual(
@@ -355,7 +797,7 @@ class Hold(WestCommand):
         while True:
             time.sleep(0.1)
 """)
-        for backend in ("nrf", "west"):
+        for backend in BACKENDS:
             ready = self.root / f"ready-{backend}"
             env = dict(self.env, PATH=os.environ[f"SOURCE_{backend.upper()}_PATH"])
             with subprocess.Popen(
@@ -375,7 +817,10 @@ class Hold(WestCommand):
                 stderr=subprocess.DEVNULL,
             ) as child:
                 try:
-                    deadline = time.monotonic() + 10
+                    # Activation now includes separate core/catalog checks.
+                    # Match other public command setup budgets; cancellation
+                    # itself must still finish within five seconds below.
+                    deadline = time.monotonic() + 30
                     while not ready.exists():
                         self.assertIsNone(child.poll())
                         self.assertLess(time.monotonic(), deadline)
@@ -435,7 +880,7 @@ class Hold(WestCommand):
         (self.ws / "manifest/west.yml").write_text(
             "manifest:\n  projects:\n    - name: nrf\n      path: vendor/nordic\n      url: https://example.invalid/nrf\n      import: true\n"
         )
-        for backend in ("nrf", "west"):
+        for backend in BACKENDS:
             result = self.run_shell(backend, ["nix-nrf", "source", "--json"])
             self.assert_ok(result)
             source = json.loads(result.stdout)

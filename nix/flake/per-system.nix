@@ -137,6 +137,7 @@
       inherit
         pkgs
         westBackendVersions
+        nix-nrf
         ;
     };
     # Release/changelog consistency gate: real scripts/release.py check plus
@@ -164,7 +165,7 @@ in {
     udev-rules = nrfUdevRules;
     # West backend SDK package: exact Zephyr SDK from official release
     # assets (packaged output backing `backend = "west"` shells).
-    west-zephyr-sdk-v3_3_0 = westZephyrSdk;
+    west-zephyr-sdk-v3_4_1 = westZephyrSdk;
   };
 
   lib = {

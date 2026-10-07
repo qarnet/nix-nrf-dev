@@ -32,7 +32,7 @@ Generic guidance and a small test-owned demonstration if needed: board pin revie
 
 Receiver src/audio_timing_nrf54.c:8-25 distinguishes DMA-buffer FRAMESTART cadence from LRCK; boards/nrf54l15dk_nrf54l15_cpuapp.overlay:130-140 already uses D3/P1.7 for MCK; PLANNED_FEATURES.md:90-108 describes long-idle resume pop with unconfirmed cause.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 

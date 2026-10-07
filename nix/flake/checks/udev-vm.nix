@@ -31,6 +31,31 @@
   pkgs,
   nrfUdevRules,
 }: let
+  isArm64 = pkgs.stdenv.hostPlatform.system == "aarch64-linux";
+  testSystemd = import ./udev-systemd.nix {inherit pkgs;};
+  # Bound initrd workers before coldplug through the pinned control API.
+  # Stage-2 kernel events can starve that API under TCG; never couple daemon
+  # readiness to a control reply there. Initrd uses its own /bin executables.
+  emulatedUdev = udevadm: limitWorkers:
+    pkgs.lib.optionalAttrs isArm64 {
+      settings.Manager.DefaultDeviceTimeoutSec = pkgs.lib.mkForce 900;
+      services = {
+        systemd-udevd.serviceConfig = pkgs.lib.optionalAttrs limitWorkers {
+          ExecStartPost = ["${udevadm} control --timeout=300 --children-max=2"];
+          TimeoutStartSec = 450;
+        };
+        systemd-udev-trigger = {
+          after = ["systemd-udevd.service"];
+          # systemd 261's all-object scan floods TCG with module/driver events
+          # before worker dispatch. Coldplug every actual device instead; this
+          # test does not qualify subsystem/driver-event stress handling.
+          serviceConfig.ExecStart = [
+            ""
+            "-${udevadm} trigger --type=devices --action=add --prioritized-subsystem=module,block,tpmrm,net,tty,input"
+          ];
+        };
+      };
+    };
   # One immutable store fixture per product string, built from the same
   # structure. Format is umockdev-record's: `P:` sysfs path, `N:` device node
   # with hex contents, `E:` udev property, `A:` ASCII sysfs attribute with
@@ -83,8 +108,24 @@
 in {
   udev-vm = pkgs.testers.runNixOSTest {
     name = "nix-nrf-udev-vm";
+    # Hosted ARM64 has no KVM. Allow TCG without weakening guest assertions;
+    # capable builders still use acceleration automatically.
+    requiredFeatures.kvm = pkgs.stdenv.hostPlatform.system != "aarch64-linux";
+    globalTimeout =
+      if pkgs.stdenv.hostPlatform.system == "aarch64-linux"
+      then 1800
+      else 3600;
 
     nodes.machine = _: {
+      # Stage-2 udev under ARM software emulation may outlive instrumentation's
+      # 300s device deadline even though virtio devices exist. Preserve real
+      # device/guest assertions and give the backdoor device time to become ready.
+      systemd =
+        (emulatedUdev "${testSystemd}/bin/udevadm" false)
+        // {
+          package = testSystemd;
+        };
+      boot.initrd.systemd = emulatedUdev "/bin/udevadm" true;
       system.stateVersion = "26.11";
 
       # Upstream 60-openocd.rules assigns MODE="660", GROUP="plugdev",
@@ -107,7 +148,21 @@ in {
       import json
       import shlex
 
+      ${pkgs.lib.optionalString (pkgs.stdenv.hostPlatform.system == "aarch64-linux") ''
+        import os
+
+        # QEMU's TCG "max" CPU exposes expensive optional ISA features absent
+        # from the Pi baseline. Keep native KVM unchanged; use a baseline CPU
+        # for software emulation through the VM's public QEMU_OPTS interface.
+        if not os.access("/dev/kvm", os.R_OK | os.W_OK):
+            os.environ["QEMU_OPTS"] = os.environ.get("QEMU_OPTS", "") + " -cpu cortex-a72"
+      ''}
       start_all()
+      ${pkgs.lib.optionalString (pkgs.stdenv.hostPlatform.system == "aarch64-linux") ''
+        # TCG can exceed the driver's fixed 300s connect window. Wait through
+        # public console API before requesting guest shell commands.
+        machine.wait_for_console_text(r"systemd\[1\]: Started backdoor\.service\.", timeout=1500)
+      ''}
 
       def synthetic_event_json(fixture, product, label):
           # Replay one fixture through the pinned umockdev preload sandbox and

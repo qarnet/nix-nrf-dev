@@ -14,7 +14,7 @@ labels:
   - 'area:documentation'
 dependencies: []
 documentation:
-  - docs/development/application-types-research.md
+  - docs/adr/0002-separate-source-and-toolchain-ownership.md
 priority: p2
 type: feature
 ordinal: 23000
@@ -37,7 +37,7 @@ Add source = { mode = "managed"; } (default) or source = { mode = "workspace"; w
 
 ### Technical context
 
-Research: docs/development/application-types-research.md, NCS v3.3.0 source and 11 CMake discovery probes. Implementation boundaries: nix/backends/default.nix; nix/backends/nrfutil/shell.nix and bootstrap.nix; nix/backends/west/shell.nix and bootstrap.nix; bin/backends/* bootstrap scripts; nix/commands/default.nix and doctor.nix. West Manifest.from_topdir resolves imported project paths without update; west -z selects base without persisting zephyr.base.
+Research used NCS v3.3.0 source and 11 CMake discovery probes; lasting rationale is in docs/adr/0002-separate-source-and-toolchain-ownership.md. Implementation boundaries: nix/backends/default.nix; nix/backends/nrfutil/shell.nix and bootstrap.nix; nix/backends/west/shell.nix and bootstrap.nix; bin/backends/* bootstrap scripts; nix/commands/default.nix and doctor.nix. West Manifest.from_topdir resolves imported project paths without update; west -z selects base without persisting zephyr.base.
 
 ### Open questions
 
@@ -65,7 +65,7 @@ Product direction is approved. Public workspace support is bounded to existing c
 <!-- SECTION:NOTES:BEGIN -->
 Readiness established from approved independent-axis design and pinned research. Size L: cross-backend readiness, source resolution, diagnostics, tests and user docs. No implementation dependency on blocked RTT/debug items; workspace Python preparation remains explicit and caller-owned.
 
-Implemented strict managed/workspace source options, runtime anchoring, real west-manifest/import resolution, NCS VERSION checks, conflict/CWD/cache guards, child package discovery for plain or hinted find_package, toolchain-only nrfutil bootstrap, check-only prepared-Python west bootstrap, and separate source/toolchain-selection diagnostics. User guide: docs/application-types.md. Source/qualification evidence: docs/development/application-source-status.md. Managed behavior retains its existing gates.
+Implemented strict managed/workspace source options, runtime anchoring, real west-manifest/import resolution, NCS VERSION checks, conflict/CWD/cache guards, child package discovery for plain or hinted find_package, toolchain-only nrfutil bootstrap, check-only prepared-Python west bootstrap, and separate source/toolchain-selection diagnostics. User guide: docs/application-types.md. Source/qualification evidence is retained below. Managed behavior retains its existing gates.
 
 Verification passed: nix flake check --all-systems --no-build -L; nix flake check -L; nix build .#nix-nrf --no-link; git diff --check; clean-env-test public shell regression. source-workspace-tests has 13 passing tests, using real west/CMake, distinct source workspaces, disposable Git manifest imports, both package declarations, failures, cancellation, environment isolation and no source mutation.
 

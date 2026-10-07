@@ -34,11 +34,8 @@
     backlog-md,
     ...
   }: let
-    # Repository's implemented host platform only. Per-system construction
-    # (configured Nixpkgs, components, formatter/pre-commit, checks, dev
-    # shells) lives in nix/flake/per-system.nix. Future platform expansion
-    # must add implementation, metadata, and verification before being listed here.
-    supportedSystems = ["x86_64-linux"];
+    # Emit all supported hosts purely; Nix's CLI selects the current system.
+    supportedSystems = builtins.attrNames (import ./nix/platforms.nix);
   in
     flake-utils.lib.eachSystem supportedSystems (
       system:

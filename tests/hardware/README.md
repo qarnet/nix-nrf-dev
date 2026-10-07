@@ -25,10 +25,10 @@ Follow [GitHub runner guide](https://docs.github.com/en/actions/hosting-your-own
 ## Runner prerequisites
 
 - Install Nix.
-- Install NCS `v3.3.0` with nrfutil sdk-manager:
+- Install NCS `v3.4.1` with nrfutil sdk-manager:
 
   ```sh
-  nrfutil sdk-manager toolchain install --ncs-version v3.3.0
+  nrfutil sdk-manager toolchain install --ncs-version v3.4.1
   ```
 
 - Give runner user USB access through `dialout`, `plugdev`, or distribution

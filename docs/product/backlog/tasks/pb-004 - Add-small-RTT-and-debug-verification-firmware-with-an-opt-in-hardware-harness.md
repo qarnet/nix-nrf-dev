@@ -33,9 +33,9 @@ Provide known text and binary records, sequence/session identity, observable los
 
 ### Technical context
 
-tests/hardware/README.md; tests/hardware/run.sh; tests/hardware/preflight_xiao.py; docs/development/rtt-debug-research.md#verification-scope. Existing harness flashes but does not validate FLPR heartbeat or IPC.
+tests/hardware/README.md; tests/hardware/run.sh; tests/hardware/preflight_xiao.py; docs/product/research/debug-tooling.md. Existing harness flashes but does not validate FLPR heartbeat or IPC.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 
@@ -73,7 +73,7 @@ User approved use of attached nRF54L15. Hardware validation remains blocked beca
 
 Physical provisioning update: rebuilt matching fixture without SDK bootstrap, then explicitly flashed serial EF0E3B64 through pinned OpenOCD nrf54l_flash recipe. load/verify succeeded and reset run completed. Subsequent SWD DP ID reads fail at both 1000 and 100 kHz while onboard CMSIS-DAP USB remains accessible. Flash verification proves byte placement only; firmware execution/RTT emission has not passed. Hardware runner failed before readiness, evidence directory /tmp/opencode/pb004-hil-20260926-043514. No mass erase or recovery performed; do not check physical acceptance from flash verification.
 
-After user physical reconnect, target SWD remains inaccessible although CMSIS-DAP enumeration and raw probe commands work. Logical USB reset succeeds but not target recovery. Detailed image hashes, positive flash verification and negative non-erasing diagnostics are preserved in docs/development/pb002-pb004-hardware.md. Physical acceptance still blocked; do not infer execution from flash verification. No further firmware writes, mass erase, probe firmware update, or NixOS changes performed.
+After user physical reconnect, target SWD remains inaccessible although CMSIS-DAP enumeration and raw probe commands work. Logical USB reset succeeds but not target recovery. The separate xiao-samd11-debug-probe project owns detailed physical diagnostics; this item's notes retain the acceptance boundary. Physical acceptance still blocked; do not infer execution from flash verification. No further firmware writes, mass erase, probe firmware update, or NixOS changes performed.
 
 Reset investigation now distinguishes physical wiring from firmware exposure. Seeed PA04/Q2 hardware path is confirmed. A matching published probe image has disabled reset-pin mapping; firmware fix needs direction initialization and inverted logical nRESET handling, not a one-byte mask change alone. Exact installed probe image still unknown. Receiver nRF5340 history used UICR protection correction and CTRL-AP reset through working SWD, not a transferable missing-DPIDR fix. Serial-mcp SWD precedent was unresolved; its UART DTR/RTS fixes do not prove this bridge resets nRF54. No erase or probe firmware change made.
 

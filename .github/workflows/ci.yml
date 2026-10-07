@@ -1,6 +1,6 @@
 # Builds packages and runs release, flake, CLI, shell, initializer, and recipe
 # checks. Runs for pull requests, pushes to main, and nightly. A release job can
-# call reusable workflow only after trusted main push passes `check`.
+# call reusable workflow only after trusted main push passes shared/native gates.
 name: CI
 
 on:
@@ -23,9 +23,37 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  shared:
+    name: Shared source checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: cachix/cachix-action@v17
+        with:
+          name: qarnet
+          authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+      - name: Shared gates and all-host evaluation
+        run: python3 -B scripts/ci.py shared
+
   check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    name: Native (${{ matrix.system }})
+    needs: shared
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-24.04
+            backend: nrfutil
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+            backend: west
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
@@ -38,29 +66,13 @@ jobs:
           name: qarnet
           authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
 
-      # Release contract check: strict-SemVer release.json must
-      # match the changelog table row/body (with `## [Unreleased]` above the
-      # current release), and the release regression suite proves every
-      # negative contract element. Runs before the flake gate; the same check
-      # is wired into the flake as checks.<system>.release-consistency.
-      - name: Validate release and changelog consistency
-        run: |
-          python3 scripts/release.py check
-          python3 tests/unit/test_release.py
-
-      # Evaluate flake outputs and checks. First verify that every published
-      # system output evaluates without building. Then realize normal checks,
-      # including treefmt, pre-commit, and fake-boundary bootstrap tests. No
-      # test downloads an SDK or toolchain.
+      # Shared job already evaluates all hosts and runs source-only gates.
+      # Execute every other published check natively, including compiler object
+      # probes, real OpenOCD framing, refusal coverage, and the booted udev VM.
+      # Nix realizes immutable package closures; no mutable SDK setup runs.
       - name: Flake check
         run: |
-          # --no-build uses read-only evaluation. Pinned Backlog.md/bun2nix
-          # imports a nested source path that must first be materialized in
-          # the store. Writable SDK-free evaluation does that without building
-          # contributor packages, bootstrapping an SDK, or changing pins.
-          nix eval --raw .#devShells.x86_64-linux.product.drvPath >/dev/null
-          nix flake check --all-systems --no-build -L
-          nix flake check -L
+          python3 -B scripts/ci.py native --system '${{ matrix.system }}'
 
       # Build all packages. Cachix caches later runs.
       # openocd-master is ~10 min from source on first run; subsequent runs pull from cache.
@@ -69,10 +81,10 @@ jobs:
       # `nix-nrf probes` subcommand, built as part of .#nix-nrf.
       # .#udev-rules is the OpenOCD udev-rule relocation package consumed by
       # the NixOS module and reported by `nix-nrf doctor`.
-      # .#west-zephyr-sdk-v3_3_0 is the west backend exact Zephyr SDK package
+      # .#west-zephyr-sdk-v3_4_1 is the west backend exact Zephyr SDK package
       # (packages.default aliases nix-nrf, so it is not built separately).
       - name: Build packages
-        run: nix build -L .#openocd-master-unwrapped .#openocd-master .#nrfutil .#nix-nrf .#udev-rules .#west-zephyr-sdk-v3_3_0
+        run: python3 -B scripts/ci.py packages --system '${{ matrix.system }}'
 
       # Smoke-run built binaries.
       - name: Smoke run openocd
@@ -118,7 +130,7 @@ jobs:
       # `nix-nrf bootstrap --help` and `nix-nrf doctor --help`, never a bare
       # bootstrap, installation, or doctor run against missing state or USB.
       - name: Devshell provides tools
-        run: nix develop --command sh -ceu 'command -v nrfutil; command -v nix-nrf; command -v openocd; command -v west; nix-nrf bootstrap --help >/dev/null; nix-nrf doctor --help >/dev/null; ! command -v nrf-probes; ! command -v nrf-sdk-versions'
+        run: nix develop --command sh -ceu 'command -v nix-nrf; command -v openocd; command -v west; nix-nrf bootstrap --help >/dev/null; nix-nrf doctor --help >/dev/null; ! command -v nrf-probes; ! command -v nrf-sdk-versions'
 
       # Check that Nordic sdk-manager variables
       # do not poison non-toolchain tools (Node, Git, Python).
@@ -204,20 +216,28 @@ jobs:
       # against the current checkout (path:$repo, read-only; nothing is
       # written back to the repository), and that its dev shell provides the
       # expected tools without the removed nrf-probes. The exact
-      # `--ncs-version v3.3.0` keeps generation offline; the dev shell entry
+      # `--ncs-version v3.4.1` keeps generation offline; the dev shell entry
       # runs only the read-only bootstrap check, so this step never installs
-      # or downloads SDK/toolchain bundles.
+      # mutable SDK sources or Nordic toolchain bundles. Immutable compiler SDK
+      # assets are already covered by the normal Nix package build.
       - name: Project init and generated-flake check
         run: |
           repo="$(pwd)"
           tmp_root="$(mktemp -d)"
           trap 'rm -rf -- "$tmp_root"' EXIT
-          dest="$tmp_root/project"
-          nix run .#init-project -- "$dest" \
-            --backend nrfutil --ncs-version v3.3.0 --non-interactive
-          nix flake check -L "path:$dest" --override-input nix-nrf-dev "path:$repo"
-          nix develop "path:$dest" --override-input nix-nrf-dev "path:$repo" \
-            --command sh -ceu 'command -v openocd; command -v nix-nrf; nix-nrf probes --help >/dev/null; nix-nrf bootstrap --help >/dev/null; ! command -v nrf-probes'
+          # West portability must execute on amd64 too, not only evaluate there.
+          backends="west"
+          if [ '${{ matrix.backend }}' != west ]; then
+            backends="$backends ${{ matrix.backend }}"
+          fi
+          for backend in $backends; do
+            dest="$tmp_root/$backend"
+            nix run .#init-project -- "$dest" \
+              --backend "$backend" --ncs-version v3.4.1 --non-interactive
+            nix flake check -L "path:$dest" --override-input nix-nrf-dev "path:$repo"
+            nix develop "path:$dest" --override-input nix-nrf-dev "path:$repo" \
+              --command sh -ceu 'command -v openocd; command -v nix-nrf; nix-nrf probes --help >/dev/null; nix-nrf bootstrap --help >/dev/null; ! command -v nrf-probes'
+          done
 
   # Release publication: only a trusted push to main, after the `check` job
   # above passed, may reach the privileged reusable release workflow. Pull
@@ -227,7 +247,7 @@ jobs:
   # workflow) and passes the immutable github.sha as the exact ref.
   release:
     name: Release
-    needs: check
+    needs: [shared, check]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write

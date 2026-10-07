@@ -10,6 +10,8 @@ import subprocess
 import sys
 from typing import Any
 
+from host_platform import native_host
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -22,7 +24,7 @@ def main():
     parser.add_argument("--workspace", type=Path, required=True)
     parser.add_argument("--workspace-app", type=Path, required=True)
     parser.add_argument("--freestanding-app", type=Path, required=True)
-    parser.add_argument("--ncs-version", default="v3.3.0")
+    parser.add_argument("--ncs-version", default="v3.4.1")
     parser.add_argument("--python-environment", default="")
     parser.add_argument("--board", default="xiao_nrf54l15/nrf54l15/cpuapp")
     parser.add_argument("--output", type=Path, required=True)
@@ -43,6 +45,11 @@ def main():
             "workspace application must be inside the workspace; freestanding application must be outside it"
         )
     repo = Path(__file__).resolve().parents[2]
+    host = native_host(repo)
+    if args.backend not in host["backends"]:
+        parser.error(
+            f"backend {args.backend} unavailable on {host['system']}; use west"
+        )
     output = args.output.resolve()
     output.mkdir(mode=0o700, parents=False, exist_ok=False)
     env = dict(
@@ -54,7 +61,7 @@ def main():
         SOURCE_MATRIX_PYTHON=args.python_environment,
     )
     # Runtime strings are read through getEnv, never interpolated into Nix code.
-    expression = """(builtins.getFlake (builtins.getEnv "SOURCE_MATRIX_REPO")).lib.x86_64-linux.mkNrfShell {
+    expression = """(builtins.getFlake (builtins.getEnv "SOURCE_MATRIX_REPO")).lib.${builtins.currentSystem}.mkNrfShell {
       backend = builtins.getEnv "SOURCE_MATRIX_BACKEND";
       ncsVersion = builtins.getEnv "SOURCE_MATRIX_VERSION";
       autoBootstrap = false;
@@ -63,7 +70,12 @@ def main():
     }"""
     prefix = ["nix", "develop", "--impure", "--expr", expression, "-c"]
     report: dict[str, Any] = dict(
-        outcome="failed", backend=args.backend, board=args.board, cases=[], commands=[]
+        outcome="failed",
+        host=host["system"],
+        backend=args.backend,
+        board=args.board,
+        cases=[],
+        commands=[],
     )
 
     def run(command, name):

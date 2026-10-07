@@ -75,12 +75,18 @@ args = sys.argv[1:]
 '''
 
 PY = RECORDER % {"body": r'''
-if args[:2] == ["-m", "pip"]:
+if args[:3] == ["-m", "pip", "install"]:
     log("mutations.log")
     if os.path.exists(os.environ["FAKE_WEST_BOOTSTRAP_LOG_DIR"] + "/fail_pip"):
         print("fake pip: forced failure", file=sys.stderr)
         sys.exit(1)
     sys.exit(0)
+if args == ["-m", "pip", "check"] and os.path.exists(os.environ["FAKE_WEST_BOOTSTRAP_LOG_DIR"] + "/inconsistent"):
+    print("fixture-consumer requires shared-dependency<6, but 7 is installed")
+    sys.exit(1)
+if args[:1] == ["-c"] and "pygit2" in args[1] and os.path.exists(os.environ["FAKE_WEST_BOOTSTRAP_LOG_DIR"] + "/missing_optional"):
+    print("ModuleNotFoundError: No module named 'pygit2'", file=sys.stderr)
+    sys.exit(1)
 if args == ["-c", "import west, yaml, elftools, zcbor, nrfregtool"]:
     log("probes.log")
     sys.exit(0)
@@ -95,6 +101,9 @@ if os.path.exists(os.environ["FAKE_WEST_BOOTSTRAP_LOG_DIR"] + "/fail_pip"):
 sys.exit(0)
 '''}
 WEST = RECORDER % {"body": r'''
+if args and args[0] in ("init", "update") and any(os.environ.get(key) for key in ("ZEPHYR_BASE", "Zephyr_DIR", "WEST_CONFIG_LOCAL")):
+    print("foreign source context reached workspace mutation", file=sys.stderr)
+    sys.exit(1)
 if args == ["--version"]:
     log("probes.log")
     version_file = os.environ["FAKE_WEST_BOOTSTRAP_LOG_DIR"] + "/west_version"
@@ -167,7 +176,7 @@ class WestBootstrapTestCase(unittest.TestCase):
         self.env = os.environ.copy()
         self.env["HOME"] = str(self.home)
         self.env["NIX_NRF_WEST_PYTHON"] = str(self.creator)
-        self.env["NIX_NRF_WEST_NCS_VERSION"] = "v3.3.0"
+        self.env["NIX_NRF_WEST_NCS_VERSION"] = "v3.4.1"
         self.env["NIX_NRF_WEST_TESTED_WEST_VERSION"] = "1.4.0"
         self.env["NIX_NRF_WEST_REQUIREMENTS"] = REQUIREMENTS
         self.env["NIX_NRF_WEST_PIP_CONSTRAINTS"] = "cbor2==5.9.0"
@@ -181,7 +190,7 @@ class WestBootstrapTestCase(unittest.TestCase):
 
     @property
     def workspace(self):
-        return self.home / "ncs" / "v3.3.0"
+        return self.home / "ncs" / "v3.4.1"
 
     def write_marker(self, name, text=""):
         (self.fake_dir / name).write_text(text)
@@ -268,7 +277,45 @@ class WestBootstrapTestCase(unittest.TestCase):
         for name in ("mutations.log", "probes.log"):
             (self.fake_dir / name).write_text("")
 
-    # 1. Missing workspace --check: exit 1, no mutation, no probes.
+    def test_setup_ignores_foreign_source_context(self):
+        result = self.run_bootstrap(
+            "--yes",
+            env_extra={
+                "ZEPHYR_BASE": "/foreign/zephyr",
+                "Zephyr_DIR": "/foreign/package",
+                "WEST_CONFIG_LOCAL": "/foreign/.west/config",
+            },
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.workspace / ".west/config").is_file())
+
+    def test_selected_optional_import_failure_and_recovery_are_check_only(self):
+        self.make_ready_workspace()
+        (self.fake_dir / "missing_optional").touch()
+        extra = {"NIX_NRF_WEST_READINESS_IMPORTS": "pygit2"}
+        before = self.mutations()
+        result = self.run_bootstrap("--check", env_extra=extra)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("No module named 'pygit2'", result.stderr)
+        self.assertEqual(self.mutations(), before)
+        (self.fake_dir / "missing_optional").unlink()
+        result = self.run_bootstrap("--check", env_extra=extra)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.mutations(), before)
+
+    def test_dependency_conflict_is_not_ready_and_check_never_repairs(self):
+        self.make_ready_workspace()
+        self.write_marker("inconsistent")
+        result = self.run_bootstrap("--check")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("dependency consistency check failed", result.stderr)
+        self.assertEqual(self.mutations(), [])
+        self.rm_marker("inconsistent")
+        result = self.run_bootstrap("--check")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.mutations(), [])
+
+    # Missing workspace --check: exit 1, no mutation, no probes.
     def test_check_missing_workspace_exits_1_no_mutation(self):
         proc = self.run_bootstrap("--check")
         self.assertEqual(proc.returncode, 1)
@@ -339,11 +386,12 @@ class WestBootstrapTestCase(unittest.TestCase):
             [
                 "nix-python -m venv .venv",
                 f"python -m pip install -c {self.workspace}/.venv/nix-nrf-pip-constraints.txt west==1.4.0",
-                f"west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.3.0 {self.workspace}",
+                f"west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.4.1 {self.workspace}",
                 "west update",
-                f"python -m pip install -c {self.workspace}/.venv/nix-nrf-pip-constraints.txt -r {self.workspace}/zephyr/scripts/requirements.txt",
-                f"python -m pip install -c {self.workspace}/.venv/nix-nrf-pip-constraints.txt -r {self.workspace}/nrf/scripts/requirements.txt",
-                f"python -m pip install -c {self.workspace}/.venv/nix-nrf-pip-constraints.txt -r {self.workspace}/bootloader/mcuboot/scripts/requirements.txt",
+                f"python -m pip install -c {self.workspace}/.venv/nix-nrf-pip-constraints.txt "
+                + " ".join(
+                    f"-r {self.workspace}/{req}" for req in REQUIREMENTS.splitlines()
+                ),
             ],
         )
         # Re-readiness after setup runs the read-only probes.
@@ -361,8 +409,10 @@ class WestBootstrapTestCase(unittest.TestCase):
         self.assertEqual(
             pip_requirements,
             [
-                f"python -m pip install -c {self.workspace}/.venv/nix-nrf-pip-constraints.txt -r {self.workspace}/{req}"
-                for req in REQUIREMENTS.splitlines()
+                f"python -m pip install -c {self.workspace}/.venv/nix-nrf-pip-constraints.txt "
+                + " ".join(
+                    f"-r {self.workspace}/{req}" for req in REQUIREMENTS.splitlines()
+                )
             ],
         )
 
@@ -494,7 +544,7 @@ class WestBootstrapTestCase(unittest.TestCase):
         self.make_ready_workspace()
         proc = self.run_bootstrap("--check", "--print-sdk-path")
         self.assertEqual(proc.returncode, 0)
-        self.assertEqual(proc.stdout, str(self.home / "ncs" / "v3.3.0") + "\n")
+        self.assertEqual(proc.stdout, str(self.home / "ncs" / "v3.4.1") + "\n")
 
     def test_cli_workspace_overrides_default(self):
         alt = self.home / "elsewhere"
@@ -517,7 +567,7 @@ class WestBootstrapTestCase(unittest.TestCase):
             "",  # no --print-sdk-path requested
         )
         self.assertIn(
-            f"west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.3.0 {expected}",
+            f"west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.4.1 {expected}",
             self.mutations(),
         )
         # venv landed at the absolute path, and nothing nested below it.
@@ -540,7 +590,7 @@ class WestBootstrapTestCase(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         expected = str(self.home / "tilde-ws")
         self.assertIn(
-            f"west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.3.0 {expected}",
+            f"west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.4.1 {expected}",
             self.mutations(),
         )
 

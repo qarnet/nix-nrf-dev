@@ -44,6 +44,10 @@
     ];
   };
 in {
+  workspace =
+    if workspaceMode
+    then source.workspace
+    else null;
   command =
     if workspaceMode
     then "${resolver}/libexec/nix-nrf/source"

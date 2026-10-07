@@ -277,6 +277,13 @@ def main(argv=None):
     parser, args = parse_args(argv)
     _QUIET = args.quiet
 
+    host = os.environ.get("NIX_NRF_BOOTSTRAP_HOST_SYSTEM")
+    if host == "aarch64-linux":
+        fail(
+            "Nordic SDK toolchain management is unavailable on aarch64-linux; "
+            'enter a shell configured with backend = "west". No sources or tools were installed'
+        )
+
     nrfutil_exe = os.environ.get("NIX_NRF_NRFUTIL")
     if not nrfutil_exe:
         fail("NIX_NRF_NRFUTIL is not set. Run through `nix-nrf bootstrap`.")

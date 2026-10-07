@@ -7,13 +7,15 @@
   inputs.nix-nrf-dev.url = "github:qarnet/nix-nrf-dev";
 
   outputs = {nix-nrf-dev, ...}: {
-    devShells.x86_64-linux.default =
-      nix-nrf-dev.lib.x86_64-linux.mkNrfShell {
+    devShells = builtins.listToAttrs (map (system: {
+      name = system;
+      value.default = nix-nrf-dev.lib.${system}.mkNrfShell {
         backend = @BACKEND@;
         ncsVersion = @NCS_VERSION@;
         # autoBootstrap = true;
         # packages = [];
         # extraShellHook = "";
       };
+    }) @SYSTEMS@);
   };
 }

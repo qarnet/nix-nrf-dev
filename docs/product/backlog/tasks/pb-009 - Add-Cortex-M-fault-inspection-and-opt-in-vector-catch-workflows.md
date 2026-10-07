@@ -34,7 +34,7 @@ Register/fault-status inspection, backtrace and symbolication recipes, opt-in ve
 
 Pinned src/target/cortex_m.c accepts int_err rather than stale manual irq_err and includes a DEMCR cleanup caveat. Receiver prj.conf enables assertions and stack sentinel. Scoped tools and memory export provide related evidence paths.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 

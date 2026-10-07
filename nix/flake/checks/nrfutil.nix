@@ -8,10 +8,13 @@
   nrfutil,
   mkNrfShell,
 }: let
+  nrfutilSupported =
+    builtins.elem "nrfutil"
+    (import ../../platforms.nix).${pkgs.stdenv.hostPlatform.system}.backends;
   # Fake-boundary bootstrap test gate: runs
   # tests/unit/test_nix_nrf_bootstrap.py against a temporary fake
   # nrfutil executable/state directory with sandboxed Python stdlib.
-  # Covers every lifecycle branch: ready selection, --check, approval,
+  # Covers bootstrap lifecycle cases: ready selection, --check, approval,
   # install matrix, exact-bundle behavior, malformed state, failed and
   # incomplete installs, missing version. It uses no network or real SDK,
   # and no real nrfutil state.
@@ -39,7 +42,7 @@
   # to check the exact values and selected nrfutil store
   # path survive.
   bootstrapQuotingCheck = let
-    nastyNcsVersion = "v3.3.0 with space 'and quote'";
+    nastyNcsVersion = "v3.4.1 with space 'and quote'";
     nastyBundleId = "bundle \"with\" 'quotes' and spaces";
     module = import ../../backends/nrfutil/bootstrap.nix {
       inherit pkgs;
@@ -84,7 +87,7 @@
   # (for the on-demand env-failure scenario), and emits a shell-safe
   # toolchain env script that prepends a fake real-west bin dir and sets the
   # FAKE_TOOLCHAIN_ENV / PYTHONHOME / GIT_EXEC_PATH markers. Unexpected argv
-  # clears stderr and exits nonzero.
+  # reports an error on stderr and exits nonzero.
   fakeNrfutil = pkgs.writeTextFile {
     name = "fake-nrfutil";
     destination = "/bin/nrfutil";
@@ -105,7 +108,7 @@
       SDK = os.environ.get("FAKE_NRFUTIL_SDK_PATH", "")
       WEST_BIN = os.environ.get("FAKE_NRFUTIL_REAL_WEST_BIN", "")
       FAIL_ENV_CALL = os.environ.get("FAKE_NRFUTIL_FAIL_ENV_CALL", "")
-      NCS_VERSION = os.environ.get("NIX_NRF_NCS_VERSION", "v3.3.0")
+      NCS_VERSION = os.environ.get("NIX_NRF_NCS_VERSION", "v3.4.1")
 
 
       def state_path(name):
@@ -314,11 +317,11 @@
     boundaryFixture = pkgs.mkShell {
       packages = [pkgs.ripgrep];
     };
-    nastyNcsVersion = "v3.3.0 with 'quotes' and \"spaces\"";
+    nastyNcsVersion = "v3.4.1 with 'quotes' and \"spaces\"";
     nastyBundleId = "bundle \"with\" 'quotes' and spaces";
     readyShell = mkNrfShell {
       backend = "nrfutil";
-      ncsVersion = "v3.3.0";
+      ncsVersion = "v3.4.1";
       name = "nrfutil-boundary-ready";
       packages = [pkgs.hello];
       extraShellHook = "export NIX_NRF_BOUNDARY_MARKER=set";
@@ -328,7 +331,7 @@
     };
     noAutoShell = mkNrfShell {
       backend = "nrfutil";
-      ncsVersion = "v3.3.0";
+      ncsVersion = "v3.4.1";
       name = "nrfutil-boundary-no-auto";
       autoBootstrap = false;
       withMultilib = false;
@@ -374,7 +377,7 @@
     readyBootstrapModule = import ../../backends/nrfutil/bootstrap.nix {
       inherit pkgs;
       nrfutilPackage = fakeNrfutil;
-      ncsVersion = "v3.3.0";
+      ncsVersion = "v3.4.1";
     };
     bundleBootstrapModule = import ../../backends/nrfutil/bootstrap.nix {
       inherit pkgs;
@@ -475,7 +478,7 @@
       PYEOF
 
       # ── Ready scoped west wrapper: exact argv/env, scoped markers, PATH ──
-      "$westPkg/bin/west" list --format=json > ready-wrapper.out
+      "$westPkg/bin/west" build --help > ready-wrapper.out
       python3 - <<'PYEOF'
       import json
       import os
@@ -486,10 +489,10 @@
       env_calls = [a for a in lines if a[:3] == ["sdk-manager", "toolchain", "env"]]
       assert env_calls, "no toolchain env calls recorded"
       for a in env_calls:
-          assert a[3:5] == ["--ncs-version", "v3.3.0"], a
+          assert a[3:5] == ["--ncs-version", "v3.4.1"], a
           assert a[-2:] == ["--as-script", "sh"], a
       entry = [json.loads(l) for l in open(os.path.join(state, "west.log"))][-1]
-      assert entry["argv"] == ["list", "--format=json"], entry
+      assert entry["argv"] == ["build", "--help"], entry
       env = entry["env"]
       assert env["ZEPHYR_BASE"] == sdk + "/zephyr", env
       assert env["FAKE_TOOLCHAIN_ENV"] == "1", env
@@ -506,7 +509,7 @@
       empty_sdk="$PWD/sdk-empty"
       reset_env "$empty_state" "$empty_sdk"
       export NIX_NRF_BOOTSTRAP_YES=1
-      "$westPkg/bin/west" list --format=json > lazy.out
+      "$westPkg/bin/west" build --help > lazy.out
       [ -e "$empty_state/sdk-ready" ] || { echo "FAIL: lazy bootstrap did not create sdk-ready" >&2; exit 1; }
       [ -e "$empty_state/toolchain-ready" ] || { echo "FAIL: lazy bootstrap did not create toolchain-ready" >&2; exit 1; }
       [ -d "$empty_sdk/zephyr" ] || { echo "FAIL: lazy bootstrap did not create the SDK source" >&2; exit 1; }
@@ -516,9 +519,9 @@
 
       state = os.environ["FAKE_NRFUTIL_STATE"]
       installs = [json.loads(l) for l in open(os.path.join(state, "installs.log"))]
-      assert installs == [["sdk-manager", "install", "v3.3.0"]], installs
+      assert installs == [["sdk-manager", "install", "v3.4.1"]], installs
       entry = [json.loads(l) for l in open(os.path.join(state, "west.log"))][-1]
-      assert entry["argv"] == ["list", "--format=json"], entry
+      assert entry["argv"] == ["build", "--help"], entry
       assert entry["env"]["ZEPHYR_BASE"] == os.environ["FAKE_NRFUTIL_SDK_PATH"] + "/zephyr", entry["env"]
       PYEOF
 
@@ -528,14 +531,14 @@
       reset_env "$noauto_state" "$noauto_sdk"
       mkdir -p "$noauto_sdk/zephyr" "$noauto_state"
       touch "$noauto_state/sdk-ready" "$noauto_state/toolchain-ready"
-      "$noAutoWest/bin/west" list > noauto-ready.out
+      "$noAutoWest/bin/west" build --help > noauto-ready.out
       [ -e "$noauto_state/west.log" ] || { echo "FAIL: no-auto ready state did not reach fake west" >&2; exit 1; }
 
       missing_state="$PWD/state-noauto-missing"
       missing_sdk="$PWD/sdk-noauto-missing"
       reset_env "$missing_state" "$missing_sdk"
       set +e
-      "$noAutoWest/bin/west" list > noauto-missing.out 2> noauto-missing.err
+      "$noAutoWest/bin/west" build --help > noauto-missing.out 2> noauto-missing.err
       rc=$?
       set -e
       [ "$rc" -ne 0 ] || { echo "FAIL: no-auto missing state exited 0" >&2; cat noauto-missing.err >&2; exit 1; }
@@ -566,7 +569,7 @@
       touch "$failenv_state/sdk-ready" "$failenv_state/toolchain-ready"
       export FAKE_NRFUTIL_FAIL_ENV_CALL=2
       set +e
-      "$westPkg/bin/west" list > fail-env.out 2> fail-env.err
+      "$westPkg/bin/west" build --help > fail-env.out 2> fail-env.err
       rc=$?
       set -e
       [ "$rc" -ne 0 ] || { echo "FAIL: env-failure scenario exited 0" >&2; cat fail-env.err >&2; exit 1; }
@@ -602,7 +605,7 @@
       touch "$noreal_state/sdk-ready" "$noreal_state/toolchain-ready"
       export FAKE_NRFUTIL_REAL_WEST_BIN="$PWD/empty-real-west"
       set +e
-      "$westPkg/bin/west" list > no-real-west.out 2> no-real-west.err
+      "$westPkg/bin/west" build --help > no-real-west.out 2> no-real-west.err
       rc=$?
       set -e
       [ "$rc" -ne 0 ] || { echo "FAIL: no-real-west scenario exited 0" >&2; cat no-real-west.err >&2; exit 1; }
@@ -621,7 +624,7 @@
       bundle_sdk="$PWD/sdk-bundle"
       reset_env "$bundle_state" "$bundle_sdk"
       export NIX_NRF_BOOTSTRAP_YES=1
-      "$bundleWest/bin/west" list --format=json > bundle.out
+      "$bundleWest/bin/west" build --help > bundle.out
       python3 - <<'PYEOF'
       import json
       import os
@@ -643,7 +646,7 @@
           assert a[a.index("--toolchain-bundle-id") + 1] == nasty_bundle, a
           assert a[-2:] == ["--as-script", "sh"], a
       entry = [json.loads(l) for l in open(os.path.join(state, "west.log"))][-1]
-      assert entry["argv"] == ["list", "--format=json"], entry
+      assert entry["argv"] == ["build", "--help"], entry
       assert entry["env"]["ZEPHYR_BASE"] == sdk + "/zephyr", entry["env"]
       PYEOF
 
@@ -865,18 +868,18 @@
       # Success: values with spaces, a single quote, a double quote, and an
       # option-like value must each stay one exact argv element.
       run_scenario success success \
-        "$(to_json "v3.3.0 with spaces" "it's" 'say "hi"' "--option-like")" \
-        versions "v3.3.0 with spaces" "it's" 'say "hi"' "--option-like"
+        "$(to_json "v3.4.1 with spaces" "it's" 'say "hi"' "--option-like")" \
+        versions "v3.4.1 with spaces" "it's" 'say "hi"' "--option-like"
       assert_exact success 0 expected.success.out expected.success.err
 
       # Simulated remote/index failure: status 1 preserved.
       run_scenario remote-fail remote-fail \
-        "$(to_json v3.3.0)" versions v3.3.0
+        "$(to_json v3.4.1)" versions v3.4.1
       assert_exact remote-fail 1 expected.remote-fail.out expected.remote-fail.err
 
       # CLI failure: status 2 preserved.
       run_scenario cli-fail cli-fail \
-        "$(to_json --ncs-version v3.3.0)" versions --ncs-version v3.3.0
+        "$(to_json --ncs-version v3.4.1)" versions --ncs-version v3.4.1
       assert_exact cli-fail 2 expected.cli-fail.out expected.cli-fail.err
 
       # Arbitrary nonstandard status: 37 preserved, not remapped.
@@ -901,9 +904,9 @@
           for l in open(os.path.join(os.environ["FAKE_VERSIONS_STATE"], "commands.log"))
       ]
       expected = [
-          ["sdk-manager", "search", "v3.3.0 with spaces", "it's", 'say "hi"', "--option-like"],
-          ["sdk-manager", "search", "v3.3.0"],
-          ["sdk-manager", "search", "--ncs-version", "v3.3.0"],
+          ["sdk-manager", "search", "v3.4.1 with spaces", "it's", 'say "hi"', "--option-like"],
+          ["sdk-manager", "search", "v3.4.1"],
+          ["sdk-manager", "search", "--ncs-version", "v3.4.1"],
           ["sdk-manager", "search", "status-37"],
           ["sdk-manager", "search", "--help"],
           ["sdk-manager", "search", "--help"],
@@ -950,34 +953,28 @@
       mkdir -p "$out"
     '';
 
-  # Source policy gate: retain the versioned archive and its fixed content hash
-  # and reject the legacy mutable executable endpoint. Runtime dispatch above
-  # proves this source definition reaches the public nrfutil command.
+  # Validate selected derivation metadata rather than matching source-code text:
+  # immutable per-host supply must stay compatible with extension composition.
   nrfutilSupplyDefinitionCheck =
     pkgs.runCommand "nrfutil-supply-definition"
     {
-      source = ../../backends/nrfutil/package.nix;
-      expectedSdkManagerVersion = "1.16.1";
+      inherit nrfutil;
+      selectedSource = nrfutil.sdkManager.src.url;
+      selectedTriplet = nrfutil.sdkManagerTriplet;
+      version = nrfutil.sdkManagerVersion;
+      composed = nrfutil.withExtensions ["nrfutil-sdk-manager"];
     }
     ''
       set -eu
 
-      grep -F "sdkManagerVersion = \"$expectedSdkManagerVersion\";" "$source" >/dev/null || {
-        echo "FAIL: sdk-manager version is not $expectedSdkManagerVersion" >&2
-        exit 1
-      }
-      grep -F "nrfutil-sdk-manager/nrfutil-sdk-manager-x86_64-unknown-linux-gnu-" "$source" >/dev/null || {
-        echo "FAIL: sdk-manager source is not a versioned x86_64 archive" >&2
-        exit 1
-      }
-      grep -F "sha256-0v6X8UP4iKZ5Ij2cbgtR1zDrYLSl9KXa/JcKzSAg/jg=" "$source" >/dev/null || {
-        echo "FAIL: sdk-manager source hash changed or is missing" >&2
-        exit 1
-      }
-      if grep -F "/executables/" "$source" >/dev/null; then
-        echo "FAIL: legacy mutable nrfutil executable endpoint is forbidden" >&2
-        exit 1
-      fi
+      case "$selectedSource" in
+        https://files.nordicsemi.com/artifactory/swtools/external/nrfutil/packages/nrfutil-sdk-manager/nrfutil-sdk-manager-"$selectedTriplet"-"$version".tar.gz) ;;
+        *) echo "FAIL: sdk-manager source is not the selected versioned host archive" >&2; exit 1;;
+      esac
+      export HOME="$PWD/home" NRFUTIL_HOME="$PWD/home/nrfutil"
+      mkdir -p "$NRFUTIL_HOME"
+      "$composed/bin/nrfutil" sdk-manager --version > version.out
+      grep -F "nrfutil-sdk-manager $version " version.out
 
       echo "nrfutil immutable supply definition check passed" >&2
       mkdir -p "$out"
@@ -1044,12 +1041,15 @@
       echo "nrfutil search offline check passed (status $rc)" >&2
       mkdir -p "$out"
     '';
-in {
-  bootstrap-tests = bootstrapTests;
-  bootstrap-quoting = bootstrapQuotingCheck;
-  nrfutil-shell-boundary = nrfutilShellBoundaryCheck;
-  nrfutil-versions-boundary = nrfutilVersionsBoundaryCheck;
-  nrfutil-sdk-manager-version = nrfutilSdkManagerVersionCheck;
-  nrfutil-supply-definition = nrfutilSupplyDefinitionCheck;
-  nrfutil-search-offline = nrfutilSearchOfflineCheck;
-}
+in
+  {
+    bootstrap-tests = bootstrapTests;
+    bootstrap-quoting = bootstrapQuotingCheck;
+    nrfutil-versions-boundary = nrfutilVersionsBoundaryCheck;
+    nrfutil-sdk-manager-version = nrfutilSdkManagerVersionCheck;
+    nrfutil-supply-definition = nrfutilSupplyDefinitionCheck;
+    nrfutil-search-offline = nrfutilSearchOfflineCheck;
+  }
+  // pkgs.lib.optionalAttrs nrfutilSupported {
+    nrfutil-shell-boundary = nrfutilShellBoundaryCheck;
+  }

@@ -170,9 +170,30 @@ def inspect_sdk(sdk, excluded_projects=()):
                 unpopulated_submodules=unpopulated_submodules,
             )
         )
+    version = (nrf / "VERSION").read_text().strip()
+    if "VERSION_MAJOR" in version:
+        fields = {
+            key.strip(): value.strip()
+            for line in version.splitlines()
+            if "=" in line
+            for key, value in [line.split("=", 1)]
+        }
+        try:
+            version = ".".join(
+                str(int(fields[key]))
+                for key in ("VERSION_MAJOR", "VERSION_MINOR", "PATCHLEVEL")
+            )
+            if int(fields.get("VERSION_TWEAK", "0")):
+                version += "." + fields["VERSION_TWEAK"]
+            if fields.get("EXTRAVERSION"):
+                version += "-" + fields["EXTRAVERSION"]
+        except (KeyError, ValueError) as exc:
+            raise FixtureError(
+                f"invalid Nordic VERSION fields: {nrf / 'VERSION'}"
+            ) from exc
     return dict(
         sdk=str(sdk),
-        ncs_version=(nrf / "VERSION").read_text().strip(),
+        ncs_version=version,
         allowlist=allowlist,
         projects=projects,
         config_sha256=digest(sdk / ".west/config"),

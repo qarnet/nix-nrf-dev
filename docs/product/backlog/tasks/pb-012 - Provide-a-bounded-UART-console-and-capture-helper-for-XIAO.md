@@ -30,9 +30,9 @@ Explicit port/baud selection, binary-preserving capture, optional console mode, 
 
 ### Technical context
 
-docs/development/roadmap.md proposes a serial helper; docs/hardware.md covers host permissions. Receiver scripts/hil/serial_io.py:1-16,74-89 already retains raw RX/TX and controls pre-open line settings. Board SAMD11 bridges USB serial; verify exact board revision before documenting pins.
+docs/hardware.md covers host permissions. Receiver scripts/hil/serial_io.py:1-16,74-89 already retains raw RX/TX and controls pre-open line settings. Board SAMD11 bridges USB serial; verify exact board revision before documenting pins.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 

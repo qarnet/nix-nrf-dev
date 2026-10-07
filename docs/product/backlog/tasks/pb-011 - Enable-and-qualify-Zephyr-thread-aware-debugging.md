@@ -34,7 +34,7 @@ OpenOCD Zephyr awareness, verified firmware metadata requirements, matching ELF,
 
 Pinned src/rtos/zephyr.c expects _kernel and _kernel_thread_info_* symbols. Receiver boards/nrf54l15dk_nrf54l15_cpuapp.conf:104-114 documents stack pressure; src/audio_offload.c:80-103 defines recovery queue and submit mutex. Verify SDK Kconfig rather than copying stale symbols.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 

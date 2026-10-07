@@ -31,9 +31,9 @@ Assess packaging existing recipes and explicit user-controlled build/flash/debug
 
 ### Technical context
 
-tcl/nrf54l_flash.tcl; tcl/nrf53_flash.tcl; docs/hardware.md#recovery-safety; docs/development/roadmap.md proposes packaging recipes and a flash command. Receiver scripts/bin/fw-flash-54l15 already owns application-specific image loading.
+tcl/nrf54l_flash.tcl; tcl/nrf53_flash.tcl; docs/hardware.md#recovery-safety. Receiver scripts/bin/fw-flash-54l15 already owns application-specific image loading.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 

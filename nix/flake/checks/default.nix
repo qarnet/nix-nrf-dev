@@ -16,7 +16,8 @@
   product,
   session,
   source,
-}: {
+}:
+{
   inherit (backendSelector) backend-selector;
   inherit
     (core)
@@ -35,7 +36,6 @@
     (nrfutil)
     bootstrap-tests
     bootstrap-quoting
-    nrfutil-shell-boundary
     nrfutil-versions-boundary
     nrfutil-sdk-manager-version
     nrfutil-supply-definition
@@ -49,11 +49,19 @@
     west-target-toolchain-consistency
     west-backend-quoting
     west-shell-boundary
+    west-sdk-native-probes
     ;
   inherit (initProject) init-project-tests;
   inherit (release) release-consistency;
   inherit (product) backlog;
   inherit (session) session-tests debug-fixture-tests;
-  inherit (source) source-workspace-tests local-sdk-fixture-tests;
+  inherit
+    (source)
+    source-workspace-tests
+    local-sdk-fixture-tests
+    ci-partition-tests
+    nordic-artifact-catalog-tests
+    ;
   inherit formatting pre-commit;
 }
+// builtins.intersectAttrs {nrfutil-shell-boundary = null;} nrfutil

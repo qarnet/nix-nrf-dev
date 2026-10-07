@@ -6,8 +6,10 @@
 direnv allow     # or: nix develop
 ```
 
-Shell provides `openocd`, `nrfutil`, `nix-nrf`, scoped `west` wrapper, and
-NCS toolchain. `nix-nrf probes` identifies probes. `nix-nrf doctor` reports
+Shell provides `openocd`, `nix-nrf`, scoped `west` wrapper, and the selected
+NCS build environment: nrfutil on amd64, experimental west on ARM64. Standalone
+nrfutil packages exist on both hosts, but ARM64 Nordic-managed toolchain
+installation does not. `nix-nrf probes` identifies probes. `nix-nrf doctor` reports
 hardware access without running `sudo`. There are no standalone
 `nrf-probes` or `nrf-doctor` commands. Create consumer project with
 `nix run .#init-project -- ./my-project`.
@@ -51,6 +53,13 @@ Source-selection changes also run `nix build .#checks.x86_64-linux.source-worksp
 This gate uses the public shell hooks/commands, real west and CMake, and synthetic
 source packages; it is not full firmware qualification. Existing real-build
 workspace prerequisites and source ownership are documented in `docs/application-types.md`.
+This gate also exercises SDK-independent core init/update with local-only Git
+fixtures, distinct extension registrations across application layouts, disabled
+extensions, missing imports, and three-state doctor diagnostics. Real stock SDK
+resolved registry and command activation qualification remain opt-in through
+`tests/application-types/command_layers.py`; missing commands/dependencies fail
+that report rather than being skipped. Offline SBOM is a separate optional smoke,
+never a proxy for workspace command availability.
 Local SDK fixture changes also run
 `nix build -L .#checks.x86_64-linux.local-sdk-fixture-tests`. Its disposable Git/west
 tests require no SDK. The opt-in four-build application-owned import qualification
@@ -98,10 +107,29 @@ Flake checks cover evaluation, fake-boundary units, shell boundaries, and
 wiring checks. They do not build `packages.*`. CI builds packages separately.
 Run `nix build` after changing package derivation.
 
+Examples above use `x86_64-linux`; substitute `aarch64-linux` for native ARM64
+checks. Both systems need writable product-shell evaluation before a cold-store
+all-systems no-build pass. CI separates source-only checks from native checks
+and dynamically enumerates packages:
+
+```bash
+python3 -B scripts/ci.py shared
+python3 -B scripts/ci.py native  # native host only, requires shared gate first
+python3 -B scripts/ci.py packages
+```
+
+Normal CI never provisions mutable SDK sources or Python environments. Native
+firmware qualification is opt-in with prepared sources/Python; its portable
+procedure lives in `tests/application-types/README.md`. ARM64 KVM VM results do
+not prove software-emulated startup. The forced-TCG Pi qualification now passes
+the original assertions with the test-image-only systemd 261.1 stat-key repair;
+implementation and limits live in `nix/flake/checks/udev-{systemd,vm}.nix`.
+Lasting host/backend policy is recorded in `docs/adr/0001-select-native-backends-explicitly.md`.
+
 ## Clean-room bootstrap test
 
 `tests/clean-room/run.sh` uses an empty, isolated home. It bootstraps NCS
-`v3.3.0` and selected toolchain with `nix-nrf bootstrap --yes`, re-enters
+`v3.4.1` and selected toolchain with `nix-nrf bootstrap --yes`, re-enters
 shell, derives `ZEPHYR_BASE`, and builds XIAO nRF54L15 sysbuild blinky with
 real `west build`. It never flashes hardware.
 
@@ -117,7 +145,8 @@ script-created temporary directory that is removed on exit unless
 removed. See `tests/clean-room/README.md` for the full safety contract.
 
 Clean-room test is not in normal pre-commit or flake checks. Normal PR CI
-never downloads SDK or toolchain bundles. Run it manually through
+never provisions mutable SDK sources, Python environments, or Nordic toolchain
+bundles. Immutable Zephyr SDK archives are normal Nix package inputs. Run it manually through
 `.github/workflows/clean-room.yml` on `nrf-hardware` runner. Use
 `nix-nrf bootstrap` locally for SDK and toolchain in home directory.
 

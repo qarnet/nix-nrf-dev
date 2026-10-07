@@ -4,7 +4,7 @@
 # Clean-room test for public west backend
 # (mutable west workspace + version-local venv, Nix Zephyr SDK), entered
 # through the public API: `mkNrfShell { backend = "west"; ncsVersion =
-# "v3.3.0"; }`.
+# "v3.4.1"; }`.
 #
 # Proves end-to-end behavior from an empty, isolated Linux home directory:
 #   1. Enter the public west shell (via the flake's public `lib.mkNrfShell`
@@ -63,10 +63,10 @@ cd "$REPO_ROOT"
 # Public west backend instance: the flake's own public `lib.mkNrfShell` with
 # `backend = "west"`. The harness enters it with `nix develop --expr` so no
 # dedicated devShell output is needed.
-WEST_SHELL_EXPR='let flake = builtins.getFlake (toString ./.); in flake.lib.x86_64-linux.mkNrfShell { backend = "west"; ncsVersion = "v3.3.0"; }'
+WEST_SHELL_EXPR='let flake = builtins.getFlake (toString ./.); in flake.lib.x86_64-linux.mkNrfShell { backend = "west"; ncsVersion = "v3.4.1"; }'
 
 # NCS release wired into the public west shell instance above.
-NCS_VERSION="v3.3.0"
+NCS_VERSION="v3.4.1"
 MIN_FREE_GIB="${NIX_NRF_WEST_MIN_FREE_GIB:-25}"
 CLEAN_HOME="${NIX_NRF_WEST_CLEAN_HOME:-}"
 CREATED_HOME=""

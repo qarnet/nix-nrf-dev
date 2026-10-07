@@ -86,6 +86,16 @@ def resolve():
             f"missing Nordic source project (Kconfig.nrf and VERSION): {nrf}"
         )
     actual = (nrf / "VERSION").read_text().strip()
+    if "VERSION_MAJOR" in actual:
+        fields = dict(re.findall(r"^([A-Z_]+)[ \t]*=[ \t]*([^\r\n]*)", actual, re.MULTILINE))
+        try:
+            actual = ".".join(str(int(fields[key].strip())) for key in ("VERSION_MAJOR", "VERSION_MINOR", "PATCHLEVEL"))
+            if int(fields.get("VERSION_TWEAK", "0").strip()):
+                actual += "." + fields["VERSION_TWEAK"].strip()
+            if fields.get("EXTRAVERSION", "").strip():
+                actual += "-" + fields["EXTRAVERSION"].strip()
+        except (KeyError, ValueError) as exc:
+            raise SourceError(f"invalid Nordic VERSION fields: {nrf / 'VERSION'}") from exc
     expected = os.environ["NIX_NRF_SOURCE_NCS_VERSION"].removeprefix("v")
     if actual != expected:
         raise SourceError(
@@ -149,6 +159,7 @@ def resolve():
         zephyr_revision=revision(zephyr),
         nrf_revision=revision(nrf),
         requirements=requirements,
+        project_roots={project.name: str(Path(project.abspath).resolve()) for project in manifest.projects if project.name == "manifest" or manifest.is_active(project)},
     )
 
 

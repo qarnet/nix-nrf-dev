@@ -9,6 +9,7 @@
   backlog,
   nix-nrf,
 }: let
+  platform = (import ../platforms.nix).${pkgs.stdenv.hostPlatform.system};
   # Internal hybrid-input fixture: plain mkShell whose packages provide
   # the regression tools (Node, Git, Python). clean-env-test pulls them in
   # via inputsFrom so CI's tool execution proves inputsFrom propagation
@@ -25,10 +26,10 @@ in {
   # Dogfood shell for hacking on this repo / ad-hoc probe work.
   # Composes mkNrfShell with pre-commit hooks (packages + shellHook).
   # autoBootstrap defaults to true: lazy SDK/toolchain bootstrap on
-  # the first `west` invocation.
+  # the first SDK-extension `west` invocation; core commands remain SDK-independent.
   default = mkNrfShell {
-    backend = "nrfutil";
-    ncsVersion = "v3.3.0";
+    backend = platform.defaultBackend;
+    ncsVersion = "v3.4.1";
     name = "nix-nrf-dev";
     packages = pre-commit.enabledPackages ++ [backlog];
     extraShellHook = pre-commit.shellHook;
@@ -57,8 +58,8 @@ in {
   # (Node, Git, Python). The tools arrive via inputsFrom from the
   # internal cleanEnvFixture.
   clean-env-test = mkNrfShell {
-    backend = "nrfutil";
-    ncsVersion = "v3.3.0";
+    backend = platform.defaultBackend;
+    ncsVersion = "v3.4.1";
     name = "nix-nrf-dev-clean-env-test";
     withMultilib = false;
     inputsFrom = [cleanEnvFixture];

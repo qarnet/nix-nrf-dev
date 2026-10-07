@@ -33,7 +33,7 @@ Provide scoped tool execution with preserved arguments, streams, and exit status
 
 nix/backends/nrfutil/shell.nix:70-126; nix/backends/west/zephyr-sdk.nix; nix/backends/west/versions.nix. West packaging notes plain GDB versus gdb-py ABI limitations. Receiver has separate CPUAPP and src/flpr images.
 
-Research and pinned upstream references: docs/development/rtt-debug-research.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
+Research and pinned upstream references: docs/product/research/debug-tooling.md. Receiver evidence: le-audio-receiver at 012b19739802e8fc53d6e8a701fb362a17a1c209, inspected read-only.
 
 ### Open questions
 

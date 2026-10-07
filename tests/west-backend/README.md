@@ -54,4 +54,5 @@ No scheduled workflow runs this test. Normal CI uses fake-boundary checks:
 Run prints clean-home path, free space, selected NCS release, lifecycle steps,
 setup and build durations, installed size, SDK store path, compiler versions,
 absence of nrfutil, and artifact checks. Script-created home is removed at end.
-Caller-provided home remains unchanged.
+Caller-provided home is retained with the provisioned SDK and build outputs;
+cleanup never removes it.

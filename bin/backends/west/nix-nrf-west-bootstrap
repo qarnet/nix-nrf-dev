@@ -8,8 +8,8 @@
 #
 # Internal backend command: installed by nix/backends/west/bootstrap.nix at
 # $out/libexec/nix-nrf/bootstrap (no standalone $out/bin command) and wrapped
-# with the exact Nix Python interpreter and metadata defaults:
-#   NIX_NRF_WEST_PYTHON                 exact Nix Python executable
+# with the venv-creation interpreter and metadata defaults:
+#   NIX_NRF_WEST_PYTHON                 exact Nix Python for venv creation
 #   NIX_NRF_WEST_NCS_VERSION            NCS release (workspace/venv version)
 #   NIX_NRF_WEST_TESTED_WEST_VERSION    west pinned before workspace creation
 #   NIX_NRF_WEST_REQUIREMENTS           newline-separated requirement paths,
@@ -46,7 +46,7 @@
 # stdout stays empty unless --print-sdk-path succeeds, so command
 # substitution stays machine-readable. All status and prompts go to stderr.
 #
-# Timeout policy: only read-only checks (venv imports, west --version) get a
+# Timeout policy: read-only readiness probes get a
 # timeout; long installs (pip, west init/update) never do.
 
 import argparse
@@ -114,7 +114,7 @@ def required_requirements():
 def pip_constraints():
     """Configured pip constraint lines (may be empty). These ground the loose
     NCS requirement files in the release's own pinned resolution (e.g.
-    cbor2==5.9.0 for NCS v3.3.0, matching its requirements-fixed.txt)."""
+    cbor2==5.9.0 for NCS v3.4.1, matching its requirements-fixed.txt)."""
     raw = os.environ.get("NIX_NRF_WEST_PIP_CONSTRAINTS", "")
     return [line for line in raw.splitlines() if line.strip()]
 
@@ -151,12 +151,12 @@ def pip_install_argv(venv_python, constraints_path, *install_args):
 def venv_python_imports_ok(venv_python):
     """venv Python can import the modules Zephyr/NCS builds need.
 
-    Note: nrf-regtool 9.2.1 (the version NCS v3.3.0 resolves) provides the
+    Note: nrf-regtool 9.2.1 (the version NCS v3.4.1 resolves) provides the
     `nrfregtool` module; the older `nrf_regtool` name does not exist in this
     wheel."""
     try:
         proc = subprocess.run(
-            [str(venv_python), "-c", "import west, yaml, elftools, zcbor, nrfregtool"],
+            [str(venv_python), "-c", "import west, yaml, elftools, zcbor, nrfregtool" + (", " + os.environ["NIX_NRF_WEST_READINESS_IMPORTS"] if os.environ.get("NIX_NRF_WEST_READINESS_IMPORTS") else "")],
             capture_output=True,
             text=True,
             timeout=CHECK_TIMEOUT,
@@ -279,8 +279,8 @@ def west_version_ok(venv_west, workspace, requirement_paths=None):
 
 def readiness(workspace, source_info=None):
     """Return the list of problems; empty list means ready. Read-only: no
-    mutation, no network, no pip/west invocation except venv import and
-    west --version checks."""
+    mutation or network; probes imports, versions, selected requirements and
+    installed dependency consistency."""
     problems = []
 
     if source_info is None and not (workspace / ".west" / "config").is_file():
@@ -290,9 +290,28 @@ def readiness(workspace, source_info=None):
     if source_info is None and not (workspace / "zephyr" / "zephyr-env.sh").is_file():
         problems.append("missing zephyr/zephyr-env.sh")
 
-    requirement_paths = (
-        source_info["requirements"] if source_info else required_requirements()
-    )
+    requirement_paths = required_requirements()
+    if source_info:
+        # Metadata paths refer to SDK project identities, not literal checkout
+        # directories. Preserve imported/relocated Nordic and Zephyr layouts.
+        # Only the configured profile is normative. Module test requirement
+        # files discovered for orientation are not silently selected tooling.
+        requirement_paths = []
+        for req in required_requirements():
+            if req.startswith("nrf/"):
+                resolved = str(Path(source_info["nrf_base"]) / req.removeprefix("nrf/"))
+            elif req.startswith("zephyr/"):
+                resolved = str(Path(source_info["zephyr_base"]) / req.removeprefix("zephyr/"))
+            elif req.startswith("bootloader/mcuboot/"):
+                mcuboot = source_info.get("project_roots", {}).get("mcuboot")
+                if not mcuboot:
+                    continue
+                resolved = str(Path(mcuboot) / req.removeprefix("bootloader/mcuboot/"))
+            else:
+                problems.append(f"cannot resolve selected requirements file {req} from manifest identities")
+                continue
+            if resolved not in requirement_paths:
+                requirement_paths.append(resolved)
     for req in requirement_paths:
         if not (workspace / req).is_file():
             problems.append(f"missing requirements file {req}")
@@ -316,6 +335,35 @@ def readiness(workspace, source_info=None):
         problems.append("venv python import check failed")
     if not west_version_ok(venv_west, workspace, requirement_paths):
         problems.append("venv west version does not satisfy workspace requirements")
+    # pip check cannot detect missing requested roots. Evaluate selected SDK
+    # files against this interpreter's actual distribution metadata.
+    requirement_probe = os.environ.get(
+        "NIX_NRF_WEST_REQUIREMENT_PROBE",
+        str(Path(__file__).with_name("check-python-requirements.py")),
+    )
+    try:
+        selected = subprocess.run(
+            [
+                str(venv_python),
+                requirement_probe,
+                str(workspace),
+                json.dumps([str(workspace / req) for req in requirement_paths]),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=CHECK_TIMEOUT,
+        )
+        if selected.returncode:
+            detail = selected.stdout.strip() or selected.stderr.strip()
+            problems.append("selected Python requirements not satisfied: " + detail)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        problems.append(f"selected Python requirement check could not run: {exc}")
+    try:
+        consistency = subprocess.run([str(venv_python), "-m", "pip", "check"], capture_output=True, text=True, timeout=CHECK_TIMEOUT)
+        if consistency.returncode:
+            problems.append("venv dependency consistency check failed: " + consistency.stdout.strip())
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        problems.append(f"venv dependency consistency check could not run: {exc}")
 
     return problems
 
@@ -356,7 +404,10 @@ def run(argv, cwd, *, check_message):
     """Run one setup step. Output is inherited so long installs keep their
     full log. Any nonzero exit fails setup."""
     try:
-        proc = subprocess.run(argv, cwd=str(cwd))
+        env = dict(os.environ)
+        for key in ("ZEPHYR_BASE", "Zephyr_DIR", "WEST_CONFIG_LOCAL"):
+            env.pop(key, None)
+        proc = subprocess.run(argv, cwd=str(cwd), env=env)
     except OSError as exc:
         fail(f"cannot run {' '.join(argv)}: {exc}")
     if proc.returncode != 0:
@@ -424,7 +475,7 @@ def run_setup(args, workspace):
         )
         created_venv = True
 
-    # Pip constraints (release-specific, e.g. cbor2==5.9.0 for NCS v3.3.0) are
+    # Pip constraints (release-specific, e.g. cbor2==5.9.0 for NCS v3.4.1) are
     # written into the venv before any pip invocation and applied via `-c`.
     constraints_path = write_constraints(workspace, pip_constraints())
 
@@ -464,15 +515,14 @@ def run_setup(args, workspace):
         check_message="west update",
     )
 
-    # 5. Install each metadata requirement file with the venv python/pip in
-    #    declared order (on partial/existing reruns: requirements may have
-    #    changed; a ready workspace never reaches this function).
-    for req in required_requirements():
-        run(
-            pip_install_argv(venv_python, constraints_path, "-r", str(workspace / req)),
-            workspace,
-            check_message=f"pip install -r {req}",
-        )
+    # Resolve baseline and optional groups together. Sequential pip installs can
+    # upgrade a shared dependency beyond an earlier group's upper bound while
+    # still exiting successfully (for example chardet vs spsdk).
+    preinstall = [line for line in os.environ.get("NIX_NRF_WEST_PREINSTALL_REQUIREMENTS", "").splitlines() if line.strip()]
+    if preinstall:
+        run(pip_install_argv(venv_python, constraints_path, "--index-url", "https://pypi.org/simple", *preinstall), workspace, check_message="pip install selected native prerequisites from PyPI")
+    requirement_args = [arg for req in required_requirements() for arg in ("-r", str(workspace / req))]
+    run(pip_install_argv(venv_python, constraints_path, *requirement_args), workspace, check_message="pip install selected requirements")
 
 
 def parse_args(argv):

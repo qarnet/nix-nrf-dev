@@ -4,14 +4,27 @@
 # version and fetchurl verifies its content before any binary is installed.
 {pkgs}: let
   sdkManagerVersion = "1.16.1";
+  assets = {
+    x86_64-linux = {
+      triplet = "x86_64-unknown-linux-gnu";
+      hash = "sha256-0v6X8UP4iKZ5Ij2cbgtR1zDrYLSl9KXa/JcKzSAg/jg=";
+    };
+    aarch64-linux = {
+      triplet = "aarch64-unknown-linux-gnu";
+      hash = "sha256-G3ABdtS6jPsvaDt2fedJ2OXhqtlsujBFNQUCOx+/ZLc=";
+    };
+  };
+  asset =
+    assets.${pkgs.stdenv.hostPlatform.system}
+      or (throw "nrfutil: no pinned sdk-manager asset for ${pkgs.stdenv.hostPlatform.system}");
 
   sdkManager = pkgs.stdenvNoCC.mkDerivation {
     pname = "nrfutil-sdk-manager";
     version = sdkManagerVersion;
 
     src = pkgs.fetchurl {
-      url = "https://files.nordicsemi.com/artifactory/swtools/external/nrfutil/packages/nrfutil-sdk-manager/nrfutil-sdk-manager-x86_64-unknown-linux-gnu-${sdkManagerVersion}.tar.gz";
-      hash = "sha256-0v6X8UP4iKZ5Ij2cbgtR1zDrYLSl9KXa/JcKzSAg/jg=";
+      url = "https://files.nordicsemi.com/artifactory/swtools/external/nrfutil/packages/nrfutil-sdk-manager/nrfutil-sdk-manager-${asset.triplet}-${sdkManagerVersion}.tar.gz";
+      inherit (asset) hash;
     };
 
     nativeBuildInputs = [pkgs.autoPatchelfHook];
@@ -48,7 +61,7 @@
       pkgs.nrfutil.meta
       // {
         mainProgram = "nrfutil-sdk-manager";
-        platforms = ["x86_64-linux"];
+        platforms = builtins.attrNames assets;
       };
   };
 
@@ -77,6 +90,7 @@
 
       passthru = {
         inherit sdkManager sdkManagerVersion;
+        sdkManagerTriplet = asset.triplet;
         allExtensions = pkgs.nrfutil.allExtensions;
         withExtensions = mkNrfutil;
         withAllExtensions = mkNrfutil pkgs.nrfutil.allExtensions;
@@ -86,6 +100,7 @@
         pkgs.nrfutil.meta
         // {
           mainProgram = "nrfutil";
+          platforms = builtins.attrNames assets;
         };
     };
 in
