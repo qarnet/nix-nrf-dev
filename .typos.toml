@@ -7,4 +7,5 @@ SER = "SER" # serial-number placeholder in tcl usage examples
 tio = "tio" # serial-console tool
 
 [default.extend-identifiers]
+certifi = "certifi" # Python CA-bundle package
 EXTRAVERSION = "EXTRAVERSION" # literal Nordic/Zephyr VERSION field
